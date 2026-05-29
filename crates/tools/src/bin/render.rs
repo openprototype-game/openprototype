@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
 use prototype_formats::font::Font;
-use prototype_formats::{Dimensions, IndexedImage, Palette, background, bdy, pal, raw};
+use prototype_formats::{Dimensions, IndexedImage, Palette, StartExe, background, bdy, pal, raw};
 
 #[derive(Parser)]
 #[command(about = "Render Prototype assets to PNG for inspection")]
@@ -60,15 +60,16 @@ enum Command {
         #[arg(long)]
         palette: Option<PathBuf>,
     },
-    /// Preview the menu: blit back3.raw and draw the menu items with font.raw.
+    /// Preview the menu: blit back3.raw and draw the menu items with font.raw,
+    /// using the palette read from START.EXE.
     Menu {
+        /// START.EXE (source of the menu palette).
+        start_exe: PathBuf,
         /// 320x200 background (BACK3.RAW).
         background: PathBuf,
         /// Glyph sheet (FONT.RAW).
         font: PathBuf,
         output: PathBuf,
-        #[arg(long)]
-        palette: Option<PathBuf>,
     },
 }
 
@@ -119,18 +120,24 @@ fn main() -> Result<()> {
             render_indexed(&image, &output, palette.as_deref())
         }
         Command::Menu {
+            start_exe,
             background,
             font,
             output,
-            palette,
         } => {
+            let exe = read(&start_exe)?;
+            let palette = StartExe::new(&exe)
+                .context("reading START.EXE")?
+                .menu_palette()
+                .context("decoding menu palette")?;
+
             let mut canvas = raw::decode(&read(&background)?, Dimensions::new(320, 200))
                 .context("decoding background")?;
             let font = Font::decode(&read(&font)?).context("decoding font")?;
 
             // From entry0's menu setup (0x4abb..0x4ae5): labels at x=90, cursor
             // at x=70, rows at y=60..124 step 16. '>' (glyph 0x3e) is the
-            // filled triangle cursor.
+            // filled triangle cursor. Labels are port-owned, not read from the EXE.
             let items = ["NEW GAME", "LOAD GAME", "HIGHSCORES", "MUSIC MENU", "QUIT"];
             for (row, label) in items.iter().enumerate() {
                 let y = 60 + row as i32 * 16;
@@ -138,7 +145,7 @@ fn main() -> Result<()> {
             }
             font.draw_into(&mut canvas, 70, 60, ">");
 
-            render_indexed(&canvas, &output, palette.as_deref())
+            save(&to_png(&canvas, &palette), &output)
         }
     }
 }

@@ -17,8 +17,10 @@ pub mod font;
 pub mod pal;
 pub mod raw;
 pub mod smp;
+pub mod start_exe;
 pub mod wad;
 
 pub use color::{Palette, Rgb};
 pub use error::{DecodeError, Result};
 pub use image::{Dimensions, IndexedImage};
+pub use start_exe::StartExe;

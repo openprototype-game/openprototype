@@ -144,6 +144,14 @@ call fcn.00002adc                   ; switch to game drive, EXEC, switch back
 Called from `entry0` @ 0x4b48 and 0x4b6f (the menu's level-select paths). The
 launched WAD receives the drive letter as its command tail.
 
+The table stores `level_1.wad` lowercase; the disc has `LEVEL_1.WAD`. DOS is
+case-insensitive so the original matches, but a case-sensitive host would not.
+So the port owns level → path resolution in Rust, and owns the menu labels too
+(uppercase-only, localization is a port choice). This table and the `0x30f`
+string table are reverse-engineering reference, not runtime data sources. Only
+binary blobs that are painful to transcribe (the menu palette) are read at
+runtime, via the `start_exe` decoder.
+
 ## Open threads (next digs)
 
 - Which routine loads `cover3.bdy` / `back3.raw` / `font.raw` and blits them.

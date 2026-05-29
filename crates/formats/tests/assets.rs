@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use prototype_formats::color::Rgb;
-use prototype_formats::{Dimensions, background, bdy, pal, raw};
+use prototype_formats::{Dimensions, StartExe, background, bdy, pal, raw};
 
 fn asset(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -40,6 +40,27 @@ fn surplogo_bdy_unpacks_to_320x200() {
     let image =
         bdy::decode(&bytes, Dimensions::new(320, 200)).expect("SURPLOGO.BDY should be 320x200");
     assert_eq!(image.pixels.len(), 64_000);
+}
+
+#[test]
+fn start_exe_menu_palette_decodes() {
+    let bytes = std::fs::read(asset("START.EXE")).unwrap();
+
+    let palette = StartExe::new(&bytes)
+        .expect("START.EXE should be the recognized build")
+        .menu_palette()
+        .expect("menu palette should decode");
+
+    // The menu palette's DAC order is anchored at index 1 = white.
+    assert_eq!(palette.colors.len(), 256);
+    assert_eq!(
+        palette.colors[1],
+        Rgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        }
+    );
 }
 
 #[test]

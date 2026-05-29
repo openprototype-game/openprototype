@@ -16,4 +16,8 @@ pub enum DecodeError {
     /// A run-length opcode referenced bytes past the end of the input.
     #[error("run-length data ended unexpectedly")]
     TruncatedRun,
+    /// The input is not the container this decoder expected (wrong file or
+    /// wrong version).
+    #[error("unrecognized input: {reason}")]
+    Unrecognized { reason: &'static str },
 }
