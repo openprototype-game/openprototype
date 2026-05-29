@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use prototype_formats::color::Rgb;
-use prototype_formats::{Dimensions, bdy, pal, raw};
+use prototype_formats::{Dimensions, background, bdy, pal, raw};
 
 fn asset(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -40,4 +40,15 @@ fn surplogo_bdy_unpacks_to_320x200() {
     let image =
         bdy::decode(&bytes, Dimensions::new(320, 200)).expect("SURPLOGO.BDY should be 320x200");
     assert_eq!(image.pixels.len(), 64_000);
+}
+
+#[test]
+fn canyon_background_combines_to_640x160() {
+    let planes: Vec<Vec<u8>> = (1..=4)
+        .map(|n| std::fs::read(asset(&format!("CANYON.SP{n}"))).unwrap())
+        .collect();
+
+    let image = background::decode([&planes[0], &planes[1], &planes[2], &planes[3]])
+        .expect("CANYON.SP1-4 should combine");
+    assert_eq!(image.size, Dimensions::new(640, 160));
 }

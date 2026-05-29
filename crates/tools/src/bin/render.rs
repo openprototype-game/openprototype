@@ -1,8 +1,8 @@
 //! Decode an asset and write it to a PNG for visual inspection.
 //!
-//! Commands: `palette` (a .PAL as a swatch grid), `raw`, and `bdy`. For `raw`
-//! and `bdy`, pass `--palette` to colour the image, or omit it to fall back to
-//! a grayscale ramp that shows geometry without a known palette.
+//! Run with `--help` for the commands. Image commands take an optional
+//! `--palette`; without one they fall back to a grayscale ramp that shows
+//! geometry when the real palette is not yet known.
 
 use std::fs;
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
-use prototype_formats::{Dimensions, IndexedImage, Palette, bdy, pal, raw};
+use prototype_formats::{Dimensions, IndexedImage, Palette, background, bdy, pal, raw};
 
 #[derive(Parser)]
 #[command(about = "Render Prototype assets to PNG for inspection")]
@@ -51,6 +51,14 @@ enum Command {
         #[arg(long)]
         palette: Option<PathBuf>,
     },
+    /// Combine a level background from its four planes. Pass any .SP1 path;
+    /// the .SP2..SP4 siblings are read automatically.
+    Background {
+        input: PathBuf,
+        output: PathBuf,
+        #[arg(long)]
+        palette: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -82,6 +90,21 @@ fn main() -> Result<()> {
             let pixels = read(&input)?;
             let image =
                 bdy::decode(&pixels, Dimensions::new(width, height)).context("decoding bdy")?;
+            render_indexed(&image, &output, palette.as_deref())
+        }
+        Command::Background {
+            input,
+            output,
+            palette,
+        } => {
+            let planes = [
+                read(&input.with_extension("SP1"))?,
+                read(&input.with_extension("SP2"))?,
+                read(&input.with_extension("SP3"))?,
+                read(&input.with_extension("SP4"))?,
+            ];
+            let image = background::decode([&planes[0], &planes[1], &planes[2], &planes[3]])
+                .context("combining background planes")?;
             render_indexed(&image, &output, palette.as_deref())
         }
     }

@@ -10,12 +10,12 @@ pub mod color;
 pub mod error;
 pub mod image;
 
+pub mod background;
 pub mod bdy;
 pub mod fli;
 pub mod pal;
 pub mod raw;
 pub mod smp;
-pub mod sprite;
 pub mod wad;
 
 pub use color::{Palette, Rgb};
