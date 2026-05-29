@@ -11,7 +11,9 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
 use prototype_formats::font::Font;
-use prototype_formats::{Dimensions, IndexedImage, Palette, StartExe, background, bdy, pal, raw};
+use prototype_formats::{
+    Dimensions, Flic, IndexedImage, Palette, StartExe, background, bdy, pal, raw,
+};
 
 #[derive(Parser)]
 #[command(about = "Render Prototype assets to PNG for inspection")]
@@ -70,6 +72,20 @@ enum Command {
         /// Glyph sheet (FONT.RAW).
         font: PathBuf,
         output: PathBuf,
+    },
+    /// Decode a .FLI animation. Emit any combination of an animated GIF,
+    /// per-frame PNGs, and a contact sheet tiling every frame.
+    Fli {
+        input: PathBuf,
+        /// Animated GIF of all frames.
+        #[arg(long)]
+        gif: Option<PathBuf>,
+        /// Directory to dump frame_0000.png .. one per frame.
+        #[arg(long)]
+        frames_dir: Option<PathBuf>,
+        /// Single PNG tiling every frame (downscaled) into a grid.
+        #[arg(long)]
+        contact_sheet: Option<PathBuf>,
     },
 }
 
@@ -147,7 +163,120 @@ fn main() -> Result<()> {
 
             save(&to_png(&canvas, &palette), &output)
         }
+        Command::Fli {
+            input,
+            gif,
+            frames_dir,
+            contact_sheet,
+        } => {
+            if gif.is_none() && frames_dir.is_none() && contact_sheet.is_none() {
+                anyhow::bail!("pass at least one of --gif, --frames-dir, --contact-sheet");
+            }
+
+            let bytes = read(&input)?;
+            let frames = decode_fli_frames(&bytes)?;
+
+            if let Some(dir) = frames_dir.as_deref() {
+                dump_frames(&frames, dir)?;
+            }
+
+            if let Some(path) = gif.as_deref() {
+                write_gif(&frames, path)?;
+            }
+
+            if let Some(path) = contact_sheet.as_deref() {
+                save(&contact_sheet_of(&frames), path)?;
+            }
+
+            Ok(())
+        }
     }
+}
+
+/// One decoded FLI frame: a ready-to-write RGB image and its delay in jiffies.
+struct FliFrame {
+    image: RgbImage,
+    delay_jiffies: u32,
+}
+
+fn decode_fli_frames(bytes: &[u8]) -> Result<Vec<FliFrame>> {
+    let mut flic = Flic::new(bytes).context("reading FLI header")?;
+    let mut frames = Vec::with_capacity(usize::from(flic.header().frame_count));
+
+    while let Some(frame) = flic.next_frame() {
+        let frame = frame.context("decoding FLI frame")?;
+        frames.push(FliFrame {
+            image: to_png(frame.image, frame.palette),
+            delay_jiffies: frame.delay_jiffies,
+        });
+    }
+
+    Ok(frames)
+}
+
+fn dump_frames(frames: &[FliFrame], dir: &std::path::Path) -> Result<()> {
+    fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+
+    for (index, frame) in frames.iter().enumerate() {
+        let path = dir.join(format!("frame_{index:04}.png"));
+        save(&frame.image, &path)?;
+    }
+
+    Ok(())
+}
+
+fn write_gif(frames: &[FliFrame], output: &std::path::Path) -> Result<()> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    use image::{Delay, Frame as GifFrame};
+
+    let file = fs::File::create(output).with_context(|| format!("writing {}", output.display()))?;
+    let mut encoder = GifEncoder::new(std::io::BufWriter::new(file));
+    encoder
+        .set_repeat(Repeat::Infinite)
+        .context("setting GIF loop")?;
+
+    for frame in frames {
+        let millis = frame.delay_jiffies.max(1) * 1000 / 70;
+        let delay = Delay::from_numer_denom_ms(millis, 1);
+        let rgba = image::DynamicImage::ImageRgb8(frame.image.clone()).into_rgba8();
+        encoder
+            .encode_frame(GifFrame::from_parts(rgba, 0, 0, delay))
+            .context("encoding GIF frame")?;
+    }
+
+    Ok(())
+}
+
+/// Tile every frame (downscaled) into one grid, so periodic corruption is
+/// visible at a glance.
+fn contact_sheet_of(frames: &[FliFrame]) -> RgbImage {
+    use image::imageops::{FilterType, resize};
+
+    const THUMB_WIDTH: u32 = 80;
+    const THUMB_HEIGHT: u32 = 50;
+    const PAD: u32 = 2;
+
+    let columns = (frames.len() as f64).sqrt().ceil() as u32;
+    let columns = columns.max(1);
+    let rows = frames.len().div_ceil(columns as usize) as u32;
+
+    let cell_w = THUMB_WIDTH + PAD;
+    let cell_h = THUMB_HEIGHT + PAD;
+    let mut sheet: RgbImage = ImageBuffer::new(columns * cell_w + PAD, rows * cell_h + PAD);
+
+    for (index, frame) in frames.iter().enumerate() {
+        let thumb = resize(&frame.image, THUMB_WIDTH, THUMB_HEIGHT, FilterType::Nearest);
+        let column = index as u32 % columns;
+        let row = index as u32 / columns;
+        let origin_x = PAD + column * cell_w;
+        let origin_y = PAD + row * cell_h;
+
+        for (x, y, pixel) in thumb.enumerate_pixels() {
+            sheet.put_pixel(origin_x + x, origin_y + y, *pixel);
+        }
+    }
+
+    sheet
 }
 
 fn render_palette(input: &std::path::Path, output: &std::path::Path, cell: u32) -> Result<()> {

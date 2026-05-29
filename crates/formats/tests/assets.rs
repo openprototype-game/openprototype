@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use prototype_formats::color::Rgb;
-use prototype_formats::{Dimensions, StartExe, background, bdy, pal, raw};
+use prototype_formats::{Dimensions, Flic, StartExe, background, bdy, pal, raw};
 
 fn asset(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -61,6 +61,38 @@ fn start_exe_menu_palette_decodes() {
             b: 255,
         }
     );
+}
+
+#[test]
+fn every_fli_decodes_all_frames() {
+    let files = [
+        "INTRO.FLI",
+        "CANYON.FLI",
+        "CREDZ.FLI",
+        "FLY.FLI",
+        "GO2.FLI",
+        "HIGHSCOR.FLI",
+        "LAVA.FLI",
+    ];
+
+    for name in files {
+        let bytes = std::fs::read(asset(&format!("FLI/{name}"))).unwrap();
+        let mut flic = Flic::new(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
+
+        let expected = flic.header().frame_count;
+        let size = Dimensions::new(flic.header().width, flic.header().height);
+        assert_eq!(size, Dimensions::new(320, 200), "{name} dimensions");
+
+        let mut decoded = 0u16;
+
+        while let Some(frame) = flic.next_frame() {
+            let frame = frame.unwrap_or_else(|error| panic!("{name} frame {decoded}: {error}"));
+            assert_eq!(frame.image.size, size, "{name} frame {decoded} size");
+            decoded += 1;
+        }
+
+        assert_eq!(decoded, expected, "{name} frame count");
+    }
 }
 
 #[test]

@@ -42,7 +42,7 @@ impl Palette {
 }
 
 /// Map a 6-bit DAC value (0..=63) to the full 8-bit range.
-fn expand_6bit(value: u8) -> u8 {
+pub(crate) fn expand_6bit(value: u8) -> u8 {
     let clamped = value & 0x3f;
     (clamped << 2) | (clamped >> 4)
 }
