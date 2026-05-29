@@ -76,6 +76,47 @@ By interrupt usage and call graph (93 functions total):
 Decompiling all 93 functions to port-ready detail is an iterative job;
 this inventory is the structural pass. Take one subsystem at a time.
 
+## Menu render + input (resolved)
+
+The main menu lives in `fcn.00003e41` (called from `entry0` @ 0x4b02). It draws
+into the mode-13h framebuffer at segment 0xA000.
+
+### Text / glyph drawing: `fcn.00003d03(al = ASCII char)`
+
+`di` = destination screen offset, `es` = 0xA000. Steps:
+
+- glyph index = `char - 0x20` (space is the first glyph).
+- The font is a sheet (`font.raw`, 320 px wide): **20 glyphs per row, each
+  16 px wide and 15 px tall, glyph area starts at y = 16** (source base
+  `si = 0x1400`). For index `n`: advance `0x12c0` (= 320*15) per group of 20,
+  then `+ n*16` within the row.
+- Copies 15 rows of 16 px, source/dest stride 320. **Pixel value 0 is
+  transparent** (left as background). Then `di += 16` to the next cell.
+
+So a level WAD's HUD font and this menu font share the same layout idea; worth
+a `font` decoder in `crates/formats` later.
+
+### Key input: `fcn.00002e5c()` (blocking)
+
+Spins until `cs:[0x2dec] != 0`, returns the scancode from `cs:[0x2ded]`, clears
+the flag. The flag+scancode are written by the custom `int 9` keyboard ISR
+(installed via the `AH=25` sites). Returns a raw scancode, not ASCII.
+
+### Menu loop: `fcn.00003e41`
+
+- 5 items at framebuffer offsets `0x4b46, 0x5f46, 0x7346, 0x8746, 0x9b46`,
+  spaced `0x1400` (= 16 scanlines). At 320 wide that is x≈70, y = 60/76/92/108/124.
+- Each iteration redraws the `'>'` cursor (char 0x3e) at the current item via
+  `fcn.00003d03`, then blocks on `fcn.00002e5c`.
+- Scancodes: **0x48 = Up, 0x50 = Down** (move cursor by `0x1400`, wrapping at
+  the first/last item), **0x1C = Enter** (dispatch).
+- Enter dispatches by current offset: 0x4b46 → NEW GAME (0x4b05), 0x5f46 →
+  0x4258, 0x7346 → options `fcn.00003f0c`, 0x8746 → 0x439a, 0x9b46 → QUIT
+  (0x4d90, the `AH=4C` exit).
+
+The item labels themselves (from the 0x030f `$`-table) are drawn once before
+the loop, with the same `fcn.00003d03`.
+
 ## Level launch contract (resolved)
 
 `fcn.00003abe(bx = level number)`:
