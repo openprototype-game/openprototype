@@ -1,8 +1,8 @@
 //! Decode an asset and write it to a PNG for visual inspection.
 //!
-//! BDY is not decodable yet, so the useful commands today are `palette`
-//! (proves PAL decoding and 6-bit scaling) and `raw` (proves RAW geometry;
-//! pass a palette or fall back to a grayscale ramp).
+//! Commands: `palette` (a .PAL as a swatch grid), `raw`, and `bdy`. For `raw`
+//! and `bdy`, pass `--palette` to colour the image, or omit it to fall back to
+//! a grayscale ramp that shows geometry without a known palette.
 
 use std::fs;
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
-use prototype_formats::{Dimensions, IndexedImage, Palette, pal, raw};
+use prototype_formats::{Dimensions, IndexedImage, Palette, bdy, pal, raw};
 
 #[derive(Parser)]
 #[command(about = "Render Prototype assets to PNG for inspection")]
@@ -40,6 +40,17 @@ enum Command {
         #[arg(long)]
         palette: Option<PathBuf>,
     },
+    /// Render a .BDY (ByteRun1-compressed). Without --palette, grayscale.
+    Bdy {
+        input: PathBuf,
+        output: PathBuf,
+        #[arg(long)]
+        width: u32,
+        #[arg(long)]
+        height: u32,
+        #[arg(long)]
+        palette: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -55,7 +66,24 @@ fn main() -> Result<()> {
             width,
             height,
             palette,
-        } => render_raw(&input, &output, width, height, palette.as_deref()),
+        } => {
+            let pixels = read(&input)?;
+            let image =
+                raw::decode(&pixels, Dimensions::new(width, height)).context("decoding raw")?;
+            render_indexed(&image, &output, palette.as_deref())
+        }
+        Command::Bdy {
+            input,
+            output,
+            width,
+            height,
+            palette,
+        } => {
+            let pixels = read(&input)?;
+            let image =
+                bdy::decode(&pixels, Dimensions::new(width, height)).context("decoding bdy")?;
+            render_indexed(&image, &output, palette.as_deref())
+        }
     }
 }
 
@@ -78,22 +106,17 @@ fn render_palette(input: &std::path::Path, output: &std::path::Path, cell: u32) 
     save(&canvas, output)
 }
 
-fn render_raw(
-    input: &std::path::Path,
+fn render_indexed(
+    image: &IndexedImage,
     output: &std::path::Path,
-    width: u32,
-    height: u32,
     palette: Option<&std::path::Path>,
 ) -> Result<()> {
-    let image =
-        raw::decode(&read(input)?, Dimensions::new(width, height)).context("decoding raw")?;
-
     let palette = match palette {
         Some(path) => pal::decode(&read(path)?).context("decoding palette")?,
         None => grayscale_ramp(),
     };
 
-    save(&to_png(&image, &palette), output)
+    save(&to_png(image, &palette), output)
 }
 
 /// A palette whose index maps straight to a shade of gray.

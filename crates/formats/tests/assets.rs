@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use prototype_formats::color::Rgb;
-use prototype_formats::{Dimensions, pal, raw};
+use prototype_formats::{Dimensions, bdy, pal, raw};
 
 fn asset(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -30,5 +30,14 @@ fn back3_raw_decodes_at_320x200() {
 
     let image =
         raw::decode(&bytes, Dimensions::new(320, 200)).expect("BACK3.RAW should be 320x200");
+    assert_eq!(image.pixels.len(), 64_000);
+}
+
+#[test]
+fn surplogo_bdy_unpacks_to_320x200() {
+    let bytes = std::fs::read(asset("SURPLOGO.BDY")).unwrap();
+
+    let image =
+        bdy::decode(&bytes, Dimensions::new(320, 200)).expect("SURPLOGO.BDY should be 320x200");
     assert_eq!(image.pixels.len(), 64_000);
 }
