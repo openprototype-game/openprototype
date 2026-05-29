@@ -2,6 +2,12 @@
 /target/
 **/*.rs.bk
 
+# Local render output from the inspection tool
+/renders/
+
+# Raw reverse-engineering dumps (r2 output); findings go in reference/
+/re/
+
 # IDE
 .idea/
 .vscode/
