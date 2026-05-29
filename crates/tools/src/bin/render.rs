@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
+use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, IndexedImage, Palette, background, bdy, pal, raw};
 
 #[derive(Parser)]
@@ -55,6 +56,16 @@ enum Command {
     /// the .SP2..SP4 siblings are read automatically.
     Background {
         input: PathBuf,
+        output: PathBuf,
+        #[arg(long)]
+        palette: Option<PathBuf>,
+    },
+    /// Preview the menu: blit back3.raw and draw the menu items with font.raw.
+    Menu {
+        /// 320x200 background (BACK3.RAW).
+        background: PathBuf,
+        /// Glyph sheet (FONT.RAW).
+        font: PathBuf,
         output: PathBuf,
         #[arg(long)]
         palette: Option<PathBuf>,
@@ -106,6 +117,28 @@ fn main() -> Result<()> {
             let image = background::decode([&planes[0], &planes[1], &planes[2], &planes[3]])
                 .context("combining background planes")?;
             render_indexed(&image, &output, palette.as_deref())
+        }
+        Command::Menu {
+            background,
+            font,
+            output,
+            palette,
+        } => {
+            let mut canvas = raw::decode(&read(&background)?, Dimensions::new(320, 200))
+                .context("decoding background")?;
+            let font = Font::decode(&read(&font)?).context("decoding font")?;
+
+            // From entry0's menu setup (0x4abb..0x4ae5): labels at x=90, cursor
+            // at x=70, rows at y=60..124 step 16. '>' (glyph 0x3e) is the
+            // filled triangle cursor.
+            let items = ["NEW GAME", "LOAD GAME", "HIGHSCORES", "MUSIC MENU", "QUIT"];
+            for (row, label) in items.iter().enumerate() {
+                let y = 60 + row as i32 * 16;
+                font.draw_into(&mut canvas, 90, y, label);
+            }
+            font.draw_into(&mut canvas, 70, 60, ">");
+
+            render_indexed(&canvas, &output, palette.as_deref())
         }
     }
 }

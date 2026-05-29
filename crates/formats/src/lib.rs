@@ -13,6 +13,7 @@ pub mod image;
 pub mod background;
 pub mod bdy;
 pub mod fli;
+pub mod font;
 pub mod pal;
 pub mod raw;
 pub mod smp;

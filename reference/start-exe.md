@@ -81,6 +81,19 @@ this inventory is the structural pass. Take one subsystem at a time.
 The main menu lives in `fcn.00003e41` (called from `entry0` @ 0x4b02). It draws
 into the mode-13h framebuffer at segment 0xA000.
 
+### Setup before the loop (`entry0` 0x4a71..0x4ae5)
+
+1. Build the palette buffer: zero 768 bytes, copy 768 bytes from segment
+   `0x513:0` (file offset **21296**, the 6-bit menu palette), then upload 256
+   colours via `fcn.00000230`.
+2. Blit `BACK3.RAW` (0xfa00 = 64000 bytes) from the loaded-asset segment in
+   `cs:[0x3853]` to 0xA000.
+3. Draw the five menu labels with `fcn.00003d89` (string blitter) at x=90:
+   `NEW GAME` (0x30f) @ 0x4b5a, `LOAD GAME` (0x503) @ 0x5f5a, `HIGHSCORES`
+   (0x50d) @ 0x735a, `MUSIC MENU` (0x58c) @ 0x875a, `QUIT` (0x324) @ 0x9b5a.
+   The German release of this screen reads NEUES SPIEL / SPIEL LADEN /
+   HIGHSCORES / MUSIKAUSWAHL / ENDE, the same five items.
+
 ### Text / glyph drawing: `fcn.00003d03(al = ASCII char)`
 
 `di` = destination screen offset, `es` = 0xA000. Steps:
