@@ -50,6 +50,32 @@ Consecutive entries, used by the launcher and loader:
   images (already decodable; COVER3 is the cover art we rendered).
 - `x:font.raw`, `x:font2.raw`, `x:back3.raw`: menu font and background.
 
+## Subsystems (inventory)
+
+By interrupt usage and call graph (93 functions total):
+
+- **Startup**: `fcn.00000010` shrinks the memory block (`AH=4A`); drive-letter
+  fixup; loads `proto.cfg` (the "not found" string). entry0 is the driver.
+- **EMS memory**: `int 0x67`, allocates the ~2.5 MB "Grafik Data" buffer
+  (matches the EMS error strings).
+- **Interrupt handlers**: installs custom ISRs via `AH=25` at 0x1024, 0x103c,
+  0x108d, 0x109a, 0x2e9b (timer/keyboard); restored on exit (`AH=35` get,
+  `AH=25` set).
+- **Video**: mode 13h via `int 0x10 AX=0013` (re-set after each full-screen
+  image/FLI); palette uploaded through the DAC port 0x3C8/0x3C9 by the routine
+  at 0x0208-0x0240 (`fcn.00000230`); pixel output written to segment 0xA000.
+- **File loading**: `int 0x21` AH=3D/3F/3E/42 (open/read/close/seek). Loads
+  the BDY/PAL/RAW assets from the table at 0x3684.
+- **Sound**: SoundBlaster DSP init (the "DMA-Buffer"/"DSP-Version" strings);
+  not yet located precisely.
+- **FLI playback**: the intro/cutscene player; not yet located precisely.
+- **Menu + submenus**: render (font.raw + back3.raw), input loop, and the
+  graphics/joystick/volume/music/load/save/highscores/credits screens.
+- **Level launch**: see below (resolved).
+
+Decompiling all 93 functions to port-ready detail is an iterative job;
+this inventory is the structural pass. Take one subsystem at a time.
+
 ## Level launch contract (resolved)
 
 `fcn.00003abe(bx = level number)`:
