@@ -6,6 +6,10 @@
 //! The format details come from the game's original developer; see the
 //! per-format notes under `reference/formats/`.
 
+pub mod color;
+pub mod error;
+pub mod image;
+
 pub mod bdy;
 pub mod fli;
 pub mod pal;
@@ -13,3 +17,7 @@ pub mod raw;
 pub mod smp;
 pub mod sprite;
 pub mod wad;
+
+pub use color::{Palette, Rgb};
+pub use error::{DecodeError, Result};
+pub use image::{Dimensions, IndexedImage};
