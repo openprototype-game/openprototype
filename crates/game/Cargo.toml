@@ -1,0 +1,13 @@
+[package]
+name = "prototype"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "prototype"
+path = "src/main.rs"
+
+[dependencies]
+prototype-formats.workspace = true
