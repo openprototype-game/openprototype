@@ -53,3 +53,51 @@ impl IndexedImage {
         out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::Rgb;
+
+    #[test]
+    fn pixel_count_multiplies_dimensions() {
+        assert_eq!(Dimensions::new(320, 200).pixel_count(), 64_000);
+    }
+
+    #[test]
+    fn new_rejects_mismatched_pixel_count() {
+        let error = IndexedImage::new(Dimensions::new(2, 2), vec![0; 3]).unwrap_err();
+        assert_eq!(
+            error,
+            DecodeError::SizeMismatch {
+                expected: 4,
+                actual: 3
+            }
+        );
+    }
+
+    #[test]
+    fn new_accepts_exact_pixel_count() {
+        let image = IndexedImage::new(Dimensions::new(2, 1), vec![0, 1]).unwrap();
+        assert_eq!(image.pixels, vec![0, 1]);
+    }
+
+    #[test]
+    fn to_rgb8_packs_indices_through_palette() {
+        let mut colors = [Rgb::default(); 256];
+        colors[0] = Rgb {
+            r: 10,
+            g: 20,
+            b: 30,
+        };
+        colors[1] = Rgb {
+            r: 40,
+            g: 50,
+            b: 60,
+        };
+        let palette = Palette { colors };
+        let image = IndexedImage::new(Dimensions::new(2, 1), vec![0, 1]).unwrap();
+
+        assert_eq!(image.to_rgb8(&palette), vec![10, 20, 30, 40, 50, 60]);
+    }
+}

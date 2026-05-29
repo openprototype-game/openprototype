@@ -9,3 +9,27 @@ use crate::{Dimensions, IndexedImage, Result};
 pub fn decode(bytes: &[u8], size: Dimensions) -> Result<IndexedImage> {
     IndexedImage::new(size, bytes.to_vec())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DecodeError;
+
+    #[test]
+    fn decodes_when_byte_count_matches() {
+        let image = decode(&[1, 2, 3, 4], Dimensions::new(2, 2)).unwrap();
+        assert_eq!(image.pixels, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn rejects_byte_count_that_does_not_fill_dimensions() {
+        let error = decode(&[1, 2, 3], Dimensions::new(2, 2)).unwrap_err();
+        assert_eq!(
+            error,
+            DecodeError::SizeMismatch {
+                expected: 4,
+                actual: 3
+            }
+        );
+    }
+}
