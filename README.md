@@ -11,6 +11,8 @@ the shipped game files, guided by notes from the original developer.
 - `crates/formats/` — library: decoders for every on-disk format.
 - `crates/game/` — the game binary.
 - `crates/tools/` — CLIs for inspecting and extracting assets.
+- `crates/integration-tests/` — decodes real assets sourced from the CD image
+  (skips when no image is present).
 
 ## The disc image
 

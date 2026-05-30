@@ -72,20 +72,14 @@ fn lists_root_files_and_the_fli_subdir() {
 }
 
 #[test]
-fn reads_a_file_and_decodes_it_through_formats() {
+fn reads_files_to_their_declared_length() {
     let Some(image) = open() else { return };
 
-    let bytes = image.read("COVER3.PAL").unwrap();
-    assert_eq!(bytes.len(), 768, "PAL is 256 RGB triples");
-
-    let palette = prototype_formats::pal::decode(&bytes).expect("COVER3.PAL decodes");
-    assert!(
-        palette
-            .colors
-            .iter()
-            .any(|color| *color != prototype_formats::Rgb::default()),
-        "the palette is not all-black"
-    );
+    // Decoding the bytes (the cross-crate path) lives in `prototype-integration-tests`;
+    // here we only prove `read` returns each file's declared byte count.
+    assert_eq!(image.read("COVER3.PAL").unwrap().len(), 768);
+    assert_eq!(image.read("INSTALL.EXE").unwrap().len(), 47752);
+    assert_eq!(image.read("FLI/INTRO.FLI").unwrap().len(), 386376);
 }
 
 #[test]

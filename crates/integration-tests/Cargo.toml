@@ -1,9 +1,12 @@
 [package]
-name = "prototype-disc"
+name = "prototype-integration-tests"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-thiserror = "2.0.18"
+prototype-disc.workspace = true
+
+[dev-dependencies]
+prototype-formats.workspace = true
