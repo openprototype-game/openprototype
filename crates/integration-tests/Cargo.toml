@@ -10,3 +10,4 @@ prototype-disc.workspace = true
 
 [dev-dependencies]
 prototype-formats.workspace = true
+sha2 = "0.10"
