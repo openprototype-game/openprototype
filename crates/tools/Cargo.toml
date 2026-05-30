@@ -9,4 +9,5 @@ publish.workspace = true
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "gif"] }
+prototype-disc.workspace = true
 prototype-formats.workspace = true

@@ -276,6 +276,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "prototype-disc"
+version = "0.1.0"
+dependencies = [
+ "prototype-formats",
+ "thiserror",
+]
+
+[[package]]
 name = "prototype-formats"
 version = "0.1.0"
 dependencies = [
@@ -289,6 +297,7 @@ dependencies = [
  "anyhow",
  "clap",
  "image",
+ "prototype-disc",
  "prototype-formats",
 ]
 

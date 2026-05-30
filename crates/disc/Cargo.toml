@@ -1,0 +1,12 @@
+[package]
+name = "prototype-disc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror = "2.0.18"
+
+[dev-dependencies]
+prototype-formats.workspace = true

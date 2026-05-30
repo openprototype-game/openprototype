@@ -10,14 +10,20 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
+use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
 use prototype_formats::{
     Dimensions, Flic, IndexedImage, Palette, StartExe, background, bdy, pal, raw, smp,
 };
+use prototype_tools::read_asset;
 
 #[derive(Parser)]
 #[command(about = "Render Prototype assets to PNG for inspection")]
 struct Cli {
+    /// Read inputs from a CD image (cue path) instead of the filesystem;
+    /// positional inputs are then canonical asset names (e.g. FLI/INTRO.FLI).
+    #[arg(long, global = true)]
+    cue: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -102,12 +108,16 @@ enum Command {
 }
 
 fn main() -> Result<()> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    let source = prototype_tools::open_source(cli.cue.as_deref())?;
+    let source = source.as_ref();
+
+    match cli.command {
         Command::Palette {
             input,
             output,
             cell,
-        } => render_palette(&input, &output, cell),
+        } => render_palette(source, &input, &output, cell),
         Command::Raw {
             input,
             output,
@@ -115,10 +125,10 @@ fn main() -> Result<()> {
             height,
             palette,
         } => {
-            let pixels = read(&input)?;
+            let pixels = read(source, &input)?;
             let image =
                 raw::decode(&pixels, Dimensions::new(width, height)).context("decoding raw")?;
-            render_indexed(&image, &output, palette.as_deref())
+            render_indexed(source, &image, &output, palette.as_deref())
         }
         Command::Bdy {
             input,
@@ -127,10 +137,10 @@ fn main() -> Result<()> {
             height,
             palette,
         } => {
-            let pixels = read(&input)?;
+            let pixels = read(source, &input)?;
             let image =
                 bdy::decode(&pixels, Dimensions::new(width, height)).context("decoding bdy")?;
-            render_indexed(&image, &output, palette.as_deref())
+            render_indexed(source, &image, &output, palette.as_deref())
         }
         Command::Background {
             input,
@@ -138,14 +148,14 @@ fn main() -> Result<()> {
             palette,
         } => {
             let planes = [
-                read(&input.with_extension("SP1"))?,
-                read(&input.with_extension("SP2"))?,
-                read(&input.with_extension("SP3"))?,
-                read(&input.with_extension("SP4"))?,
+                read(source, &input.with_extension("SP1"))?,
+                read(source, &input.with_extension("SP2"))?,
+                read(source, &input.with_extension("SP3"))?,
+                read(source, &input.with_extension("SP4"))?,
             ];
             let image = background::decode([&planes[0], &planes[1], &planes[2], &planes[3]])
                 .context("combining background planes")?;
-            render_indexed(&image, &output, palette.as_deref())
+            render_indexed(source, &image, &output, palette.as_deref())
         }
         Command::Menu {
             start_exe,
@@ -153,15 +163,15 @@ fn main() -> Result<()> {
             font,
             output,
         } => {
-            let exe = read(&start_exe)?;
+            let exe = read(source, &start_exe)?;
             let palette = StartExe::new(&exe)
                 .context("reading START.EXE")?
                 .menu_palette()
                 .context("decoding menu palette")?;
 
-            let mut canvas = raw::decode(&read(&background)?, Dimensions::new(320, 200))
+            let mut canvas = raw::decode(&read(source, &background)?, Dimensions::new(320, 200))
                 .context("decoding background")?;
-            let font = Font::decode(&read(&font)?).context("decoding font")?;
+            let font = Font::decode(&read(source, &font)?).context("decoding font")?;
 
             // From entry0's menu setup (0x4abb..0x4ae5): labels at x=90, cursor
             // at x=70, rows at y=60..124 step 16. '>' (glyph 0x3e) is the
@@ -185,7 +195,7 @@ fn main() -> Result<()> {
                 anyhow::bail!("pass at least one of --gif, --frames-dir, --contact-sheet");
             }
 
-            let bytes = read(&input)?;
+            let bytes = read(source, &input)?;
             let frames = decode_fli_frames(&bytes)?;
 
             if let Some(dir) = frames_dir.as_deref() {
@@ -213,7 +223,7 @@ fn main() -> Result<()> {
             } else {
                 smp::Encoding::Signed
             };
-            let samples = smp::decode(&read(&input)?, encoding);
+            let samples = smp::decode(&read(source, &input)?, encoding);
 
             write_wav(&samples, rate, &output)
         }
@@ -330,8 +340,13 @@ fn contact_sheet_of(frames: &[FliFrame]) -> RgbImage {
     sheet
 }
 
-fn render_palette(input: &std::path::Path, output: &std::path::Path, cell: u32) -> Result<()> {
-    let palette = pal::decode(&read(input)?).context("decoding palette")?;
+fn render_palette(
+    source: Option<&DiscImage>,
+    input: &std::path::Path,
+    output: &std::path::Path,
+    cell: u32,
+) -> Result<()> {
+    let palette = pal::decode(&read(source, input)?).context("decoding palette")?;
     let mut canvas: RgbImage = ImageBuffer::new(16 * cell, 16 * cell);
 
     for (index, color) in palette.colors.iter().enumerate() {
@@ -350,12 +365,13 @@ fn render_palette(input: &std::path::Path, output: &std::path::Path, cell: u32) 
 }
 
 fn render_indexed(
+    source: Option<&DiscImage>,
     image: &IndexedImage,
     output: &std::path::Path,
     palette: Option<&std::path::Path>,
 ) -> Result<()> {
     let palette = match palette {
-        Some(path) => pal::decode(&read(path)?).context("decoding palette")?,
+        Some(path) => pal::decode(&read(source, path)?).context("decoding palette")?,
         None => grayscale_ramp(),
     };
 
@@ -386,8 +402,8 @@ fn to_png(image: &IndexedImage, palette: &Palette) -> RgbImage {
         .expect("to_rgb8 returns width * height * 3 bytes")
 }
 
-fn read(path: &std::path::Path) -> Result<Vec<u8>> {
-    fs::read(path).with_context(|| format!("reading {}", path.display()))
+fn read(source: Option<&DiscImage>, path: &std::path::Path) -> Result<Vec<u8>> {
+    read_asset(source, path)
 }
 
 fn save(canvas: &RgbImage, output: &std::path::Path) -> Result<()> {

@@ -8,6 +8,10 @@
 # Raw reverse-engineering dumps (r2 output); findings go in reference/
 /re/
 
+# The original CD image (copyrighted; downloaded by the user, see README)
+/PROTOTYPE.bin
+/PROTOTYPE.cue
+
 # IDE
 .idea/
 .vscode/
