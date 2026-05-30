@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
 use prototype_formats::font::Font;
 use prototype_formats::{
-    Dimensions, Flic, IndexedImage, Palette, StartExe, background, bdy, pal, raw,
+    Dimensions, Flic, IndexedImage, Palette, StartExe, background, bdy, pal, raw, smp,
 };
 
 #[derive(Parser)]
@@ -86,6 +86,18 @@ enum Command {
         /// Single PNG tiling every frame (downscaled) into a grid.
         #[arg(long)]
         contact_sheet: Option<PathBuf>,
+    },
+    /// Decode a .SMP sound sample to a WAV for listening.
+    Smp {
+        input: PathBuf,
+        output: PathBuf,
+        /// Playback sample rate in Hz. Default 22222 = the engine's DSP time
+        /// constant 0xD3 (`256 - 1000000/rate`).
+        #[arg(long, default_value_t = 22222)]
+        rate: u32,
+        /// Treat the source as unsigned 8-bit (default: signed, the on-disk format).
+        #[arg(long)]
+        unsigned: bool,
     },
 }
 
@@ -190,7 +202,46 @@ fn main() -> Result<()> {
 
             Ok(())
         }
+        Command::Smp {
+            input,
+            output,
+            rate,
+            unsigned,
+        } => {
+            let encoding = if unsigned {
+                smp::Encoding::Unsigned
+            } else {
+                smp::Encoding::Signed
+            };
+            let samples = smp::decode(&read(&input)?, encoding);
+
+            write_wav(&samples, rate, &output)
+        }
     }
+}
+
+/// Write mono 8-bit unsigned PCM as a WAV file (44-byte header + samples).
+fn write_wav(samples: &[u8], rate: u32, output: &std::path::Path) -> Result<()> {
+    let data_len = samples.len() as u32;
+    let byte_rate = rate; // channels(1) * bits/8(1) * rate
+
+    let mut wav = Vec::with_capacity(44 + samples.len());
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_len).to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes()); // fmt chunk size
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&rate.to_le_bytes());
+    wav.extend_from_slice(&byte_rate.to_le_bytes());
+    wav.extend_from_slice(&1u16.to_le_bytes()); // block align
+    wav.extend_from_slice(&8u16.to_le_bytes()); // bits per sample
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_len.to_le_bytes());
+    wav.extend_from_slice(samples);
+
+    fs::write(output, &wav).with_context(|| format!("writing {}", output.display()))
 }
 
 /// One decoded FLI frame: a ready-to-write RGB image and its delay in jiffies.

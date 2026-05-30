@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use prototype_formats::color::Rgb;
-use prototype_formats::{Dimensions, Flic, StartExe, background, bdy, pal, raw};
+use prototype_formats::{Dimensions, Encoding, Flic, StartExe, background, bdy, pal, raw, smp};
 
 fn asset(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -93,6 +93,38 @@ fn every_fli_decodes_all_frames() {
 
         assert_eq!(decoded, expected, "{name} frame count");
     }
+}
+
+#[test]
+fn every_smp_decodes_to_full_length() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/game");
+    let mut count = 0;
+
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let is_smp = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("smp"));
+
+        if !is_smp {
+            continue;
+        }
+
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(!bytes.is_empty(), "{} is empty", path.display());
+
+        let samples = smp::decode(&bytes, Encoding::Signed);
+        assert_eq!(
+            samples.len(),
+            bytes.len(),
+            "{} sample count",
+            path.display()
+        );
+        count += 1;
+    }
+
+    assert_eq!(count, 20, "expected 20 .SMP files");
 }
 
 #[test]

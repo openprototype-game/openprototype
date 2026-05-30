@@ -24,4 +24,5 @@ pub use color::{Palette, Rgb};
 pub use error::{DecodeError, Result};
 pub use fli::Flic;
 pub use image::{Dimensions, IndexedImage};
+pub use smp::Encoding;
 pub use start_exe::StartExe;
