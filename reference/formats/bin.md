@@ -118,6 +118,23 @@ Per the filename strings (see [wad.md](wad.md)): LEVEL_1 → OUT.BIN, LEVEL_3 �
 WALD.BIN, LEVEL_5 → TECHNO.BIN, LEVEL_7 → LAVA.BIN, LEVEL_2/4/6 → RACE1.BIN; all
 levels also load the shared `PTURN1.BN1` (player-ship sprites).
 
+## PTURN1.BN1 (player ship)
+
+`PTURN1.BN1` is 44,881 bytes = **232 compiled-sprite subroutines** back-to-back,
+no internal catalog. It fits one segment, so there's no EMS banking (no
+`field0`). The ship sprites are all **direct** (raw subroutine pointers, no clip
+header — the ship is never edge-clipped).
+
+The grouping is a catalog in the WAD at vaddr `0x6bdc` (file `0x6ddc`): a flat
+array of **8-byte cell records `[p0, p1, p2, p3]`** (4 plane offsets into PTURN1),
+delimited into frames by a trailing `ncells` word. The draw loop (`@0x8b80`,
+four X-align variants) is handed a frame's first cell and `cx = ncells`; it walks
+8-byte cells, calling the direct dispatcher (`@0x804a`) per cell and advancing
+X += 32 per cell. So a frame is `ncells` cells of 64/96px width.
+
+**28 ship frames render correctly** (rotating/banking craft with twin green
+exhausts), covering 228 of the 232 subroutines.
+
 ## Verified vs open
 
 - **Verified**: every one of the 1028 catalog records decodes — all 4112 plane
@@ -130,8 +147,17 @@ levels also load the shared `PTURN1.BN1` (player-ship sprites).
 - **Open**: the runtime placement layer — *which* catalog entry is drawn *where*
   and *when* (scroll `cs:0x6404`, the per-object tables) — is needed for a
   faithful live renderer but not for extracting the sprites. Not traced.
-- **Open**: `PTURN1.BN1` (the player ship) is drawn by an analogous but separate
-  path with its own catalog, not yet traced.
+- **Open (PTURN1 tail)**: 4 of the 232 PTURN1 subroutines aren't accounted for —
+  grouping the last 8 subs as a 2-cell frame renders an incoherent strip, so they
+  don't form a standalone ship frame. They're reached (if at all) through a
+  separate sprite-directory layer: tables of `[X, ncells, w, h]` / `[w, h, X,
+  ncells]` records near the catalog (bounding boxes `51×33`, `94×51`, and tiny
+  `4×4`), where `X = 473, 475, … 511, 514 …` indexes a pool **larger than
+  PTURN1's 58 cells** — i.e. a cross-sprite/global directory the level engine
+  maintains, not part of the ship file itself. **There is at least one sprite in
+  the PTURN1 tail not yet identified.** Reverse-engineering that directory is a
+  separate, larger task (the general object catalog), out of scope for the sprite
+  encoding.
 
 Addresses are r2 flat vaddr for `LEVEL_1.WAD`; file offset = vaddr + `0x200`
 (the MZ header).
