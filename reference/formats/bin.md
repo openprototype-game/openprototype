@@ -1,8 +1,9 @@
 # BIN / BN1: compiled sprites
 
 Status: rendering path reverse-engineered (in r2, from `LEVEL_1.WAD`) and
-verified by rendering — the OUT.BIN rock/asteroid reproduces the game screenshot
-pixel-for-pixel.
+verified by rendering — OUT.BIN banks 0–6 decode into recognizable sprites
+(rotating asteroid, blue-lit metal girders, explosions). 1984/2056 plane
+subroutines (96.5%, banks 0–38 fully) decode through the full chain.
 
 The per-level `.BIN` files (and the shared `PTURN1.BN1`) hold **compiled
 sprites**: short x86 subroutines that write palette indices straight into VGA
@@ -58,21 +59,40 @@ in segment `0x0F7F` (file offset `0xf9f0`). Records are **10 bytes = 5 words**:
 [ field0 | p0 | p1 | p2 | p3 ]
 ```
 
-`p0..p3` are byte offsets into the BIN, one per plane. Each `pk` points to that
-plane's **progressive-clip header** (a 5-word table at the start of each
-sub-sprite, e.g. OUT.BIN @ 0 = `0a 00 0f 00 18 00 21 00 2c 00`). The actual
-subroutine for an unclipped sprite is:
+The draw loop (`@0x8ee2`) reads `field0` into `bp`, then the dispatcher
+(`@0x87ba`) reads the plane words from `gs:[bx+2/4/6/8]`. Each iteration:
+`bx += 0x0a` (next descriptor), `bp += 0x20` (X += 32 — sprites are 32px wide),
+clipping at X in `[-32, 288]`.
 
-```
-sub_offset = pk + u16(BIN[pk])      // variant 0 (full sprite)
-```
+### `field0` is an EMS logical page
 
-Variants 1-4 are progressively left-clipped versions sharing the trailing
-`RETF`; the engine selects one via a clip offset (`@0x7c64` picks it from screen-edge
-proximity; the base is stored at `cs:0x59ae`).
+OUT.BIN is 2 MB, too big for conventional memory, so the level loads it into
+**expanded memory (EMS)**. The loader (`@0x7da1`) allocates 160 16 KB pages
+(`AH=43h, BX=0xA0`) and reads the file in sequential 16 KB chunks, one per
+logical page (`mov cx,0x4000; int 21h`). The fill is identity: file bytes
+`[i*0x4000 .. (i+1)*0x4000)` = EMS logical page `i`.
 
-The draw loop (`@0x8ee2`) walks a row of sprites: `bx += 0x0a` (next descriptor),
-`bp += 0x20` (X += 32 — sprites are 32px wide), clipping at X in `[-32, 288]`.
+`field0` is that logical-page index. Before drawing, the clip-select routine
+(`@0x7c64`) maps logical page `field0` into the page frame (`AX=4400h..4403h,
+DX=field0, int 67h`) and stores the frame segment at `cs:0x5856` → `fs`. So a
+record's **bank base in the file is `field0 * 0x4000`**, and `p0..p3` are offsets
+relative to that base.
+
+### Two kinds of plane pointer
+
+Each plane word `pk` resolves to a subroutine one of two ways:
+
+- **Clip-header (small, clippable sprites):** `pk` points at a 5-word
+  progressive-clip header (e.g. OUT.BIN @ 0 = `0a 00 0f 00 18 00 23 00 2e 00`).
+  The dispatcher computes `sub = pk + u16(fs:[pk + clipbase])`, where
+  `clipbase = cs:0x59ae` ∈ {0,2,4,6,8} selects the variant (0 = unclipped).
+  Variants 1-4 are progressively left-clipped, sharing the trailing `RETF`;
+  `@0x7c64` picks `clipbase` from screen-edge proximity.
+- **Direct (large/tall sprites, e.g. the 32×145 girders):** `pk` points straight
+  at the subroutine — no header, no clipping. `sub = pk`.
+
+Decoder discriminator: if `BIN[base+pk]` is a draw opcode
+(`C6/C7/66/B8/81/03/CB`), the pointer is direct; otherwise it's a clip header.
 
 ## Level → BIN mapping
 
@@ -82,15 +102,16 @@ levels also load the shared `PTURN1.BN1` (player-ship sprites).
 
 ## Verified vs open
 
-- **Verified**: dense ~32x32 OUT.BIN sprites render correctly through the full
-  chain — the floating rock/asteroid is pixel-accurate. This proves the
-  compiled-sprite format, the Mode X convention, and the descriptor-table
-  grouping.
-- **NOT yet right**: many descriptor records (the tall / sparse ones) still
-  render as garbage with the current variant-0, no-clip assumptions. So the
-  descriptor reading is not yet general — some records are not plain 32x32
-  sprites (record type via `field0`? clip variant? a different draw path?). Only
-  the dense sprites are confirmed.
+- **Verified**: OUT.BIN banks 0–6 render into recognizable sprites — rotating
+  asteroid, blue-lit metal girders (the 32×145 direct-pointer sprites that used
+  to decode as garbage), explosions. Across the whole table, 1984/2056 plane
+  subroutines (banks 0–38 fully) decode through the chain. This proves the
+  compiled-sprite format, the Mode X convention, the EMS-page banking, and both
+  pointer kinds.
+- **Open**: the descriptor table's true record count. ~496+ decode as garbage,
+  which is most likely past the table's real end (the draw loop's `cx` count,
+  not yet read), not a format gap. Pixel/colour fidelity is eyeballed, not
+  diffed against captures.
 - **Open**: `PTURN1.BN1` (the player ship) is drawn by an analogous but separate
   path with its own descriptor table, not yet traced.
 
