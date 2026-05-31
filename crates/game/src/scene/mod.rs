@@ -9,11 +9,13 @@
 //!
 //! [`App`]: crate::app::App
 
+pub mod highscores;
 pub mod intro;
 pub mod list_menu;
 pub mod menu;
 pub mod music;
 
+pub use highscores::HighscoreScreen;
 pub use intro::Intro;
 pub use list_menu::ListMenu;
 pub use menu::Menu;
@@ -31,6 +33,7 @@ pub enum SceneId {
     Intro,
     MainMenu,
     MusicMenu,
+    Highscores,
 }
 
 /// A scene's request to change the app state, returned from [`Scene::update`].

@@ -40,6 +40,17 @@ pub struct IntroAssets {
     pub font: Font,
 }
 
+/// What the high-score screen needs: the `HIGHSCOR.FLI` backdrop (kept as bytes,
+/// decoded when the scene starts) and the second font the original draws the
+/// entries with. The table itself comes from the [`HighscoreStore`], loaded when
+/// the scene is built.
+///
+/// [`HighscoreStore`]: crate::highscores::HighscoreStore
+pub struct HighscoreAssets {
+    pub fli: Vec<u8>,
+    pub font: Font,
+}
+
 /// `COVER3.BDY` decodes to a 320x478 image (taller than the screen); the intro
 /// shows the top 320x200, where the PROTOTYPE title and ship sit.
 const COVER_HEIGHT: u32 = 478;
@@ -141,6 +152,16 @@ fn load_fli_bytes(disc: &DiscImage, name: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Load and decode the high-score screen's assets from the disc image.
+pub fn load_highscore_assets(disc: &DiscImage) -> Result<HighscoreAssets> {
+    let fli = load_fli_bytes(disc, "FLI/HIGHSCOR.FLI")?;
+
+    let font_bytes = disc.read("FONT2.RAW").context("reading FONT2.RAW")?;
+    let font = Font::decode(&font_bytes).context("decoding FONT2.RAW")?;
+
+    Ok(HighscoreAssets { fli, font })
+}
+
 /// Read a CD-DA audio track as normalized interleaved stereo `f32` samples,
 /// ready to hand to the audio backend. `cd_track` is the red-book track number
 /// (track 1 is data; the music is tracks 2..=8). The on-disc PCM is 44100 Hz,
@@ -224,6 +245,18 @@ pub(crate) fn test_intro_assets() -> IntroAssets {
         intro_fli: Vec::new(),
         fly_fli: Vec::new(),
         credz_fli: Vec::new(),
+        font,
+    }
+}
+
+/// Synthetic high-score assets (empty FLI, blank font) for headless tests.
+#[cfg(test)]
+pub(crate) fn test_highscore_assets() -> HighscoreAssets {
+    let font_sheet = vec![0u8; 320 * 62];
+    let font = Font::decode(&font_sheet).expect("synthetic font sheet decodes");
+
+    HighscoreAssets {
+        fli: Vec::new(),
         font,
     }
 }

@@ -13,7 +13,8 @@ mod desktop {
     use anyhow::{Context, Result};
     use clap::Parser;
     use openprototype::app::App;
-    use openprototype::assets::{load_intro_assets, load_menu_assets};
+    use openprototype::assets::{load_highscore_assets, load_intro_assets, load_menu_assets};
+    use openprototype::highscores::HighscoreStore;
     use openprototype::platform::run;
     use prototype_disc::DiscImage;
 
@@ -34,7 +35,9 @@ mod desktop {
         );
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
-        let app = App::new(menu_assets, intro_assets);
+        let highscore_assets = load_highscore_assets(&disc)?;
+        let highscore_store = HighscoreStore::open(&disc)?;
+        let app = App::new(menu_assets, intro_assets, highscore_assets, highscore_store);
 
         run(Box::new(app), disc)
     }

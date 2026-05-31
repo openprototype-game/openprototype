@@ -38,7 +38,7 @@ impl MenuItem {
         match self {
             MenuItem::NewGame => None,
             MenuItem::LoadGame => None,
-            MenuItem::Highscores => None,
+            MenuItem::Highscores => Some(Transition::To(SceneId::Highscores)),
             MenuItem::MusicMenu => Some(Transition::To(SceneId::MusicMenu)),
             MenuItem::Quit => Some(Transition::Quit),
         }

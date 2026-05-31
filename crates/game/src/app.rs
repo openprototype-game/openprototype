@@ -9,42 +9,54 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::assets::{IntroAssets, MenuAssets};
+use crate::assets::{HighscoreAssets, IntroAssets, MenuAssets};
 use crate::core::framebuffer::Framebuffer;
 use crate::core::game::{Game, StepOutput};
 use crate::core::input::KeyEvent;
-use crate::scene::{Intro, Menu, MusicMenu, Scene, SceneId, Transition};
+use crate::highscores::HighscoreStore;
+use crate::scene::{HighscoreScreen, Intro, Menu, MusicMenu, Scene, SceneId, Transition};
 
 pub struct App {
     current: Box<dyn Scene>,
     menu_assets: Rc<MenuAssets>,
     intro_assets: Rc<IntroAssets>,
+    highscore_assets: Rc<HighscoreAssets>,
+    highscore_store: HighscoreStore,
 }
 
 impl App {
     /// Build the app on the intro.
-    pub fn new(menu_assets: MenuAssets, intro_assets: IntroAssets) -> Self {
+    pub fn new(
+        menu_assets: MenuAssets,
+        intro_assets: IntroAssets,
+        highscore_assets: HighscoreAssets,
+        highscore_store: HighscoreStore,
+    ) -> Self {
         let menu_assets = Rc::new(menu_assets);
         let intro_assets = Rc::new(intro_assets);
-        let current = build(&menu_assets, &intro_assets, SceneId::Intro);
 
         Self {
-            current,
+            current: Box::new(Intro::new(intro_assets.clone(), menu_assets.clone())),
             menu_assets,
             intro_assets,
+            highscore_assets: Rc::new(highscore_assets),
+            highscore_store,
         }
     }
-}
 
-fn build(
-    menu_assets: &Rc<MenuAssets>,
-    intro_assets: &Rc<IntroAssets>,
-    id: SceneId,
-) -> Box<dyn Scene> {
-    match id {
-        SceneId::Intro => Box::new(Intro::new(intro_assets.clone(), menu_assets.clone())),
-        SceneId::MainMenu => Box::new(Menu::new(menu_assets.clone())),
-        SceneId::MusicMenu => Box::new(MusicMenu::new(menu_assets.clone())),
+    fn build(&self, id: SceneId) -> Box<dyn Scene> {
+        match id {
+            SceneId::Intro => Box::new(Intro::new(
+                self.intro_assets.clone(),
+                self.menu_assets.clone(),
+            )),
+            SceneId::MainMenu => Box::new(Menu::new(self.menu_assets.clone())),
+            SceneId::MusicMenu => Box::new(MusicMenu::new(self.menu_assets.clone())),
+            SceneId::Highscores => Box::new(HighscoreScreen::new(
+                self.highscore_assets.clone(),
+                self.highscore_store.load(),
+            )),
+        }
     }
 }
 
@@ -56,9 +68,7 @@ impl Game for App {
 
         if let Some(transition) = output.transition {
             match transition {
-                Transition::To(id) => {
-                    self.current = build(&self.menu_assets, &self.intro_assets, id)
-                }
+                Transition::To(id) => self.current = self.build(id),
                 Transition::Quit => quit = true,
             }
         }
@@ -81,13 +91,19 @@ impl Game for App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assets::{test_intro_assets, test_menu_assets};
+    use crate::assets::{test_highscore_assets, test_intro_assets, test_menu_assets};
     use crate::core::audio::AudioCommand;
+    use crate::highscores::test_store;
 
     const FRAME: Duration = Duration::ZERO;
 
     fn test_app() -> App {
-        App::new(test_menu_assets(), test_intro_assets())
+        App::new(
+            test_menu_assets(),
+            test_intro_assets(),
+            test_highscore_assets(),
+            test_store(),
+        )
     }
 
     /// Skip the intro to land on the main menu. The intro emits the title theme
