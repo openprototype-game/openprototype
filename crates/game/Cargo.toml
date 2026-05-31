@@ -14,10 +14,13 @@ name = "prototype"
 path = "src/main.rs"
 
 [features]
-default = ["desktop"]
+default = ["desktop", "audio"]
 # The winit + pixels window backend. Off => the pure core builds without the
 # GPU stack (wgpu), which keeps headless examples and tests fast.
 desktop = ["dep:winit", "dep:pixels"]
+# CD-DA playback via rodio (cpal). Off => the platform uses a silent stub, so
+# the build needs no system audio libraries (ALSA on Linux).
+audio = ["dep:rodio"]
 
 [dependencies]
 prototype-formats.workspace = true
@@ -26,6 +29,7 @@ anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 winit = { version = "0.30.13", optional = true }
 pixels = { version = "0.17.1", optional = true }
+rodio = { version = "0.22.2", default-features = false, features = ["playback"], optional = true }
 
 [dev-dependencies]
 image = { version = "0.25.10", default-features = false, features = ["png"] }

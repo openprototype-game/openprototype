@@ -9,7 +9,8 @@
 /// A request to change what music is playing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioCommand {
-    /// Start (or restart) the given CD-DA track and loop it.
+    /// Start (or restart) the given CD-DA track, playing it once (the original
+    /// game does not loop its music).
     PlayTrack(u8),
     /// Stop whatever is playing.
     StopMusic,

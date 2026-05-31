@@ -8,6 +8,7 @@
 #[cfg(feature = "desktop")]
 mod desktop {
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     use anyhow::{Context, Result};
     use clap::Parser;
@@ -27,12 +28,14 @@ mod desktop {
     pub fn main() -> Result<()> {
         let cli = Cli::parse();
 
-        let disc = DiscImage::open(&cli.cue)
-            .with_context(|| format!("opening disc image {}", cli.cue.display()))?;
+        let disc = Arc::new(
+            DiscImage::open(&cli.cue)
+                .with_context(|| format!("opening disc image {}", cli.cue.display()))?,
+        );
         let assets = load_menu_assets(&disc)?;
         let menu = Menu::new(assets);
 
-        run(Box::new(menu))
+        run(Box::new(menu), disc)
     }
 }
 

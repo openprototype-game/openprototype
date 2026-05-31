@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use pixels::{Pixels, SurfaceTexture};
+use prototype_disc::DiscImage;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
@@ -21,16 +22,17 @@ use winit::window::{Window, WindowId};
 use crate::core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use crate::core::game::Game;
 use crate::core::input::KeyEvent;
-use crate::platform::audio::{LoggingMusicPlayer, MusicPlayer};
+use crate::platform::audio::{MusicPlayer, make_music_player};
 
 const INITIAL_SCALE: u32 = 4;
 
-/// Run the given scene until it quits or the window closes.
-pub fn run(game: Box<dyn Game>) -> Result<()> {
+/// Run the given scene until it quits or the window closes. `disc` is handed to
+/// the audio backend so it can stream the CD-DA tracks on demand.
+pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
     let event_loop = EventLoop::new().context("creating the event loop")?;
     let mut app = App {
         game,
-        music: Box::new(LoggingMusicPlayer),
+        music: make_music_player(disc),
         render: None,
         pending_error: None,
     };
