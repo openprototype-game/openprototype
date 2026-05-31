@@ -86,7 +86,11 @@ mod rodio_backend {
 
     impl RodioMusicPlayer {
         pub fn new(disc: Arc<DiscImage>) -> Result<Self> {
-            let sink = DeviceSinkBuilder::open_default_sink().context("opening audio output")?;
+            let mut sink =
+                DeviceSinkBuilder::open_default_sink().context("opening audio output")?;
+            // Dropping the sink on exit is how we stop the music, so rodio's
+            // "audio will stop" drop notice is just noise.
+            sink.log_on_drop(false);
 
             Ok(Self {
                 disc,
