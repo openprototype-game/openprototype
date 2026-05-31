@@ -1,73 +1,72 @@
 //! The application: a flat scene state machine.
 //!
-//! Owns the current scene and the shared menu assets, and applies the
-//! transitions scenes request. Implements the platform-facing [`Game`] trait,
-//! so the platform stays unaware of scenes. The title theme is started once
-//! here at boot (the intro scene will own this later); the platform keeps it
-//! playing across scene switches, matching the original.
+//! Owns the current scene and the shared assets, and applies the transitions
+//! scenes request. Implements the platform-facing [`Game`] trait, so the
+//! platform stays unaware of scenes. The app boots into the intro, which starts
+//! the title theme; the platform keeps it playing across scene switches,
+//! matching the original.
 
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::assets::MenuAssets;
-use crate::core::audio::AudioCommand;
+use crate::assets::{IntroAssets, MenuAssets};
 use crate::core::framebuffer::Framebuffer;
 use crate::core::game::{Game, StepOutput};
 use crate::core::input::KeyEvent;
-use crate::scene::{Menu, MusicMenu, Scene, SceneId, Transition};
-
-/// The CD-DA track the front-end starts with (the title theme).
-const BOOT_TRACK: u8 = 2;
+use crate::scene::{Intro, Menu, MusicMenu, Scene, SceneId, Transition};
 
 pub struct App {
     current: Box<dyn Scene>,
-    assets: Rc<MenuAssets>,
-    booted: bool,
+    menu_assets: Rc<MenuAssets>,
+    intro_assets: Rc<IntroAssets>,
 }
 
 impl App {
-    /// Build the app on the main menu.
-    pub fn new(assets: MenuAssets) -> Self {
-        let assets = Rc::new(assets);
-        let current = build(&assets, SceneId::MainMenu);
+    /// Build the app on the intro.
+    pub fn new(menu_assets: MenuAssets, intro_assets: IntroAssets) -> Self {
+        let menu_assets = Rc::new(menu_assets);
+        let intro_assets = Rc::new(intro_assets);
+        let current = build(&menu_assets, &intro_assets, SceneId::Intro);
 
         Self {
             current,
-            assets,
-            booted: false,
+            menu_assets,
+            intro_assets,
         }
     }
 }
 
-fn build(assets: &Rc<MenuAssets>, id: SceneId) -> Box<dyn Scene> {
+fn build(
+    menu_assets: &Rc<MenuAssets>,
+    intro_assets: &Rc<IntroAssets>,
+    id: SceneId,
+) -> Box<dyn Scene> {
     match id {
-        SceneId::MainMenu => Box::new(Menu::new(assets.clone())),
-        SceneId::MusicMenu => Box::new(MusicMenu::new(assets.clone())),
+        SceneId::Intro => Box::new(Intro::new(intro_assets.clone(), menu_assets.clone())),
+        SceneId::MainMenu => Box::new(Menu::new(menu_assets.clone())),
+        SceneId::MusicMenu => Box::new(MusicMenu::new(menu_assets.clone())),
     }
 }
 
 impl Game for App {
     fn step(&mut self, dt: Duration, input: &[KeyEvent]) -> StepOutput {
-        let mut audio = Vec::new();
-
-        if !self.booted {
-            audio.push(AudioCommand::PlayTrack(BOOT_TRACK));
-            self.booted = true;
-        }
-
         let output = self.current.update(dt, input);
-        audio.extend(output.audio);
 
         let mut quit = false;
 
         if let Some(transition) = output.transition {
             match transition {
-                Transition::To(id) => self.current = build(&self.assets, id),
+                Transition::To(id) => {
+                    self.current = build(&self.menu_assets, &self.intro_assets, id)
+                }
                 Transition::Quit => quit = true,
             }
         }
 
-        StepOutput { audio, quit }
+        StepOutput {
+            audio: output.audio,
+            quit,
+        }
     }
 
     fn framebuffer(&self) -> &Framebuffer {
@@ -82,32 +81,42 @@ impl Game for App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assets::test_menu_assets;
+    use crate::assets::{test_intro_assets, test_menu_assets};
+    use crate::core::audio::AudioCommand;
 
     const FRAME: Duration = Duration::ZERO;
 
-    #[test]
-    fn boot_starts_the_title_theme_once() {
-        let mut app = App::new(test_menu_assets());
+    fn test_app() -> App {
+        App::new(test_menu_assets(), test_intro_assets())
+    }
 
-        assert_eq!(
-            app.step(FRAME, &[]).audio,
-            vec![AudioCommand::PlayTrack(BOOT_TRACK)]
-        );
-        assert!(app.step(FRAME, &[]).audio.is_empty());
+    /// Skip the intro to land on the main menu. The intro emits the title theme
+    /// on its first update, then the key transitions to the menu.
+    fn skip_intro(app: &mut App) {
+        app.step(FRAME, &[KeyEvent::Enter]);
+    }
+
+    #[test]
+    fn boot_runs_the_intro_and_starts_the_title_theme() {
+        let mut app = test_app();
+
+        assert!(app.is_animating(), "the intro animates");
+        assert_eq!(app.step(FRAME, &[]).audio, vec![AudioCommand::PlayTrack(2)]);
     }
 
     #[test]
     fn esc_on_the_menu_quits() {
-        let mut app = App::new(test_menu_assets());
+        let mut app = test_app();
+        skip_intro(&mut app);
 
+        assert!(!app.is_animating(), "the menu is static");
         assert!(app.step(FRAME, &[KeyEvent::Esc]).quit);
     }
 
     #[test]
     fn enters_the_jukebox_plays_a_track_and_returns() {
-        let mut app = App::new(test_menu_assets());
-        app.step(FRAME, &[]); // boot: starts the title theme
+        let mut app = test_app();
+        skip_intro(&mut app);
 
         // MUSIC MENU is the fourth item; open it.
         let open = app.step(

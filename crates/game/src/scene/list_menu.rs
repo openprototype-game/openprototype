@@ -64,7 +64,10 @@ impl ListMenu {
         self.render();
     }
 
-    fn render(&mut self) {
+    /// Draw the background and labels without the cursor. The intro fades this
+    /// in before the menu loop starts; the original draws the cursor only once
+    /// the loop runs.
+    pub fn render_without_cursor(&mut self) {
         self.framebuffer.blit_screen(&self.assets.background);
 
         for (index, label) in self.labels.iter().enumerate() {
@@ -72,6 +75,10 @@ impl ListMenu {
                 .font
                 .draw_into(&mut self.framebuffer.image, LABEL_X, row_y(index), label);
         }
+    }
+
+    fn render(&mut self) {
+        self.render_without_cursor();
 
         self.assets.font.draw_into(
             &mut self.framebuffer.image,

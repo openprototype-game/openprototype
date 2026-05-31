@@ -11,9 +11,9 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::rc::Rc;
 
-use prototype::core::game::Game;
-use prototype::core::input::KeyEvent;
+use prototype::scene::{Menu, MusicMenu, Scene};
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::color::Palette;
 use prototype_formats::{
@@ -126,27 +126,19 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
     // The composed main-menu frame: BACK3 background + font labels + cursor,
     // the initial state the player sees. Catches regressions in the menu's
     // layout or glyph compositing that the per-asset hashes above would miss.
-    let menu_assets = prototype::assets::load_menu_assets(image).unwrap();
-    let mut app = prototype::app::App::new(menu_assets);
+    // Built straight from the scene (App boots into the intro now); navigation
+    // between scenes is covered by the unit tests.
+    let menu_assets = Rc::new(prototype::assets::load_menu_assets(image).unwrap());
+    let menu = Menu::new(menu_assets.clone());
     out.push((
         "MENU#initial_frame".to_string(),
-        sha256_hex(&app.framebuffer().image.pixels),
+        sha256_hex(&menu.framebuffer().image.pixels),
     ));
 
-    // Drive into the jukebox (MUSIC MENU is the fourth item) and hash its frame.
-    app.step(std::time::Duration::ZERO, &[]);
-    app.step(
-        std::time::Duration::ZERO,
-        &[
-            KeyEvent::Down,
-            KeyEvent::Down,
-            KeyEvent::Down,
-            KeyEvent::Enter,
-        ],
-    );
+    let jukebox = MusicMenu::new(menu_assets.clone());
     out.push((
         "MUSIC#initial_frame".to_string(),
-        sha256_hex(&app.framebuffer().image.pixels),
+        sha256_hex(&jukebox.framebuffer().image.pixels),
     ));
 
     // Compiled sprites: both catalogs live in LEVEL_1.WAD (the only level

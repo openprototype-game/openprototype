@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::font::Font;
-use prototype_formats::{Dimensions, IndexedImage, Palette, StartExe, raw};
+use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw};
 
 use crate::core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
@@ -19,6 +19,30 @@ pub struct MenuAssets {
     pub font: Font,
     pub palette: Palette,
 }
+
+/// A full-screen still with its own palette (a `.BDY` image plus its `.PAL`).
+pub struct StillImage {
+    pub image: IndexedImage,
+    pub palette: Palette,
+}
+
+/// Everything the intro sequence needs. The stills are decoded up front; the
+/// FLIs are kept as raw bytes and decoded when their beat starts (each is large,
+/// and the intro plays once). Their headers are validated here so gross
+/// corruption surfaces at load, not mid-intro.
+pub struct IntroAssets {
+    pub neo: StillImage,
+    pub surplogo: StillImage,
+    pub cover: StillImage,
+    pub intro_fli: Vec<u8>,
+    pub fly_fli: Vec<u8>,
+    pub credz_fli: Vec<u8>,
+    pub font: Font,
+}
+
+/// `COVER3.BDY` decodes to a 320x478 image (taller than the screen); the intro
+/// shows the top 320x200, where the PROTOTYPE title and ship sit.
+const COVER_HEIGHT: u32 = 478;
 
 /// Load and decode the menu assets from the disc image.
 pub fn load_menu_assets(disc: &DiscImage) -> Result<MenuAssets> {
@@ -43,6 +67,78 @@ pub fn load_menu_assets(disc: &DiscImage) -> Result<MenuAssets> {
         font,
         palette,
     })
+}
+
+/// Load and decode the intro assets from the disc image.
+pub fn load_intro_assets(disc: &DiscImage) -> Result<IntroAssets> {
+    let neo = load_still(disc, "NEO.BDY", "NEO.PAL")?;
+    let surplogo = load_still(disc, "SURPLOGO.BDY", "SURPLOGO.PAL")?;
+    let cover = load_cover(disc)?;
+
+    let intro_fli = load_fli_bytes(disc, "FLI/INTRO.FLI")?;
+    let fly_fli = load_fli_bytes(disc, "FLI/FLY.FLI")?;
+    let credz_fli = load_fli_bytes(disc, "FLI/CREDZ.FLI")?;
+
+    let font_bytes = disc.read("FONT.RAW").context("reading FONT.RAW")?;
+    let font = Font::decode(&font_bytes).context("decoding FONT.RAW")?;
+
+    Ok(IntroAssets {
+        neo,
+        surplogo,
+        cover,
+        intro_fli,
+        fly_fli,
+        credz_fli,
+        font,
+    })
+}
+
+/// Decode a full-screen `.BDY` still and its `.PAL` palette.
+fn load_still(disc: &DiscImage, body: &str, palette: &str) -> Result<StillImage> {
+    let body_bytes = disc.read(body).with_context(|| format!("reading {body}"))?;
+    let image = bdy::decode(&body_bytes, Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT))
+        .with_context(|| format!("decoding {body}"))?;
+
+    let palette_bytes = disc
+        .read(palette)
+        .with_context(|| format!("reading {palette}"))?;
+    let palette = pal::decode(&palette_bytes).with_context(|| format!("decoding {palette}"))?;
+
+    Ok(StillImage { image, palette })
+}
+
+/// Decode the PROTOTYPE cover and squeeze it to the screen. `COVER3.BDY` is a
+/// 320x478 image; the original displays its top 320x400 in a Mode X 320x400
+/// screen (the CRT squashes it to normal height). We reproduce that on the
+/// 320x200 framebuffer by taking every other row of those top 400.
+fn load_cover(disc: &DiscImage) -> Result<StillImage> {
+    let body_bytes = disc.read("COVER3.BDY").context("reading COVER3.BDY")?;
+    let full = bdy::decode(&body_bytes, Dimensions::new(SCREEN_WIDTH, COVER_HEIGHT))
+        .context("decoding COVER3.BDY")?;
+
+    let width = SCREEN_WIDTH as usize;
+    let mut pixels = Vec::with_capacity((SCREEN_WIDTH * SCREEN_HEIGHT) as usize);
+
+    for row in 0..SCREEN_HEIGHT as usize {
+        let start = row * 2 * width;
+        pixels.extend_from_slice(&full.pixels[start..start + width]);
+    }
+
+    let image = IndexedImage::new(Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT), pixels)
+        .expect("squeezed cover matches its dimensions");
+
+    let palette_bytes = disc.read("COVER3.PAL").context("reading COVER3.PAL")?;
+    let palette = pal::decode(&palette_bytes).context("decoding COVER3.PAL")?;
+
+    Ok(StillImage { image, palette })
+}
+
+/// Read a FLI's bytes and validate its header, so a corrupt file fails at load
+/// rather than when its beat plays.
+fn load_fli_bytes(disc: &DiscImage, name: &str) -> Result<Vec<u8>> {
+    let bytes = disc.read(name).with_context(|| format!("reading {name}"))?;
+    Flic::new(&bytes).with_context(|| format!("validating {name} header"))?;
+    Ok(bytes)
 }
 
 /// Read a CD-DA audio track as normalized interleaved stereo `f32` samples,
@@ -99,6 +195,36 @@ pub(crate) fn test_menu_assets() -> MenuAssets {
         background,
         font,
         palette,
+    }
+}
+
+/// Synthetic intro assets for tests that exercise the intro's beat logic
+/// without the disc. The stills are blank and the FLIs are empty: tests drive
+/// the early stills/fades or skip the whole intro, and never reach a FLI beat.
+#[cfg(test)]
+pub(crate) fn test_intro_assets() -> IntroAssets {
+    let still = || {
+        let image = IndexedImage::new(
+            Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+            vec![0u8; (SCREEN_WIDTH * SCREEN_HEIGHT) as usize],
+        )
+        .expect("synthetic still matches its dimensions");
+        let palette = Palette::from_vga_6bit(&[0u8; 768]).expect("synthetic palette decodes");
+
+        StillImage { image, palette }
+    };
+
+    let font_sheet = vec![0u8; 320 * 62];
+    let font = Font::decode(&font_sheet).expect("synthetic font sheet decodes");
+
+    IntroAssets {
+        neo: still(),
+        surplogo: still(),
+        cover: still(),
+        intro_fli: Vec::new(),
+        fly_fli: Vec::new(),
+        credz_fli: Vec::new(),
+        font,
     }
 }
 

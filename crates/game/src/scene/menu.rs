@@ -57,6 +57,13 @@ impl Menu {
             list: ListMenu::new(assets, labels),
         }
     }
+
+    /// The menu frame with the cursor hidden, for the intro's fade-in. The menu
+    /// loop draws the cursor only once it starts, so the fade shows labels only.
+    pub fn frame_without_cursor(&mut self) -> &Framebuffer {
+        self.list.render_without_cursor();
+        self.list.framebuffer()
+    }
 }
 
 impl Scene for Menu {

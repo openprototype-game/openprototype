@@ -70,6 +70,27 @@ impl FlicPlayer {
         }
     }
 
+    /// Decode every frame, but play at a fixed `frame_delay` instead of the
+    /// FLI's own speed. The original's player (`START.EXE` `0x31fd`) ignores the
+    /// header speed and delays a caller-set tick count after each frame, so the
+    /// intro plays each FLI at its own rate; this mirrors that.
+    pub fn decode_at(bytes: &[u8], frame_delay: Duration) -> Result<Self> {
+        let mut player = Self::decode(bytes)?;
+
+        for frame in &mut player.frames {
+            frame.delay = frame_delay;
+        }
+
+        Ok(player)
+    }
+
+    /// Restart from the first frame. Used to loop a short animation (the intro
+    /// credits replay `credz.fli` under each text page).
+    pub fn restart(&mut self) {
+        self.index = 0;
+        self.elapsed = Duration::ZERO;
+    }
+
     /// The frame to show now.
     pub fn current(&self) -> &FlicFrame {
         &self.frames[self.index]

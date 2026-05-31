@@ -13,7 +13,7 @@ mod desktop {
     use anyhow::{Context, Result};
     use clap::Parser;
     use prototype::app::App;
-    use prototype::assets::load_menu_assets;
+    use prototype::assets::{load_intro_assets, load_menu_assets};
     use prototype::platform::run;
     use prototype_disc::DiscImage;
 
@@ -32,8 +32,9 @@ mod desktop {
             DiscImage::open(&cli.cue)
                 .with_context(|| format!("opening disc image {}", cli.cue.display()))?,
         );
-        let assets = load_menu_assets(&disc)?;
-        let app = App::new(assets);
+        let menu_assets = load_menu_assets(&disc)?;
+        let intro_assets = load_intro_assets(&disc)?;
+        let app = App::new(menu_assets, intro_assets);
 
         run(Box::new(app), disc)
     }

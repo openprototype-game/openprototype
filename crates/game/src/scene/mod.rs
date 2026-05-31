@@ -9,10 +9,12 @@
 //!
 //! [`App`]: crate::app::App
 
+pub mod intro;
 pub mod list_menu;
 pub mod menu;
 pub mod music;
 
+pub use intro::Intro;
 pub use list_menu::ListMenu;
 pub use menu::Menu;
 pub use music::MusicMenu;
@@ -26,6 +28,7 @@ use crate::core::input::KeyEvent;
 /// The scenes the [`App`](crate::app::App) can switch to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SceneId {
+    Intro,
     MainMenu,
     MusicMenu,
 }
