@@ -11,6 +11,7 @@
 //! - [`app`] is the scene state machine: it owns the current scene and applies
 //!   transitions. It implements the platform-facing `Game` trait.
 //! - [`assets`] decodes the disc's graphics into what scenes consume.
+//! - [`highscores`] persists the high-score table in the OS data directory.
 //! - [`platform`] is the only place that knows winit, pixels and the audio
 //!   device. It drives the loop: feed input, present the framebuffer scaled,
 //!   execute audio commands.
@@ -18,6 +19,7 @@
 pub mod app;
 pub mod assets;
 pub mod core;
+pub mod highscores;
 pub mod scene;
 
 #[cfg(feature = "desktop")]
