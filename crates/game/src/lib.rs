@@ -1,4 +1,4 @@
-//! Prototype (1995) — game runtime.
+//! Prototype (1995) game runtime.
 //!
 //! The library is split so a backend swap touches only the platform layer:
 //!
@@ -6,12 +6,16 @@
 //!   [`Framebuffer`](core::Framebuffer), react to [`KeyEvent`](core::KeyEvent)s,
 //!   and emit [`AudioCommand`](core::AudioCommand)s. No windowing or audio
 //!   library is in scope, so the whole core is headless-testable.
-//! - [`scene`] holds the concrete scenes (the menu, for now).
+//! - [`scene`] holds the scenes (the menu, for now) and the transitions between
+//!   them.
+//! - [`app`] is the scene state machine: it owns the current scene and applies
+//!   transitions. It implements the platform-facing `Game` trait.
 //! - [`assets`] decodes the disc's graphics into what scenes consume.
 //! - [`platform`] is the only place that knows winit, pixels and the audio
 //!   device. It drives the loop: feed input, present the framebuffer scaled,
 //!   execute audio commands.
 
+pub mod app;
 pub mod assets;
 pub mod core;
 pub mod scene;

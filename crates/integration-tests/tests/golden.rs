@@ -2,7 +2,7 @@
 //!
 //! For every file we can decode, we hash the *decoded* bytes (not the source,
 //! which would re-distribute the asset) and compare against a committed
-//! manifest. A mismatch means a decoder's output changed — confirm the change
+//! manifest. A mismatch means a decoder's output changed. Confirm the change
 //! is intended, then regenerate with `UPDATE_GOLDEN=1`.
 //!
 //! These hashes are a snapshot of current behaviour, not proof of correctness:
@@ -126,10 +126,10 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
     // the initial state the player sees. Catches regressions in the menu's
     // layout or glyph compositing that the per-asset hashes above would miss.
     let menu_assets = prototype::assets::load_menu_assets(image).unwrap();
-    let menu_scene = prototype::scene::Menu::new(menu_assets);
+    let app = prototype::app::App::new(menu_assets);
     out.push((
         "MENU#initial_frame".to_string(),
-        sha256_hex(&menu_scene.framebuffer().image.pixels),
+        sha256_hex(&app.framebuffer().image.pixels),
     ));
 
     // Compiled sprites: both catalogs live in LEVEL_1.WAD (the only level

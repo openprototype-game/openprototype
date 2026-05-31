@@ -1,4 +1,4 @@
-//! Prototype (1995) port — front-end shell.
+//! Prototype (1995) port: front-end shell.
 //!
 //! Opens the original disc image, loads the menu assets, and runs the menu in a
 //! window. The game data is never bundled: point `--cue` at your own copy of
@@ -12,9 +12,9 @@ mod desktop {
 
     use anyhow::{Context, Result};
     use clap::Parser;
+    use prototype::app::App;
     use prototype::assets::load_menu_assets;
     use prototype::platform::run;
-    use prototype::scene::Menu;
     use prototype_disc::DiscImage;
 
     #[derive(Parser)]
@@ -33,9 +33,9 @@ mod desktop {
                 .with_context(|| format!("opening disc image {}", cli.cue.display()))?,
         );
         let assets = load_menu_assets(&disc)?;
-        let menu = Menu::new(assets);
+        let app = App::new(assets);
 
-        run(Box::new(menu), disc)
+        run(Box::new(app), disc)
     }
 }
 

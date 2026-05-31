@@ -1,112 +1,92 @@
 //! The main menu.
 //!
-//! Mirrors `START.EXE`'s menu loop (`0x3e41`): blit `BACK3.RAW`, draw five
-//! labels with the glyph blitter at x=90, and a `>` cursor at x=70 on the
-//! active row. Rows sit at y = 60, 76, 92, 108, 124 (16 scanlines apart). Up
-//! and Down move the cursor with wraparound; Enter dispatches.
-//!
-//! In this shell only QUIT does something real (it asks the platform to exit).
-//! The other items get their own scenes later; for now they are inert. Track 2
-//! starts on the first frame so the menu has the music the original plays from
-//! the intro onward.
+//! Mirrors `START.EXE`'s menu loop: a [`ListMenu`] over NEW GAME, LOAD GAME,
+//! HIGHSCORES, MUSIC MENU, QUIT. Up/Down move the cursor (wrapping); Enter
+//! dispatches; Esc quits. In this shell only QUIT does something real; the rest
+//! get their scenes later. The menu emits no audio. The title theme is started
+//! once at boot, and the original never restarts it from the menu.
+
+use std::rc::Rc;
+
+use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::assets::MenuAssets;
-use crate::core::audio::AudioCommand;
 use crate::core::framebuffer::Framebuffer;
-use crate::core::game::{Game, StepOutput};
 use crate::core::input::KeyEvent;
+use crate::scene::list_menu::ListMenu;
+use crate::scene::{Scene, SceneOutput, Transition};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, EnumIter, Display)]
 enum MenuItem {
+    #[strum(to_string = "NEW GAME")]
     NewGame,
+    #[strum(to_string = "LOAD GAME")]
     LoadGame,
+    #[strum(to_string = "HIGHSCORES")]
     Highscores,
+    #[strum(to_string = "MUSIC MENU")]
     MusicMenu,
+    #[strum(to_string = "QUIT")]
     Quit,
 }
 
-const ITEMS: [(MenuItem, &str); 5] = [
-    (MenuItem::NewGame, "NEW GAME"),
-    (MenuItem::LoadGame, "LOAD GAME"),
-    (MenuItem::Highscores, "HIGHSCORES"),
-    (MenuItem::MusicMenu, "MUSIC MENU"),
-    (MenuItem::Quit, "QUIT"),
-];
-
-/// The CD-DA track the menu plays (the original carries it over from the intro).
-const MENU_TRACK: u8 = 2;
-
-const LABEL_X: i32 = 90;
-const CURSOR_X: i32 = 70;
-const FIRST_ROW_Y: i32 = 60;
-const ROW_HEIGHT: i32 = 16;
-
-fn row_y(index: usize) -> i32 {
-    FIRST_ROW_Y + index as i32 * ROW_HEIGHT
+impl MenuItem {
+    /// The transition Enter on this item triggers, or `None` while the item has
+    /// no scene yet.
+    fn activate(self) -> Option<Transition> {
+        match self {
+            MenuItem::NewGame => None,
+            MenuItem::LoadGame => None,
+            MenuItem::Highscores => None,
+            MenuItem::MusicMenu => None,
+            MenuItem::Quit => Some(Transition::Quit),
+        }
+    }
 }
 
 pub struct Menu {
-    assets: MenuAssets,
+    assets: Rc<MenuAssets>,
     framebuffer: Framebuffer,
-    selected: usize,
-    started_music: bool,
+    list: ListMenu,
+    labels: Vec<String>,
 }
 
 impl Menu {
-    /// Build the menu from its decoded assets and render the initial frame.
-    pub fn new(assets: MenuAssets) -> Self {
+    pub fn new(assets: Rc<MenuAssets>) -> Self {
+        let labels: Vec<String> = MenuItem::iter().map(|item| item.to_string()).collect();
         let framebuffer = Framebuffer::new(assets.palette.clone());
+        let list = ListMenu::new(labels.len());
+
         let mut menu = Self {
             assets,
             framebuffer,
-            selected: 0,
-            started_music: false,
+            list,
+            labels,
         };
 
         menu.render();
         menu
     }
 
-    fn move_cursor(&mut self, delta: i32) {
-        let count = ITEMS.len() as i32;
-        self.selected = (self.selected as i32 + delta).rem_euclid(count) as usize;
-    }
-
     fn render(&mut self) {
-        self.framebuffer.blit_screen(&self.assets.background);
-
-        for (index, (_, label)) in ITEMS.iter().enumerate() {
-            self.assets
-                .font
-                .draw_into(&mut self.framebuffer.image, LABEL_X, row_y(index), label);
-        }
-
-        self.assets.font.draw_into(
-            &mut self.framebuffer.image,
-            CURSOR_X,
-            row_y(self.selected),
-            ">",
-        );
+        let labels: Vec<&str> = self.labels.iter().map(String::as_str).collect();
+        self.list
+            .render(&mut self.framebuffer, &self.assets, &labels);
     }
 }
 
-impl Game for Menu {
-    fn step(&mut self, input: &[KeyEvent]) -> StepOutput {
-        let mut output = StepOutput::default();
-
-        if !self.started_music {
-            output.audio.push(AudioCommand::PlayTrack(MENU_TRACK));
-            self.started_music = true;
-        }
+impl Scene for Menu {
+    fn update(&mut self, input: &[KeyEvent]) -> SceneOutput {
+        let mut output = SceneOutput::default();
 
         for event in input {
             match event {
-                KeyEvent::Up => self.move_cursor(-1),
-                KeyEvent::Down => self.move_cursor(1),
-                KeyEvent::Esc => output.quit = true,
+                KeyEvent::Up => self.list.move_up(),
+                KeyEvent::Down => self.list.move_down(),
+                KeyEvent::Esc => output.transition = Some(Transition::Quit),
                 KeyEvent::Enter => {
-                    if ITEMS[self.selected].0 == MenuItem::Quit {
-                        output.quit = true;
+                    if let Some(item) = MenuItem::iter().nth(self.list.selected()) {
+                        output.transition = item.activate();
                     }
                 }
                 KeyEvent::Char(_) => {}
@@ -125,80 +105,56 @@ impl Game for Menu {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
-    use prototype_formats::font::Font;
-    use prototype_formats::{Dimensions, IndexedImage, Palette};
+    use crate::assets::test_menu_assets;
 
-    /// A menu backed by blank assets: enough to exercise state and side
-    /// effects without touching the disc.
     fn test_menu() -> Menu {
-        let background = IndexedImage::new(
-            Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
-            vec![0u8; (SCREEN_WIDTH * SCREEN_HEIGHT) as usize],
-        )
-        .unwrap();
-        let font_sheet = vec![0u8; 320 * 62];
-        let font = Font::decode(&font_sheet).unwrap();
-        let palette = Palette::from_vga_6bit(&[0u8; 768]).unwrap();
-
-        Menu::new(MenuAssets {
-            background,
-            font,
-            palette,
-        })
+        Menu::new(Rc::new(test_menu_assets()))
     }
 
     #[test]
-    fn down_advances_then_wraps_to_first() {
+    fn up_wraps_to_last_and_down_wraps_to_first() {
         let mut menu = test_menu();
+        let last = MenuItem::iter().count() - 1;
 
-        menu.step(&[KeyEvent::Down]);
-        assert_eq!(menu.selected, 1);
+        menu.update(&[KeyEvent::Up]);
+        assert_eq!(menu.list.selected(), last);
 
-        menu.selected = ITEMS.len() - 1; // QUIT
-        menu.step(&[KeyEvent::Down]);
-        assert_eq!(menu.selected, 0);
-    }
-
-    #[test]
-    fn up_from_first_wraps_to_last() {
-        let mut menu = test_menu();
-
-        menu.step(&[KeyEvent::Up]);
-        assert_eq!(menu.selected, ITEMS.len() - 1);
+        menu.update(&[KeyEvent::Down]);
+        assert_eq!(menu.list.selected(), 0);
     }
 
     #[test]
     fn enter_on_quit_requests_exit() {
         let mut menu = test_menu();
-        menu.selected = ITEMS.len() - 1; // QUIT
+        menu.update(&[KeyEvent::Up]); // QUIT is the last item
 
-        assert!(menu.step(&[KeyEvent::Enter]).quit);
+        assert_eq!(
+            menu.update(&[KeyEvent::Enter]).transition,
+            Some(Transition::Quit)
+        );
     }
 
     #[test]
-    fn enter_on_other_item_does_not_exit() {
-        let mut menu = test_menu();
-        menu.selected = 0; // NEW GAME
+    fn enter_on_an_unwired_item_does_nothing() {
+        let mut menu = test_menu(); // starts on NEW GAME
 
-        assert!(!menu.step(&[KeyEvent::Enter]).quit);
+        assert_eq!(menu.update(&[KeyEvent::Enter]).transition, None);
     }
 
     #[test]
     fn esc_requests_exit() {
         let mut menu = test_menu();
 
-        assert!(menu.step(&[KeyEvent::Esc]).quit);
+        assert_eq!(
+            menu.update(&[KeyEvent::Esc]).transition,
+            Some(Transition::Quit)
+        );
     }
 
     #[test]
-    fn music_starts_once() {
+    fn menu_emits_no_audio() {
         let mut menu = test_menu();
 
-        assert_eq!(
-            menu.step(&[]).audio,
-            vec![AudioCommand::PlayTrack(MENU_TRACK)]
-        );
-        assert!(menu.step(&[]).audio.is_empty());
+        assert!(menu.update(&[]).audio.is_empty());
     }
 }

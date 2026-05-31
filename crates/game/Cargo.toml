@@ -30,6 +30,7 @@ prototype-formats.workspace = true
 prototype-disc.workspace = true
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 winit = { version = "0.30.13", optional = true }
 pixels = { version = "0.17.1", optional = true }
 rodio = { version = "0.22.2", default-features = false, features = ["playback"], optional = true }

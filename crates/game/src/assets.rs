@@ -82,6 +82,26 @@ pub(crate) fn append_pcm_i16_le_as_f32(bytes: &[u8], out: &mut Vec<f32>) {
     );
 }
 
+/// Synthetic, all-zero menu assets for tests that exercise scene logic without
+/// the disc. Visually blank, but the right shapes.
+#[cfg(test)]
+pub(crate) fn test_menu_assets() -> MenuAssets {
+    let background = IndexedImage::new(
+        Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+        vec![0u8; (SCREEN_WIDTH * SCREEN_HEIGHT) as usize],
+    )
+    .expect("synthetic background matches its dimensions");
+    let font_sheet = vec![0u8; 320 * 62];
+    let font = Font::decode(&font_sheet).expect("synthetic font sheet decodes");
+    let palette = Palette::from_vga_6bit(&[0u8; 768]).expect("synthetic palette decodes");
+
+    MenuAssets {
+        background,
+        font,
+        palette,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
