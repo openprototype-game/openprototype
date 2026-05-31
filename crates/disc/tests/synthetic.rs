@@ -1,9 +1,9 @@
 //! Full-pipeline test over a tiny synthetic image, generated at runtime.
 //!
-//! This exercises `DiscImage::open` end to end — cue parse, case-insensitive
+//! This exercises `DiscImage::open` end to end: cue parse, case-insensitive
 //! bin resolution, the PVD, the root-directory walk, one level of `FLI/`
-//! recursion, `AssetSource::read`, and the audio-track ranges — without the real
-//! 282 MB CD. It also pins two regressions the real image first exposed: the
+//! recursion, `AssetSource::read`, and the audio-track ranges, all without the
+//! real 282 MB CD. It also pins two regressions the real image first exposed: the
 //! root directory record's own `0x00` identifier, and a cue that names the bin
 //! in a different case than the file on disk.
 

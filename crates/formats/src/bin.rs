@@ -380,7 +380,7 @@ pub fn decode_ship(bin: &[u8], wad: &[u8], catalog_offset: usize) -> Result<Spri
 mod tests {
     use super::*;
 
-    /// `mov word [si], 0xBBAA; retf` — writes index 0xAA at (0,0) and 0xBB at (1,0).
+    /// `mov word [si], 0xBBAA; retf` writes index 0xAA at (0,0) and 0xBB at (1,0).
     const WORD_SUB: &[u8] = &[0xC7, 0x04, 0xAA, 0xBB, 0xCB];
 
     #[test]

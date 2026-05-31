@@ -1,7 +1,7 @@
 //! Decode every real game asset, sourced from the CD image.
 //!
 //! Self-describing formats (FLI, SMP, PAL, the four-plane SP backgrounds) are
-//! decoded in full over the whole corpus — the loops double as totality checks
+//! decoded in full over the whole corpus, so the loops double as totality checks
 //! (no decoder errors on any real file). Formats whose geometry is external
 //! (RAW, BDY) or build-specific (EXE) keep a representative case, since you
 //! cannot decode them without a per-file width/height the disc does not carry.

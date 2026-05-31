@@ -6,12 +6,12 @@ the shipped game files, guided by notes from the original developer.
 
 ## Layout
 
-- `reference/formats/` — per-format findings as they get verified.
-- `crates/disc/` — library: reads game files and the OST from the CD image.
-- `crates/formats/` — library: decoders for every on-disk format.
-- `crates/game/` — the game binary.
-- `crates/tools/` — CLIs for inspecting and extracting assets.
-- `crates/integration-tests/` — decodes real assets sourced from the CD image
+- `reference/formats/`: per-format findings as they get verified.
+- `crates/disc/`: library that reads game files and the OST from the CD image.
+- `crates/formats/`: library of decoders for every on-disk format.
+- `crates/game/`: the game binary.
+- `crates/tools/`: CLIs for inspecting and extracting assets.
+- `crates/integration-tests/`: decodes real assets sourced from the CD image
   (gated behind the `disc-tests` feature; see below).
 
 ## The disc image
