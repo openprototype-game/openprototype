@@ -13,7 +13,7 @@ use crate::core::audio::AudioCommand;
 use crate::core::framebuffer::Framebuffer;
 use crate::core::game::{Game, StepOutput};
 use crate::core::input::KeyEvent;
-use crate::scene::{Menu, Scene, SceneId, Transition};
+use crate::scene::{Menu, MusicMenu, Scene, SceneId, Transition};
 
 /// The CD-DA track the front-end starts with (the title theme).
 const BOOT_TRACK: u8 = 2;
@@ -41,6 +41,7 @@ impl App {
 fn build(assets: &Rc<MenuAssets>, id: SceneId) -> Box<dyn Scene> {
     match id {
         SceneId::MainMenu => Box::new(Menu::new(assets.clone())),
+        SceneId::MusicMenu => Box::new(MusicMenu::new(assets.clone())),
     }
 }
 
@@ -94,5 +95,32 @@ mod tests {
         let mut app = App::new(test_menu_assets());
 
         assert!(app.step(&[KeyEvent::Esc]).quit);
+    }
+
+    #[test]
+    fn enters_the_jukebox_plays_a_track_and_returns() {
+        let mut app = App::new(test_menu_assets());
+        app.step(&[]); // boot: starts the title theme
+
+        // MUSIC MENU is the fourth item; open it.
+        let open = app.step(&[
+            KeyEvent::Down,
+            KeyEvent::Down,
+            KeyEvent::Down,
+            KeyEvent::Enter,
+        ]);
+        assert!(!open.quit);
+
+        // The jukebox starts on MUSIC 1, which is CD track 2.
+        assert_eq!(
+            app.step(&[KeyEvent::Enter]).audio,
+            vec![AudioCommand::PlayTrack(2)]
+        );
+
+        // Esc returns to the menu rather than quitting.
+        assert!(!app.step(&[KeyEvent::Esc]).quit);
+
+        // The menu was rebuilt with the cursor on NEW GAME; Up wraps to QUIT.
+        assert!(app.step(&[KeyEvent::Up, KeyEvent::Enter]).quit);
     }
 }

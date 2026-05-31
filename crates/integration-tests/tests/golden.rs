@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use prototype::core::game::Game;
+use prototype::core::input::KeyEvent;
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::color::Palette;
 use prototype_formats::{
@@ -126,9 +127,22 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
     // the initial state the player sees. Catches regressions in the menu's
     // layout or glyph compositing that the per-asset hashes above would miss.
     let menu_assets = prototype::assets::load_menu_assets(image).unwrap();
-    let app = prototype::app::App::new(menu_assets);
+    let mut app = prototype::app::App::new(menu_assets);
     out.push((
         "MENU#initial_frame".to_string(),
+        sha256_hex(&app.framebuffer().image.pixels),
+    ));
+
+    // Drive into the jukebox (MUSIC MENU is the fourth item) and hash its frame.
+    app.step(&[]);
+    app.step(&[
+        KeyEvent::Down,
+        KeyEvent::Down,
+        KeyEvent::Down,
+        KeyEvent::Enter,
+    ]);
+    out.push((
+        "MUSIC#initial_frame".to_string(),
         sha256_hex(&app.framebuffer().image.pixels),
     ));
 

@@ -1,0 +1,110 @@
+//! The music menu (jukebox).
+//!
+//! Mirrors `START.EXE`'s jukebox (`0x439a`): a [`ListMenu`] over MUSIC 1..7.
+//! Enter plays the selected track (MUSIC N is CD track N+1, so MUSIC 1 is track
+//! 2, the title theme); Esc returns to the main menu. Like the original, a
+//! selection plays the track once and the music keeps playing on return; the
+//! platform owns playback, so leaving the scene does not stop it.
+
+use std::rc::Rc;
+
+use crate::assets::MenuAssets;
+use crate::core::audio::AudioCommand;
+use crate::core::framebuffer::Framebuffer;
+use crate::core::input::KeyEvent;
+use crate::scene::list_menu::ListMenu;
+use crate::scene::{Scene, SceneId, SceneOutput, Transition};
+
+/// Number of songs (MUSIC 1..=7).
+const TRACK_COUNT: usize = 7;
+/// CD track of MUSIC 1 (track 1 is data; the songs are tracks 2..=8).
+const FIRST_MUSIC_TRACK: u8 = 2;
+
+pub struct MusicMenu {
+    list: ListMenu,
+}
+
+impl MusicMenu {
+    pub fn new(assets: Rc<MenuAssets>) -> Self {
+        let labels = (1..=TRACK_COUNT).map(|n| format!("MUSIC {n}")).collect();
+
+        Self {
+            list: ListMenu::new(assets, labels),
+        }
+    }
+}
+
+impl Scene for MusicMenu {
+    fn update(&mut self, input: &[KeyEvent]) -> SceneOutput {
+        let mut output = SceneOutput::default();
+
+        for event in input {
+            match event {
+                KeyEvent::Up => self.list.move_up(),
+                KeyEvent::Down => self.list.move_down(),
+                KeyEvent::Esc => output.transition = Some(Transition::To(SceneId::MainMenu)),
+                KeyEvent::Enter => {
+                    let track = FIRST_MUSIC_TRACK + self.list.selected() as u8;
+                    output.audio.push(AudioCommand::PlayTrack(track));
+                }
+                KeyEvent::Char(_) => {}
+            }
+        }
+
+        output
+    }
+
+    fn framebuffer(&self) -> &Framebuffer {
+        self.list.framebuffer()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assets::test_menu_assets;
+
+    fn test_jukebox() -> MusicMenu {
+        MusicMenu::new(Rc::new(test_menu_assets()))
+    }
+
+    #[test]
+    fn enter_on_music_1_plays_the_title_theme() {
+        let mut jukebox = test_jukebox(); // starts on MUSIC 1
+
+        assert_eq!(
+            jukebox.update(&[KeyEvent::Enter]).audio,
+            vec![AudioCommand::PlayTrack(2)]
+        );
+    }
+
+    #[test]
+    fn enter_on_music_7_plays_the_last_track() {
+        let mut jukebox = test_jukebox();
+        jukebox.update(&[KeyEvent::Up]); // MUSIC 7 is the last entry (wrap up)
+
+        assert_eq!(
+            jukebox.update(&[KeyEvent::Enter]).audio,
+            vec![AudioCommand::PlayTrack(8)]
+        );
+    }
+
+    #[test]
+    fn esc_returns_to_the_main_menu() {
+        let mut jukebox = test_jukebox();
+
+        assert_eq!(
+            jukebox.update(&[KeyEvent::Esc]).transition,
+            Some(Transition::To(SceneId::MainMenu))
+        );
+    }
+
+    #[test]
+    fn navigation_does_not_play_or_transition() {
+        let mut jukebox = test_jukebox();
+        let output = jukebox.update(&[KeyEvent::Down]);
+
+        assert!(output.audio.is_empty());
+        assert_eq!(output.transition, None);
+    }
+}

@@ -11,9 +11,11 @@
 
 pub mod list_menu;
 pub mod menu;
+pub mod music;
 
 pub use list_menu::ListMenu;
 pub use menu::Menu;
+pub use music::MusicMenu;
 
 use crate::core::audio::AudioCommand;
 use crate::core::framebuffer::Framebuffer;
@@ -23,6 +25,7 @@ use crate::core::input::KeyEvent;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SceneId {
     MainMenu,
+    MusicMenu,
 }
 
 /// A scene's request to change the app state, returned from [`Scene::update`].

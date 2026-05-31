@@ -2,9 +2,12 @@
 //! cursor on the selected row, with wraparound navigation.
 //!
 //! Both the main menu and the jukebox are this widget; they differ only in
-//! their labels and what Enter does. Layout mirrors `START.EXE`'s menu loop:
-//! labels at x=90, the cursor at x=70, rows at y = 60, 76, 92, ... (16
-//! scanlines apart).
+//! their labels and what Enter does. It owns the framebuffer and re-renders on
+//! navigation, so a scene built on it is just its dispatch logic. Layout mirrors
+//! `START.EXE`'s menu loop: labels at x=90, the cursor at x=70, rows at y = 60,
+//! 76, 92, ... (16 scanlines apart).
+
+use std::rc::Rc;
 
 use crate::assets::MenuAssets;
 use crate::core::framebuffer::Framebuffer;
@@ -19,43 +22,59 @@ fn row_y(index: usize) -> i32 {
     FIRST_ROW_Y + index as i32 * ROW_HEIGHT
 }
 
-/// Cursor state over a list of `count` rows (`count` must be non-zero).
+/// A rendered cursor list over `labels` (which must be non-empty).
 pub struct ListMenu {
+    assets: Rc<MenuAssets>,
+    framebuffer: Framebuffer,
+    labels: Vec<String>,
     selected: usize,
-    count: usize,
 }
 
 impl ListMenu {
-    pub fn new(count: usize) -> Self {
-        debug_assert!(count > 0, "a list menu needs at least one row");
-        Self { selected: 0, count }
+    pub fn new(assets: Rc<MenuAssets>, labels: Vec<String>) -> Self {
+        debug_assert!(!labels.is_empty(), "a list menu needs at least one row");
+
+        let framebuffer = Framebuffer::new(assets.palette.clone());
+        let mut menu = Self {
+            assets,
+            framebuffer,
+            labels,
+            selected: 0,
+        };
+
+        menu.render();
+        menu
     }
 
     pub fn selected(&self) -> usize {
         self.selected
     }
 
+    pub fn framebuffer(&self) -> &Framebuffer {
+        &self.framebuffer
+    }
+
     pub fn move_up(&mut self) {
-        self.selected = (self.selected + self.count - 1) % self.count;
+        self.selected = (self.selected + self.labels.len() - 1) % self.labels.len();
+        self.render();
     }
 
     pub fn move_down(&mut self) {
-        self.selected = (self.selected + 1) % self.count;
+        self.selected = (self.selected + 1) % self.labels.len();
+        self.render();
     }
 
-    /// Redraw the background, the `labels` (one per row), and the cursor on the
-    /// selected row.
-    pub fn render(&self, framebuffer: &mut Framebuffer, assets: &MenuAssets, labels: &[&str]) {
-        framebuffer.blit_screen(&assets.background);
+    fn render(&mut self) {
+        self.framebuffer.blit_screen(&self.assets.background);
 
-        for (index, label) in labels.iter().enumerate() {
-            assets
+        for (index, label) in self.labels.iter().enumerate() {
+            self.assets
                 .font
-                .draw_into(&mut framebuffer.image, LABEL_X, row_y(index), label);
+                .draw_into(&mut self.framebuffer.image, LABEL_X, row_y(index), label);
         }
 
-        assets.font.draw_into(
-            &mut framebuffer.image,
+        self.assets.font.draw_into(
+            &mut self.framebuffer.image,
             CURSOR_X,
             row_y(self.selected),
             CURSOR_GLYPH,

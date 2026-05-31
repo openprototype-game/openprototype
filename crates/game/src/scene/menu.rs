@@ -2,7 +2,7 @@
 //!
 //! Mirrors `START.EXE`'s menu loop: a [`ListMenu`] over NEW GAME, LOAD GAME,
 //! HIGHSCORES, MUSIC MENU, QUIT. Up/Down move the cursor (wrapping); Enter
-//! dispatches; Esc quits. In this shell only QUIT does something real; the rest
+//! dispatches; Esc quits. Only MUSIC MENU and QUIT do something so far; the rest
 //! get their scenes later. The menu emits no audio. The title theme is started
 //! once at boot, and the original never restarts it from the menu.
 
@@ -14,7 +14,7 @@ use crate::assets::MenuAssets;
 use crate::core::framebuffer::Framebuffer;
 use crate::core::input::KeyEvent;
 use crate::scene::list_menu::ListMenu;
-use crate::scene::{Scene, SceneOutput, Transition};
+use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 
 #[derive(Clone, Copy, PartialEq, Eq, EnumIter, Display)]
 enum MenuItem {
@@ -38,40 +38,23 @@ impl MenuItem {
             MenuItem::NewGame => None,
             MenuItem::LoadGame => None,
             MenuItem::Highscores => None,
-            MenuItem::MusicMenu => None,
+            MenuItem::MusicMenu => Some(Transition::To(SceneId::MusicMenu)),
             MenuItem::Quit => Some(Transition::Quit),
         }
     }
 }
 
 pub struct Menu {
-    assets: Rc<MenuAssets>,
-    framebuffer: Framebuffer,
     list: ListMenu,
-    labels: Vec<String>,
 }
 
 impl Menu {
     pub fn new(assets: Rc<MenuAssets>) -> Self {
-        let labels: Vec<String> = MenuItem::iter().map(|item| item.to_string()).collect();
-        let framebuffer = Framebuffer::new(assets.palette.clone());
-        let list = ListMenu::new(labels.len());
+        let labels = MenuItem::iter().map(|item| item.to_string()).collect();
 
-        let mut menu = Self {
-            assets,
-            framebuffer,
-            list,
-            labels,
-        };
-
-        menu.render();
-        menu
-    }
-
-    fn render(&mut self) {
-        let labels: Vec<&str> = self.labels.iter().map(String::as_str).collect();
-        self.list
-            .render(&mut self.framebuffer, &self.assets, &labels);
+        Self {
+            list: ListMenu::new(assets, labels),
+        }
     }
 }
 
@@ -93,12 +76,11 @@ impl Scene for Menu {
             }
         }
 
-        self.render();
         output
     }
 
     fn framebuffer(&self) -> &Framebuffer {
-        &self.framebuffer
+        self.list.framebuffer()
     }
 }
 
@@ -121,6 +103,18 @@ mod tests {
 
         menu.update(&[KeyEvent::Down]);
         assert_eq!(menu.list.selected(), 0);
+    }
+
+    #[test]
+    fn enter_on_music_menu_opens_the_jukebox() {
+        let mut menu = test_menu();
+        // MUSIC MENU is the fourth item (index 3).
+        menu.update(&[KeyEvent::Down, KeyEvent::Down, KeyEvent::Down]);
+
+        assert_eq!(
+            menu.update(&[KeyEvent::Enter]).transition,
+            Some(Transition::To(SceneId::MusicMenu))
+        );
     }
 
     #[test]
