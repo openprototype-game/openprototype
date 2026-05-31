@@ -24,10 +24,9 @@ use sha2::{Digest, Sha256};
 const MANIFEST: &str = "golden.sha256";
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn decoded_output_matches_golden() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let computed = decoded_hashes(&image);
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(MANIFEST);

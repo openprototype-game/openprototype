@@ -1,15 +1,17 @@
 //! Integration tests against the real CD image.
 //!
-//! These are gated on the image being present: set `$PROTOTYPE_DISC` to the
-//! cue path, or drop `PROTOTYPE.cue`/`.bin` at the repo root. When neither is
-//! found the tests print a notice and pass, so CI needs no game files.
+//! These need the original CD image, so they are gated behind the `disc-tests`
+//! feature and `#[ignore]`d without it (a plain `cargo test` lists them as
+//! ignored, never as passed). Run them with `--features disc-tests` after
+//! setting `$PROTOTYPE_DISC` to the cue path or dropping `PROTOTYPE.cue`/`.bin`
+//! at the repo root.
 
 use std::path::{Path, PathBuf};
 
 use prototype_disc::{AssetSource, DiscImage};
 
 /// Locate a cue: `$PROTOTYPE_DISC` first, then `PROTOTYPE.cue` at the repo root
-/// (two levels up from this crate). `None` means "skip".
+/// (two levels up from this crate).
 fn locate_cue() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("PROTOTYPE_DISC") {
         let path = PathBuf::from(path);
@@ -20,22 +22,18 @@ fn locate_cue() -> Option<PathBuf> {
     repo_root.exists().then_some(repo_root)
 }
 
-/// Open the image, or print why we are skipping and return `None`.
-fn open() -> Option<DiscImage> {
-    match locate_cue() {
-        Some(cue) => Some(DiscImage::open(&cue).expect("opening the disc image")),
-        None => {
-            eprintln!(
-                "skipping: no disc image (set PROTOTYPE_DISC or place PROTOTYPE.cue at repo root)"
-            );
-            None
-        }
-    }
+/// Open the image. These tests only run with `disc-tests` enabled, which is the
+/// caller asserting the image is present, so a missing image is a hard error.
+fn open() -> DiscImage {
+    let cue = locate_cue()
+        .expect("no disc image (set PROTOTYPE_DISC or place PROTOTYPE.cue at the repo root)");
+    DiscImage::open(&cue).expect("opening the disc image")
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn lists_root_files_and_the_fli_subdir() {
-    let Some(image) = open() else { return };
+    let image = open();
 
     let root_files = image
         .files()
@@ -72,8 +70,9 @@ fn lists_root_files_and_the_fli_subdir() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn reads_files_to_their_declared_length() {
-    let Some(image) = open() else { return };
+    let image = open();
 
     // Decoding the bytes (the cross-crate path) lives in `prototype-integration-tests`;
     // here we only prove `read` returns each file's declared byte count.
@@ -83,8 +82,9 @@ fn reads_files_to_their_declared_length() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn audio_tracks_match_the_verified_layout() {
-    let Some(image) = open() else { return };
+    let image = open();
 
     let tracks = image.audio_tracks();
     let starts: Vec<u32> = tracks.iter().map(|t| t.start_lba).collect();

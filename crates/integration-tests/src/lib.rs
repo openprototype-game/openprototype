@@ -4,15 +4,16 @@
 //! decoders), which is why they live here rather than inside either crate:
 //! it keeps `formats` image-free and `disc` free of a `formats` dependency.
 //!
-//! Everything is gated on the image being present (see [`open_test_image`]), so
-//! the suite skips cleanly when no game files are available.
+//! These need the original CD image, so each is gated behind the `disc-tests`
+//! feature and `#[ignore]`d without it. Run them with `--features disc-tests`
+//! (see [`open_test_image`]).
 
 use std::path::{Path, PathBuf};
 
 use prototype_disc::{AssetSource, DiscImage};
 
 /// Locate a cue: `$PROTOTYPE_DISC` first, then `PROTOTYPE.cue` at the repo root
-/// (two levels up from this crate). `None` means "skip".
+/// (two levels up from this crate).
 fn locate_cue() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("PROTOTYPE_DISC") {
         let path = PathBuf::from(path);
@@ -23,17 +24,12 @@ fn locate_cue() -> Option<PathBuf> {
     repo_root.exists().then_some(repo_root)
 }
 
-/// Open the disc image, or print why we are skipping and return `None`.
-pub fn open_test_image() -> Option<DiscImage> {
-    match locate_cue() {
-        Some(cue) => Some(DiscImage::open(&cue).expect("opening the disc image")),
-        None => {
-            eprintln!(
-                "skipping: no disc image (set PROTOTYPE_DISC or place PROTOTYPE.cue at repo root)"
-            );
-            None
-        }
-    }
+/// Open the disc image. Callers are the `disc-tests`-gated suite, so reaching
+/// this without an image is a hard error, not a silent skip.
+pub fn open_test_image() -> DiscImage {
+    let cue = locate_cue()
+        .expect("no disc image (set PROTOTYPE_DISC or place PROTOTYPE.cue at the repo root)");
+    DiscImage::open(&cue).expect("opening the disc image")
 }
 
 /// Canonical names of every file whose name ends with `ext` (case-insensitive,

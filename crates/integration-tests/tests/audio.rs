@@ -8,10 +8,9 @@ use prototype::assets::load_track_pcm_f32;
 use prototype_integration_tests::open_test_image;
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn title_theme_track_decodes_to_stereo_samples() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     // Track 2 is the title theme (track 1 is data; the music is tracks 2..=8).
     let samples = load_track_pcm_f32(&image, 2).expect("track 2 decodes");
@@ -29,10 +28,9 @@ fn title_theme_track_decodes_to_stereo_samples() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn all_seven_ost_tracks_are_present() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     for track in 2..=8 {
         let samples = load_track_pcm_f32(&image, track)

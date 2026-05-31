@@ -21,6 +21,9 @@ desktop = ["dep:winit", "dep:pixels"]
 # CD-DA playback via rodio (cpal). Off => the platform uses a silent stub, so
 # the build needs no system audio libraries (ALSA on Linux).
 audio = ["dep:rodio"]
+# Enable the tests that need the original CD image. Off by default so a plain
+# `cargo test` reports them as ignored rather than running them.
+disc-tests = []
 
 [dependencies]
 prototype-formats.workspace = true

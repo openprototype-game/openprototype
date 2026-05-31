@@ -12,7 +12,7 @@ the shipped game files, guided by notes from the original developer.
 - `crates/game/` — the game binary.
 - `crates/tools/` — CLIs for inspecting and extracting assets.
 - `crates/integration-tests/` — decodes real assets sourced from the CD image
-  (skips when no image is present).
+  (gated behind the `disc-tests` feature; see below).
 
 ## The disc image
 
@@ -25,6 +25,14 @@ and drop `PROTOTYPE.bin` / `PROTOTYPE.cue` at the repo root (they are
 git-ignored). `crates/disc/` reads both the files and the original-quality OST
 from it; see `reference/formats/disc.md`. Set `$PROTOTYPE_DISC` to point the
 tools at a cue elsewhere.
+
+Tests that need the image are gated behind a `disc-tests` feature and are
+`#[ignore]`d without it, so a plain `cargo test` skips them honestly (it reports
+them as ignored, never as passed). Run them with the image in place:
+
+```
+cargo test --workspace --features disc-tests
+```
 
 ## Status
 

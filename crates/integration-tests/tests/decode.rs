@@ -14,10 +14,9 @@ use prototype_formats::{
 use prototype_integration_tests::{names_with_ext, open_test_image};
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn every_fli_decodes_all_frames() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let names = names_with_ext(&image, ".FLI");
     assert_eq!(names.len(), 12, "FLI files on the disc");
@@ -41,10 +40,9 @@ fn every_fli_decodes_all_frames() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn every_smp_decodes_to_full_length() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let names = names_with_ext(&image, ".SMP");
     assert_eq!(names.len(), 20, "SMP files on the disc");
@@ -59,10 +57,9 @@ fn every_smp_decodes_to_full_length() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn every_palette_decodes_to_real_colours() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let names = names_with_ext(&image, ".PAL");
     assert_eq!(names.len(), 3, "PAL files on the disc");
@@ -80,10 +77,9 @@ fn every_palette_decodes_to_real_colours() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn every_background_combines_to_640x160() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let sp1_names = names_with_ext(&image, ".SP1");
     assert_eq!(sp1_names.len(), 5, "SP background sets on the disc");
@@ -101,10 +97,9 @@ fn every_background_combines_to_640x160() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn back3_raw_decodes_at_320x200() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let bytes = image.read("BACK3.RAW").unwrap();
     let decoded = raw::decode(&bytes, Dimensions::new(320, 200)).expect("BACK3.RAW is 320x200");
@@ -112,10 +107,9 @@ fn back3_raw_decodes_at_320x200() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn surplogo_bdy_unpacks_to_320x200() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let bytes = image.read("SURPLOGO.BDY").unwrap();
     let decoded = bdy::decode(&bytes, Dimensions::new(320, 200)).expect("SURPLOGO.BDY is 320x200");
@@ -123,10 +117,9 @@ fn surplogo_bdy_unpacks_to_320x200() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn start_exe_menu_palette_decodes() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let bytes = image.read("START.EXE").unwrap();
     let palette = StartExe::new(&bytes)
@@ -147,10 +140,9 @@ fn start_exe_menu_palette_decodes() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn bin_catalogs_decode_with_expected_counts() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     let wad = image.read("LEVEL_1.WAD").unwrap();
 
@@ -168,10 +160,9 @@ fn bin_catalogs_decode_with_expected_counts() {
 }
 
 #[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
 fn fli_decoding_is_deterministic() {
-    let Some(image) = open_test_image() else {
-        return;
-    };
+    let image = open_test_image();
 
     // A stateful decoder (FLI applies per-frame deltas) is the meaningful place
     // to check determinism: same bytes in, identical frames out.

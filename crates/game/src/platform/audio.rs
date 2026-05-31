@@ -237,11 +237,11 @@ mod rodio_backend {
         const SAMPLES_PER_SECTOR: usize = 588 * CHANNELS as usize;
 
         #[test]
+        #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
         fn streams_and_refills_across_chunk_boundaries() {
-            let Ok(disc) = DiscImage::open_default() else {
-                eprintln!("skipping: no disc image (set PROTOTYPE_DISC)");
-                return;
-            };
+            let disc = DiscImage::open_default().expect(
+                "no disc image (set PROTOTYPE_DISC or place PROTOTYPE.cue at the repo root)",
+            );
 
             let mut source = TrackSource::new(Arc::new(disc), 2).expect("track 2 exists");
 
@@ -257,11 +257,11 @@ mod rodio_backend {
         }
 
         #[test]
+        #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
         fn plays_once_then_ends() {
-            let Ok(disc) = DiscImage::open_default() else {
-                eprintln!("skipping: no disc image (set PROTOTYPE_DISC)");
-                return;
-            };
+            let disc = DiscImage::open_default().expect(
+                "no disc image (set PROTOTYPE_DISC or place PROTOTYPE.cue at the repo root)",
+            );
 
             let disc = Arc::new(disc);
             let start_lba = disc
