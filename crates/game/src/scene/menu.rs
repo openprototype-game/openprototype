@@ -7,6 +7,7 @@
 //! once at boot, and the original never restarts it from the menu.
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use strum::{Display, EnumIter, IntoEnumIterator};
 
@@ -59,7 +60,7 @@ impl Menu {
 }
 
 impl Scene for Menu {
-    fn update(&mut self, input: &[KeyEvent]) -> SceneOutput {
+    fn update(&mut self, _dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
 
         for event in input {
@@ -98,10 +99,10 @@ mod tests {
         let mut menu = test_menu();
         let last = MenuItem::iter().count() - 1;
 
-        menu.update(&[KeyEvent::Up]);
+        menu.update(Duration::ZERO, &[KeyEvent::Up]);
         assert_eq!(menu.list.selected(), last);
 
-        menu.update(&[KeyEvent::Down]);
+        menu.update(Duration::ZERO, &[KeyEvent::Down]);
         assert_eq!(menu.list.selected(), 0);
     }
 
@@ -109,10 +110,13 @@ mod tests {
     fn enter_on_music_menu_opens_the_jukebox() {
         let mut menu = test_menu();
         // MUSIC MENU is the fourth item (index 3).
-        menu.update(&[KeyEvent::Down, KeyEvent::Down, KeyEvent::Down]);
+        menu.update(
+            Duration::ZERO,
+            &[KeyEvent::Down, KeyEvent::Down, KeyEvent::Down],
+        );
 
         assert_eq!(
-            menu.update(&[KeyEvent::Enter]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
             Some(Transition::To(SceneId::MusicMenu))
         );
     }
@@ -120,10 +124,10 @@ mod tests {
     #[test]
     fn enter_on_quit_requests_exit() {
         let mut menu = test_menu();
-        menu.update(&[KeyEvent::Up]); // QUIT is the last item
+        menu.update(Duration::ZERO, &[KeyEvent::Up]); // QUIT is the last item
 
         assert_eq!(
-            menu.update(&[KeyEvent::Enter]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
             Some(Transition::Quit)
         );
     }
@@ -132,7 +136,10 @@ mod tests {
     fn enter_on_an_unwired_item_does_nothing() {
         let mut menu = test_menu(); // starts on NEW GAME
 
-        assert_eq!(menu.update(&[KeyEvent::Enter]).transition, None);
+        assert_eq!(
+            menu.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
+            None
+        );
     }
 
     #[test]
@@ -140,7 +147,7 @@ mod tests {
         let mut menu = test_menu();
 
         assert_eq!(
-            menu.update(&[KeyEvent::Esc]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Esc]).transition,
             Some(Transition::Quit)
         );
     }
@@ -149,6 +156,6 @@ mod tests {
     fn menu_emits_no_audio() {
         let mut menu = test_menu();
 
-        assert!(menu.update(&[]).audio.is_empty());
+        assert!(menu.update(Duration::ZERO, &[]).audio.is_empty());
     }
 }

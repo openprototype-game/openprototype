@@ -7,6 +7,7 @@
 //! platform owns playback, so leaving the scene does not stop it.
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use crate::assets::MenuAssets;
 use crate::core::audio::AudioCommand;
@@ -35,7 +36,7 @@ impl MusicMenu {
 }
 
 impl Scene for MusicMenu {
-    fn update(&mut self, input: &[KeyEvent]) -> SceneOutput {
+    fn update(&mut self, _dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
 
         for event in input {
@@ -73,7 +74,7 @@ mod tests {
         let mut jukebox = test_jukebox(); // starts on MUSIC 1
 
         assert_eq!(
-            jukebox.update(&[KeyEvent::Enter]).audio,
+            jukebox.update(Duration::ZERO, &[KeyEvent::Enter]).audio,
             vec![AudioCommand::PlayTrack(2)]
         );
     }
@@ -81,10 +82,10 @@ mod tests {
     #[test]
     fn enter_on_music_7_plays_the_last_track() {
         let mut jukebox = test_jukebox();
-        jukebox.update(&[KeyEvent::Up]); // MUSIC 7 is the last entry (wrap up)
+        jukebox.update(Duration::ZERO, &[KeyEvent::Up]); // MUSIC 7 is the last entry (wrap up)
 
         assert_eq!(
-            jukebox.update(&[KeyEvent::Enter]).audio,
+            jukebox.update(Duration::ZERO, &[KeyEvent::Enter]).audio,
             vec![AudioCommand::PlayTrack(8)]
         );
     }
@@ -94,7 +95,7 @@ mod tests {
         let mut jukebox = test_jukebox();
 
         assert_eq!(
-            jukebox.update(&[KeyEvent::Esc]).transition,
+            jukebox.update(Duration::ZERO, &[KeyEvent::Esc]).transition,
             Some(Transition::To(SceneId::MainMenu))
         );
     }
@@ -102,7 +103,7 @@ mod tests {
     #[test]
     fn navigation_does_not_play_or_transition() {
         let mut jukebox = test_jukebox();
-        let output = jukebox.update(&[KeyEvent::Down]);
+        let output = jukebox.update(Duration::ZERO, &[KeyEvent::Down]);
 
         assert!(output.audio.is_empty());
         assert_eq!(output.transition, None);

@@ -7,6 +7,7 @@
 //! playing across scene switches, matching the original.
 
 use std::rc::Rc;
+use std::time::Duration;
 
 use crate::assets::MenuAssets;
 use crate::core::audio::AudioCommand;
@@ -46,7 +47,7 @@ fn build(assets: &Rc<MenuAssets>, id: SceneId) -> Box<dyn Scene> {
 }
 
 impl Game for App {
-    fn step(&mut self, input: &[KeyEvent]) -> StepOutput {
+    fn step(&mut self, dt: Duration, input: &[KeyEvent]) -> StepOutput {
         let mut audio = Vec::new();
 
         if !self.booted {
@@ -54,7 +55,7 @@ impl Game for App {
             self.booted = true;
         }
 
-        let output = self.current.update(input);
+        let output = self.current.update(dt, input);
         audio.extend(output.audio);
 
         let mut quit = false;
@@ -72,6 +73,10 @@ impl Game for App {
     fn framebuffer(&self) -> &Framebuffer {
         self.current.framebuffer()
     }
+
+    fn is_animating(&self) -> bool {
+        self.current.is_animating()
+    }
 }
 
 #[cfg(test)]
@@ -79,48 +84,53 @@ mod tests {
     use super::*;
     use crate::assets::test_menu_assets;
 
+    const FRAME: Duration = Duration::ZERO;
+
     #[test]
     fn boot_starts_the_title_theme_once() {
         let mut app = App::new(test_menu_assets());
 
         assert_eq!(
-            app.step(&[]).audio,
+            app.step(FRAME, &[]).audio,
             vec![AudioCommand::PlayTrack(BOOT_TRACK)]
         );
-        assert!(app.step(&[]).audio.is_empty());
+        assert!(app.step(FRAME, &[]).audio.is_empty());
     }
 
     #[test]
     fn esc_on_the_menu_quits() {
         let mut app = App::new(test_menu_assets());
 
-        assert!(app.step(&[KeyEvent::Esc]).quit);
+        assert!(app.step(FRAME, &[KeyEvent::Esc]).quit);
     }
 
     #[test]
     fn enters_the_jukebox_plays_a_track_and_returns() {
         let mut app = App::new(test_menu_assets());
-        app.step(&[]); // boot: starts the title theme
+        app.step(FRAME, &[]); // boot: starts the title theme
 
         // MUSIC MENU is the fourth item; open it.
-        let open = app.step(&[
-            KeyEvent::Down,
-            KeyEvent::Down,
-            KeyEvent::Down,
-            KeyEvent::Enter,
-        ]);
+        let open = app.step(
+            FRAME,
+            &[
+                KeyEvent::Down,
+                KeyEvent::Down,
+                KeyEvent::Down,
+                KeyEvent::Enter,
+            ],
+        );
         assert!(!open.quit);
 
         // The jukebox starts on MUSIC 1, which is CD track 2.
         assert_eq!(
-            app.step(&[KeyEvent::Enter]).audio,
+            app.step(FRAME, &[KeyEvent::Enter]).audio,
             vec![AudioCommand::PlayTrack(2)]
         );
 
         // Esc returns to the menu rather than quitting.
-        assert!(!app.step(&[KeyEvent::Esc]).quit);
+        assert!(!app.step(FRAME, &[KeyEvent::Esc]).quit);
 
         // The menu was rebuilt with the cursor on NEW GAME; Up wraps to QUIT.
-        assert!(app.step(&[KeyEvent::Up, KeyEvent::Enter]).quit);
+        assert!(app.step(FRAME, &[KeyEvent::Up, KeyEvent::Enter]).quit);
     }
 }

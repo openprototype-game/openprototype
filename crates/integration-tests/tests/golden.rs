@@ -134,13 +134,16 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
     ));
 
     // Drive into the jukebox (MUSIC MENU is the fourth item) and hash its frame.
-    app.step(&[]);
-    app.step(&[
-        KeyEvent::Down,
-        KeyEvent::Down,
-        KeyEvent::Down,
-        KeyEvent::Enter,
-    ]);
+    app.step(std::time::Duration::ZERO, &[]);
+    app.step(
+        std::time::Duration::ZERO,
+        &[
+            KeyEvent::Down,
+            KeyEvent::Down,
+            KeyEvent::Down,
+            KeyEvent::Enter,
+        ],
+    );
     out.push((
         "MUSIC#initial_frame".to_string(),
         sha256_hex(&app.framebuffer().image.pixels),

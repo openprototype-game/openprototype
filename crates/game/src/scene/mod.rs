@@ -17,6 +17,8 @@ pub use list_menu::ListMenu;
 pub use menu::Menu;
 pub use music::MusicMenu;
 
+use std::time::Duration;
+
 use crate::core::audio::AudioCommand;
 use crate::core::framebuffer::Framebuffer;
 use crate::core::input::KeyEvent;
@@ -48,9 +50,16 @@ pub struct SceneOutput {
 
 /// One screen of the front-end.
 pub trait Scene {
-    /// Advance one frame given the key events since the last call.
-    fn update(&mut self, input: &[KeyEvent]) -> SceneOutput;
+    /// Advance one frame given the elapsed time and the key events since the
+    /// last call. Static scenes (menu, jukebox) ignore `dt`.
+    fn update(&mut self, dt: Duration, input: &[KeyEvent]) -> SceneOutput;
 
     /// The frame produced by the most recent [`update`](Scene::update).
     fn framebuffer(&self) -> &Framebuffer;
+
+    /// Whether the scene is animating and needs the platform to keep ticking on
+    /// a timer. Defaults to `false`: a static scene only redraws on input.
+    fn is_animating(&self) -> bool {
+        false
+    }
 }
