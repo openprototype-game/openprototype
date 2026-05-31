@@ -13,13 +13,13 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::rc::Rc;
 
-use prototype::scene::{Menu, MusicMenu, Scene};
+use openprototype::scene::{Menu, MusicMenu, Scene};
+use openprototype_integration_tests::{names_with_ext, open_test_image};
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::color::Palette;
 use prototype_formats::{
     Dimensions, Encoding, Flic, SpriteSheet, StartExe, background, bdy, bin, pal, raw, smp,
 };
-use prototype_integration_tests::{names_with_ext, open_test_image};
 use sha2::{Digest, Sha256};
 
 const MANIFEST: &str = "golden.sha256";
@@ -128,7 +128,7 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
     // layout or glyph compositing that the per-asset hashes above would miss.
     // Built straight from the scene (App boots into the intro now); navigation
     // between scenes is covered by the unit tests.
-    let menu_assets = Rc::new(prototype::assets::load_menu_assets(image).unwrap());
+    let menu_assets = Rc::new(openprototype::assets::load_menu_assets(image).unwrap());
     let menu = Menu::new(menu_assets.clone());
     out.push((
         "MENU#initial_frame".to_string(),

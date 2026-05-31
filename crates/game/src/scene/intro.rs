@@ -37,7 +37,6 @@ const fn ticks(count: u64) -> Duration {
     Duration::from_micros(count * 1_000_000 / 70)
 }
 
-
 /// Which decoded still a [`Beat::Show`] puts on screen.
 #[derive(Clone, Copy)]
 enum Still {
@@ -211,19 +210,18 @@ impl Intro {
                         Err(_) => index += 1,
                     }
                 }
-                Beat::Credits => match FlicPlayer::decode_at(
-                    &self.assets.credz_fli,
-                    CREDITS_FLI_DELAY,
-                ) {
-                    Ok(player) => {
-                        self.active = Active::Credits(Credits::new(player));
-                        return;
+                Beat::Credits => {
+                    match FlicPlayer::decode_at(&self.assets.credz_fli, CREDITS_FLI_DELAY) {
+                        Ok(player) => {
+                            self.active = Active::Credits(Credits::new(player));
+                            return;
+                        }
+                        Err(_) => {
+                            self.active = Active::Done;
+                            return;
+                        }
                     }
-                    Err(_) => {
-                        self.active = Active::Done;
-                        return;
-                    }
-                },
+                }
                 Beat::FadeInMenu(duration) => {
                     // Compose the real menu frame (background + labels + cursor)
                     // and fade its palette up from black. Building the same
@@ -524,7 +522,10 @@ mod tests {
         // The intro opens on the black hold where the music starts, then fades
         // neo in, then holds. Check the machinery, not colour (the synthetic
         // still has an all-zero palette).
-        assert!(matches!(intro.active, Active::Hold(_)), "opens on black hold");
+        assert!(
+            matches!(intro.active, Active::Hold(_)),
+            "opens on black hold"
+        );
 
         intro.update(ticks(230), &[]); // past the 220-tick black hold
         assert!(matches!(intro.active, Active::Fade(_)), "then fades in");

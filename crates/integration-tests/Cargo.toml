@@ -1,5 +1,5 @@
 [package]
-name = "prototype-integration-tests"
+name = "openprototype-integration-tests"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,6 @@ disc-tests = []
 prototype-disc.workspace = true
 
 [dev-dependencies]
-prototype = { path = "../game", default-features = false }
+openprototype = { path = "../game", default-features = false }
 prototype-formats.workspace = true
 sha2 = "0.10"

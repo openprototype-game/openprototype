@@ -4,8 +4,8 @@
 //! the OST tracks and they decode to a non-empty, well-formed stereo `f32`
 //! buffer. Gated on the image being present.
 
-use prototype::assets::load_track_pcm_f32;
-use prototype_integration_tests::open_test_image;
+use openprototype::assets::load_track_pcm_f32;
+use openprototype_integration_tests::open_test_image;
 
 #[test]
 #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]

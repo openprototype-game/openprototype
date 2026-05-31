@@ -6,12 +6,12 @@
 //! (RAW, BDY) or build-specific (EXE) keep a representative case, since you
 //! cannot decode them without a per-file width/height the disc does not carry.
 
+use openprototype_integration_tests::{names_with_ext, open_test_image};
 use prototype_disc::AssetSource;
 use prototype_formats::color::Rgb;
 use prototype_formats::{
     Dimensions, Encoding, Flic, StartExe, background, bdy, bin, pal, raw, smp,
 };
-use prototype_integration_tests::{names_with_ext, open_test_image};
 
 #[test]
 #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]

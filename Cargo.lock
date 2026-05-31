@@ -1592,6 +1592,42 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "openprototype"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "image",
+ "pixels",
+ "prototype-disc",
+ "prototype-formats",
+ "rodio",
+ "strum",
+ "winit",
+]
+
+[[package]]
+name = "openprototype-integration-tests"
+version = "0.1.0"
+dependencies = [
+ "openprototype",
+ "prototype-disc",
+ "prototype-formats",
+ "sha2",
+]
+
+[[package]]
+name = "openprototype-tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "image",
+ "prototype-disc",
+ "prototype-formats",
+]
+
+[[package]]
 name = "orbclient"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1779,21 +1815,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
-name = "prototype"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "image",
- "pixels",
- "prototype-disc",
- "prototype-formats",
- "rodio",
- "strum",
- "winit",
-]
-
-[[package]]
 name = "prototype-disc"
 version = "0.1.0"
 dependencies = [
@@ -1805,27 +1826,6 @@ name = "prototype-formats"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "prototype-integration-tests"
-version = "0.1.0"
-dependencies = [
- "prototype",
- "prototype-disc",
- "prototype-formats",
- "sha2",
-]
-
-[[package]]
-name = "prototype-tools"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "image",
- "prototype-disc",
- "prototype-formats",
 ]
 
 [[package]]

@@ -1,15 +1,44 @@
-# Prototype
+# OpenPrototype
 
-A from-scratch port of *Prototype* (1995), a DOS shoot-'em-up by Erik Pojar, to
-Rust. The original source is lost, so the port is built by reverse engineering
-the shipped game files, guided by notes from the original developer.
+An open-source, from-scratch port of *Prototype* (1995), a DOS shoot-'em-up by
+NEO Software, to Rust. The original source is lost, so the port is built by
+reverse engineering the shipped game files, guided by format notes from Erik
+Pojar, who programmed the original. The name follows OpenTyrian and the other
+Open* remakes.
+
+## Background
+
+I started on this in 2013. I reached out to Erik Pojar, the original programmer,
+who was kind enough to answer questions about the file formats, and then spent
+months disassembling the game by hand in Ghidra. I got the pieces working in
+isolation: FLI playback, images with their palettes, sound samples. But never
+anything that actually ran, and I'd come back every so often only to stall in
+the same spot.
+
+In December 2025 I picked it up again, this time with AI. GitHub Copilot
+couldn't carry the reverse engineering. A few months later I pointed the latest
+Opus model at it, and that worked: the format decoders, the disc reader, and a
+front-end that runs followed from there.
+
+## The original game
+
+*Prototype* was made by NEO Software in 1995:
+
+- Programming: Erik Pojar
+- Graphics: Michael Sormann, Peter Baustaedter
+- Music: NEO Project, Hannes Seifert, Peter Melchart
+- Design: Michael Sormann, Niki Laber
+- Additional coding: Christoph Soukup, Peter Melchart
+- Testing: Michaela Steurer, Victor Metyko, Niki Ghalustian, Kaweh Kazemi
+
+Thanks especially to Erik Pojar, whose format notes made this port possible.
 
 ## Layout
 
 - `reference/formats/`: per-format findings as they get verified.
 - `crates/disc/`: library that reads game files and the OST from the CD image.
 - `crates/formats/`: library of decoders for every on-disk format.
-- `crates/game/`: the game binary.
+- `crates/game/`: the `openprototype` binary (the game itself).
 - `crates/tools/`: CLIs for inspecting and extracting assets.
 - `crates/integration-tests/`: decodes real assets sourced from the CD image
   (gated behind the `disc-tests` feature; see below).
@@ -36,4 +65,6 @@ cargo test --workspace --features disc-tests
 
 ## Status
 
-Early. Reverse engineering and format decoding come first.
+Early, but the front-end runs from the disc image: the intro sequence, the main
+menu, and the music jukebox. The level engine, the actual gameplay, is the next
+big piece.

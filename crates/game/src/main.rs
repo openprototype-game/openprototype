@@ -12,9 +12,9 @@ mod desktop {
 
     use anyhow::{Context, Result};
     use clap::Parser;
-    use prototype::app::App;
-    use prototype::assets::{load_intro_assets, load_menu_assets};
-    use prototype::platform::run;
+    use openprototype::app::App;
+    use openprototype::assets::{load_intro_assets, load_menu_assets};
+    use openprototype::platform::run;
     use prototype_disc::DiscImage;
 
     #[derive(Parser)]

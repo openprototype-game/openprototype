@@ -10,12 +10,12 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage, Rgba as ImageRgba, RgbaImage};
+use openprototype_tools::read_asset;
 use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
 use prototype_formats::{
     Dimensions, Flic, IndexedImage, Palette, Sprite, StartExe, background, bdy, bin, pal, raw, smp,
 };
-use prototype_tools::read_asset;
 
 #[derive(Parser)]
 #[command(about = "Render Prototype assets to PNG for inspection")]
@@ -132,7 +132,7 @@ enum Command {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let source = prototype_tools::open_source(cli.cue.as_deref())?;
+    let source = openprototype_tools::open_source(cli.cue.as_deref())?;
     let source = source.as_ref();
 
     match cli.command {

@@ -1,16 +1,16 @@
 [package]
-name = "prototype"
+name = "openprototype"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [lib]
-name = "prototype"
+name = "openprototype"
 path = "src/lib.rs"
 
 [[bin]]
-name = "prototype"
+name = "openprototype"
 path = "src/main.rs"
 
 [features]

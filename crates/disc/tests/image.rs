@@ -74,7 +74,7 @@ fn lists_root_files_and_the_fli_subdir() {
 fn reads_files_to_their_declared_length() {
     let image = open();
 
-    // Decoding the bytes (the cross-crate path) lives in `prototype-integration-tests`;
+    // Decoding the bytes (the cross-crate path) lives in `openprototype-integration-tests`;
     // here we only prove `read` returns each file's declared byte count.
     assert_eq!(image.read("COVER3.PAL").unwrap().len(), 768);
     assert_eq!(image.read("INSTALL.EXE").unwrap().len(), 47752);
