@@ -8,7 +8,9 @@
 
 use prototype_disc::AssetSource;
 use prototype_formats::color::Rgb;
-use prototype_formats::{Dimensions, Encoding, Flic, StartExe, background, bdy, pal, raw, smp};
+use prototype_formats::{
+    Dimensions, Encoding, Flic, StartExe, background, bdy, bin, pal, raw, smp,
+};
 use prototype_integration_tests::{names_with_ext, open_test_image};
 
 #[test]
@@ -142,6 +144,27 @@ fn start_exe_menu_palette_decodes() {
             b: 255,
         }
     );
+}
+
+#[test]
+fn bin_catalogs_decode_with_expected_counts() {
+    let Some(image) = open_test_image() else {
+        return;
+    };
+
+    let wad = image.read("LEVEL_1.WAD").unwrap();
+
+    let scenery =
+        bin::decode_banked(&image.read("OUT.BIN").unwrap(), &wad, bin::OUT_BIN_CATALOG).unwrap();
+    assert_eq!(scenery.sprites.len(), 1028, "OUT.BIN catalog records");
+
+    let ship = bin::decode_ship(
+        &image.read("PTURN1.BN1").unwrap(),
+        &wad,
+        bin::PTURN1_CATALOG,
+    )
+    .unwrap();
+    assert_eq!(ship.sprites.len(), 28, "PTURN1 ship frames");
 }
 
 #[test]

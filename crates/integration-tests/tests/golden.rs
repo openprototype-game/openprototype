@@ -14,7 +14,9 @@ use std::path::Path;
 
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::color::Palette;
-use prototype_formats::{Dimensions, Encoding, Flic, StartExe, background, bdy, pal, raw, smp};
+use prototype_formats::{
+    Dimensions, Encoding, Flic, SpriteSheet, StartExe, background, bdy, bin, pal, raw, smp,
+};
 use prototype_integration_tests::{names_with_ext, open_test_image};
 use sha2::{Digest, Sha256};
 
@@ -120,8 +122,43 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
         sha256_hex(&palette_bytes(&menu)),
     ));
 
+    // Compiled sprites: both catalogs live in LEVEL_1.WAD (the only level
+    // reverse-engineered so far). Hash the whole decoded sheet per BIN.
+    let wad = image.read("LEVEL_1.WAD").unwrap();
+    let scenery =
+        bin::decode_banked(&image.read("OUT.BIN").unwrap(), &wad, bin::OUT_BIN_CATALOG).unwrap();
+    out.push(("OUT.BIN".to_string(), sha256_hex(&sheet_bytes(&scenery))));
+    let ship = bin::decode_ship(
+        &image.read("PTURN1.BN1").unwrap(),
+        &wad,
+        bin::PTURN1_CATALOG,
+    )
+    .unwrap();
+    out.push(("PTURN1.BN1".to_string(), sha256_hex(&sheet_bytes(&ship))));
+
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
+}
+
+/// Serialize a decoded sheet deterministically: per sprite, its size then two
+/// bytes per pixel (an opacity flag and the palette index, since transparent
+/// and opaque-index-0 are different decodes).
+fn sheet_bytes(sheet: &SpriteSheet) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    for sprite in &sheet.sprites {
+        bytes.extend_from_slice(&sprite.size.width.to_le_bytes());
+        bytes.extend_from_slice(&sprite.size.height.to_le_bytes());
+
+        for pixel in &sprite.pixels {
+            match pixel {
+                Some(index) => bytes.extend_from_slice(&[1, *index]),
+                None => bytes.extend_from_slice(&[0, 0]),
+            }
+        }
+    }
+
+    bytes
 }
 
 /// Decode every frame and concatenate the indexed pixels.
