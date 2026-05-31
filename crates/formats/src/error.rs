@@ -20,4 +20,7 @@ pub enum DecodeError {
     /// wrong version).
     #[error("unrecognized input: {reason}")]
     Unrecognized { reason: &'static str },
+    /// A compiled-sprite catalog or subroutine was structurally invalid.
+    #[error("malformed sprite data: {reason}")]
+    MalformedSprite { reason: &'static str },
 }

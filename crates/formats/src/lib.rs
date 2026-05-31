@@ -12,6 +12,7 @@ pub mod image;
 
 pub mod background;
 pub mod bdy;
+pub mod bin;
 pub mod fli;
 pub mod font;
 pub mod pal;
@@ -20,6 +21,7 @@ pub mod smp;
 pub mod start_exe;
 pub mod wad;
 
+pub use bin::{Sprite, SpriteSheet};
 pub use color::{Palette, Rgb};
 pub use error::{DecodeError, Result};
 pub use fli::Flic;
