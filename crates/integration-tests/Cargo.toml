@@ -9,5 +9,6 @@ publish.workspace = true
 prototype-disc.workspace = true
 
 [dev-dependencies]
+prototype = { path = "../game", default-features = false }
 prototype-formats.workspace = true
 sha2 = "0.10"

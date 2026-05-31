@@ -12,6 +12,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use prototype::core::game::Game;
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::color::Palette;
 use prototype_formats::{
@@ -120,6 +121,16 @@ fn decoded_hashes(image: &DiscImage) -> Vec<(String, String)> {
     out.push((
         "START.EXE#menu_palette".to_string(),
         sha256_hex(&palette_bytes(&menu)),
+    ));
+
+    // The composed main-menu frame: BACK3 background + font labels + cursor,
+    // the initial state the player sees. Catches regressions in the menu's
+    // layout or glyph compositing that the per-asset hashes above would miss.
+    let menu_assets = prototype::assets::load_menu_assets(image).unwrap();
+    let menu_scene = prototype::scene::Menu::new(menu_assets);
+    out.push((
+        "MENU#initial_frame".to_string(),
+        sha256_hex(&menu_scene.framebuffer().image.pixels),
     ));
 
     // Compiled sprites: both catalogs live in LEVEL_1.WAD (the only level
