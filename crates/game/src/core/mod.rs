@@ -10,11 +10,15 @@
 //! [`AudioCommand`]: audio::AudioCommand
 
 pub mod audio;
+pub mod fade;
+pub mod flic_player;
 pub mod framebuffer;
 pub mod game;
 pub mod input;
 
 pub use audio::AudioCommand;
+pub use fade::PaletteFade;
+pub use flic_player::FlicPlayer;
 pub use framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
 pub use game::{Game, StepOutput};
 pub use input::KeyEvent;
