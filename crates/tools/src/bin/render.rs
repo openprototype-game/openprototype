@@ -9,11 +9,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use image::{ImageBuffer, Rgb as ImageRgb, RgbImage};
+use image::{ImageBuffer, Rgb as ImageRgb, RgbImage, Rgba as ImageRgba, RgbaImage};
 use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
 use prototype_formats::{
-    Dimensions, Flic, IndexedImage, Palette, StartExe, background, bdy, pal, raw, smp,
+    Dimensions, Flic, IndexedImage, Palette, Sprite, StartExe, background, bdy, bin, pal, raw, smp,
 };
 use prototype_tools::read_asset;
 
@@ -92,6 +92,29 @@ enum Command {
         /// Single PNG tiling every frame (downscaled) into a grid.
         #[arg(long)]
         contact_sheet: Option<PathBuf>,
+    },
+    /// Decode a .BIN / .BN1 compiled-sprite file against its level .WAD
+    /// catalog. Emit any combination of a contact sheet, per-sprite PNGs, and
+    /// an animation GIF. Without --palette, indices map to a grayscale ramp.
+    Bin {
+        /// The sprite BIN (e.g. OUT.BIN) or BN1 (PTURN1.BN1).
+        input: PathBuf,
+        /// The level .WAD holding the sprite catalog (e.g. LEVEL_1.WAD).
+        wad: PathBuf,
+        /// Decode as the PTURN1 ship frame catalog instead of a scenery BIN.
+        #[arg(long)]
+        ship: bool,
+        #[arg(long)]
+        palette: Option<PathBuf>,
+        /// Single PNG laying out every sprite over a checkerboard grid.
+        #[arg(long)]
+        sheet: Option<PathBuf>,
+        /// Directory to dump sprite_0000.png .. one per non-empty sprite.
+        #[arg(long)]
+        out_dir: Option<PathBuf>,
+        /// Animated GIF of all sprites in catalog order (best for the ship).
+        #[arg(long)]
+        gif: Option<PathBuf>,
     },
     /// Decode a .SMP sound sample to a WAV for listening.
     Smp {
@@ -208,6 +231,48 @@ fn main() -> Result<()> {
 
             if let Some(path) = contact_sheet.as_deref() {
                 save(&contact_sheet_of(&frames), path)?;
+            }
+
+            Ok(())
+        }
+        Command::Bin {
+            input,
+            wad,
+            ship,
+            palette,
+            sheet,
+            out_dir,
+            gif,
+        } => {
+            if sheet.is_none() && out_dir.is_none() && gif.is_none() {
+                anyhow::bail!("pass at least one of --sheet, --out-dir, --gif");
+            }
+
+            let bin_bytes = read(source, &input)?;
+            let wad_bytes = read(source, &wad)?;
+            let sprites = if ship {
+                bin::decode_ship(&bin_bytes, &wad_bytes, bin::PTURN1_CATALOG)
+            } else {
+                bin::decode_banked(&bin_bytes, &wad_bytes, bin::OUT_BIN_CATALOG)
+            }
+            .context("decoding sprites")?
+            .sprites;
+
+            let palette = match palette.as_deref() {
+                Some(path) => pal::decode(&read(source, path)?).context("decoding palette")?,
+                None => grayscale_ramp(),
+            };
+
+            if let Some(path) = sheet.as_deref() {
+                save(&sprites_contact_sheet(&sprites, &palette), path)?;
+            }
+
+            if let Some(dir) = out_dir.as_deref() {
+                dump_sprites(&sprites, &palette, dir)?;
+            }
+
+            if let Some(path) = gif.as_deref() {
+                write_sprite_gif(&sprites, &palette, path)?;
             }
 
             Ok(())
@@ -400,6 +465,120 @@ fn to_png(image: &IndexedImage, palette: &Palette) -> RgbImage {
     let rgb = image.to_rgb8(palette);
     ImageBuffer::from_raw(image.size.width, image.size.height, rgb)
         .expect("to_rgb8 returns width * height * 3 bytes")
+}
+
+/// One sprite as an RGBA image, transparent where it has no pixel. Returns
+/// `None` for a blank (`0x0`) catalog slot.
+fn sprite_to_rgba(sprite: &Sprite, palette: &Palette) -> Option<RgbaImage> {
+    if sprite.pixels.is_empty() {
+        return None;
+    }
+
+    let mut image = RgbaImage::new(sprite.size.width, sprite.size.height);
+
+    for (offset, pixel) in sprite.pixels.iter().enumerate() {
+        if let Some(index) = pixel {
+            let color = palette.colors[*index as usize];
+            let x = offset as u32 % sprite.size.width;
+            let y = offset as u32 / sprite.size.width;
+            image.put_pixel(x, y, ImageRgba([color.r, color.g, color.b, 255]));
+        }
+    }
+
+    Some(image)
+}
+
+/// Lay every sprite over a checkerboard grid, so extent and transparency show.
+fn sprites_contact_sheet(sprites: &[Sprite], palette: &Palette) -> RgbImage {
+    const PAD: u32 = 2;
+
+    let cell_w = sprites.iter().map(|s| s.size.width).max().unwrap_or(1) + PAD;
+    let cell_h = sprites.iter().map(|s| s.size.height).max().unwrap_or(1) + PAD;
+    let columns = (sprites.len() as f64).sqrt().ceil() as u32;
+    let columns = columns.max(1);
+    let rows = sprites.len().div_ceil(columns as usize) as u32;
+
+    let mut sheet =
+        ImageBuffer::from_pixel(columns * cell_w, rows * cell_h, ImageRgb([24, 24, 32]));
+
+    for (index, sprite) in sprites.iter().enumerate() {
+        let origin_x = (index as u32 % columns) * cell_w + 1;
+        let origin_y = (index as u32 / columns) * cell_h + 1;
+
+        for y in 0..sprite.size.height {
+            for x in 0..sprite.size.width {
+                let shade = if (x + y) % 2 == 0 { 40 } else { 56 };
+                sheet.put_pixel(origin_x + x, origin_y + y, ImageRgb([shade, shade, shade]));
+            }
+        }
+
+        for (offset, pixel) in sprite.pixels.iter().enumerate() {
+            if let Some(index) = pixel {
+                let color = palette.colors[*index as usize];
+                let x = offset as u32 % sprite.size.width;
+                let y = offset as u32 / sprite.size.width;
+                sheet.put_pixel(
+                    origin_x + x,
+                    origin_y + y,
+                    ImageRgb([color.r, color.g, color.b]),
+                );
+            }
+        }
+    }
+
+    sheet
+}
+
+fn dump_sprites(sprites: &[Sprite], palette: &Palette, dir: &std::path::Path) -> Result<()> {
+    fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+
+    for (index, sprite) in sprites.iter().enumerate() {
+        if let Some(image) = sprite_to_rgba(sprite, palette) {
+            let path = dir.join(format!("sprite_{index:04}.png"));
+            image
+                .save(&path)
+                .with_context(|| format!("writing {}", path.display()))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Animate the sprites in catalog order, each centered on a transparent canvas
+/// sized to the largest sprite so the animation does not jitter.
+fn write_sprite_gif(sprites: &[Sprite], palette: &Palette, output: &std::path::Path) -> Result<()> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    use image::{Delay, Frame as GifFrame};
+
+    let canvas_w = sprites.iter().map(|s| s.size.width).max().unwrap_or(1);
+    let canvas_h = sprites.iter().map(|s| s.size.height).max().unwrap_or(1);
+
+    let file = fs::File::create(output).with_context(|| format!("writing {}", output.display()))?;
+    let mut encoder = GifEncoder::new(std::io::BufWriter::new(file));
+    encoder
+        .set_repeat(Repeat::Infinite)
+        .context("setting GIF loop")?;
+
+    for sprite in sprites {
+        let Some(image) = sprite_to_rgba(sprite, palette) else {
+            continue;
+        };
+
+        let mut canvas = RgbaImage::new(canvas_w, canvas_h);
+        let offset_x = (canvas_w - sprite.size.width) / 2;
+        let offset_y = (canvas_h - sprite.size.height) / 2;
+
+        for (x, y, pixel) in image.enumerate_pixels() {
+            canvas.put_pixel(offset_x + x, offset_y + y, *pixel);
+        }
+
+        let delay = Delay::from_numer_denom_ms(100, 1);
+        encoder
+            .encode_frame(GifFrame::from_parts(canvas, 0, 0, delay))
+            .context("encoding GIF frame")?;
+    }
+
+    Ok(())
 }
 
 fn read(source: Option<&DiscImage>, path: &std::path::Path) -> Result<Vec<u8>> {
