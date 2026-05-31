@@ -10,7 +10,7 @@ use openprototype_integration_tests::{names_with_ext, open_test_image};
 use prototype_disc::AssetSource;
 use prototype_formats::color::Rgb;
 use prototype_formats::{
-    Dimensions, Encoding, Flic, StartExe, background, bdy, bin, pal, raw, smp,
+    Dimensions, Encoding, Flic, Highscores, StartExe, background, bdy, bin, pal, raw, smp,
 };
 
 #[test]
@@ -157,6 +157,20 @@ fn bin_catalogs_decode_with_expected_counts() {
     )
     .unwrap();
     assert_eq!(ship.sprites.len(), 28, "PTURN1 ship frames");
+}
+
+#[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
+fn high_txt_round_trips_byte_for_byte() {
+    let image = open_test_image();
+
+    let bytes = image.read("HIGH.TXT").unwrap();
+    let text = std::str::from_utf8(&bytes).expect("HIGH.TXT is ASCII text");
+    let scores: Highscores = text.parse().expect("HIGH.TXT parses");
+
+    // Re-encoding the parsed table must reproduce the file exactly, proving the
+    // field widths and the LF line endings match the original byte-for-byte.
+    assert_eq!(scores.to_string().as_bytes(), bytes.as_slice());
 }
 
 #[test]
