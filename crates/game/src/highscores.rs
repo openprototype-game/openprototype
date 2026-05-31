@@ -64,6 +64,22 @@ fn load_disc_default(disc: &DiscImage) -> Result<Highscores> {
     text.parse::<Highscores>().context("decoding HIGH.TXT")
 }
 
+/// A store with a synthetic default and a path that does not exist, for tests
+/// in other modules that need a store but never read its file.
+#[cfg(test)]
+pub(crate) fn test_store() -> HighscoreStore {
+    let disc_default = (1..=8)
+        .map(|rank| format!("{:.<13} {:06}$\n", "X", rank * 1000))
+        .collect::<String>()
+        .parse()
+        .expect("synthetic table parses");
+
+    HighscoreStore {
+        path: std::env::temp_dir().join("openprototype-test-highscores-unused"),
+        disc_default,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
