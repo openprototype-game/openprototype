@@ -20,12 +20,12 @@ use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, IndexedImage, Palette, Rgb};
 
 use crate::assets::{IntroAssets, MenuAssets};
-use crate::core::audio::AudioCommand;
-use crate::core::fade::PaletteFade;
-use crate::core::flic_player::FlicPlayer;
-use crate::core::framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
-use crate::core::input::KeyEvent;
+use crate::fade::PaletteFade;
+use crate::flic_player::FlicPlayer;
 use crate::scene::{Menu, Scene, SceneId, SceneOutput, Transition};
+use openprototype_core::audio::AudioCommand;
+use openprototype_core::framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::input::KeyEvent;
 
 /// The CD-DA track the intro starts (the title theme), kept playing into the
 /// menu by the platform.

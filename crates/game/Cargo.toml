@@ -15,26 +15,25 @@ path = "src/main.rs"
 
 [features]
 default = ["desktop", "audio"]
-# The winit + pixels window backend. Off => the pure core builds without the
-# GPU stack (wgpu), which keeps headless examples and tests fast.
-desktop = ["dep:winit", "dep:pixels"]
-# CD-DA playback via rodio (cpal). Off => the platform uses a silent stub, so
-# the build needs no system audio libraries (ALSA on Linux).
-audio = ["dep:rodio"]
+# The windowing backend (winit + pixels). Off => only the headless runtime
+# builds, which keeps examples and tests free of the GPU stack.
+desktop = ["dep:openprototype-backend"]
+# CD-DA playback via rodio (cpal). Off => the backend uses a silent fallback
+# player, so the build needs no system audio libraries (ALSA on Linux).
+audio = ["openprototype-backend/audio"]
 # Enable the tests that need the original CD image. Off by default so a plain
 # `cargo test` reports them as ignored rather than running them.
 disc-tests = []
 
 [dependencies]
+openprototype-core.workspace = true
+openprototype-backend = { workspace = true, optional = true }
 prototype-formats.workspace = true
 prototype-disc.workspace = true
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 directories = "6.0.0"
 strum = { version = "0.28.0", features = ["derive"] }
-winit = { version = "0.30.13", optional = true }
-pixels = { version = "0.17.1", optional = true }
-rodio = { version = "0.22.2", default-features = false, features = ["playback"], optional = true }
 
 [dev-dependencies]
 image = { version = "0.25.10", default-features = false, features = ["png"] }

@@ -17,6 +17,7 @@ pub mod fli;
 pub mod font;
 pub mod high;
 pub mod pal;
+pub mod pcm;
 pub mod raw;
 pub mod smp;
 pub mod start_exe;

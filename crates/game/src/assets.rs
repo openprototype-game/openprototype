@@ -11,7 +11,7 @@ use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw};
 
-use crate::core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 /// Everything the main menu needs to render.
 pub struct MenuAssets {
@@ -162,43 +162,6 @@ pub fn load_highscore_assets(disc: &DiscImage) -> Result<HighscoreAssets> {
     Ok(HighscoreAssets { fli, font })
 }
 
-/// Read a CD-DA audio track as normalized interleaved stereo `f32` samples,
-/// ready to hand to the audio backend. `cd_track` is the red-book track number
-/// (track 1 is data; the music is tracks 2..=8). The on-disc PCM is 44100 Hz,
-/// 16-bit stereo, little-endian.
-pub fn load_track_pcm_f32(disc: &DiscImage, cd_track: u8) -> Result<Vec<f32>> {
-    let track = disc
-        .audio_tracks()
-        .iter()
-        .find(|track| track.number == cd_track)
-        .with_context(|| format!("disc has no audio track {cd_track}"))?;
-
-    let pcm = disc
-        .read_track_pcm(track)
-        .with_context(|| format!("reading audio track {cd_track}"))?;
-
-    Ok(pcm_i16_le_to_f32(&pcm))
-}
-
-/// Convert raw little-endian 16-bit PCM into `f32` in `[-1.0, 1.0)`. A trailing
-/// odd byte (never expected in red-book audio) is dropped.
-fn pcm_i16_le_to_f32(bytes: &[u8]) -> Vec<f32> {
-    let mut out = Vec::with_capacity(bytes.len() / 2);
-    append_pcm_i16_le_as_f32(bytes, &mut out);
-    out
-}
-
-/// Decode `bytes` (little-endian 16-bit PCM) into `out`, normalized to
-/// `[-1.0, 1.0)`. Lets the streaming source refill its buffer without
-/// reallocating. A trailing odd byte is dropped.
-pub(crate) fn append_pcm_i16_le_as_f32(bytes: &[u8], out: &mut Vec<f32>) {
-    out.extend(
-        bytes
-            .chunks_exact(2)
-            .map(|pair| i16::from_le_bytes([pair[0], pair[1]]) as f32 / 32768.0),
-    );
-}
-
 /// Synthetic, all-zero menu assets for tests that exercise scene logic without
 /// the disc. Visually blank, but the right shapes.
 #[cfg(test)]
@@ -258,26 +221,5 @@ pub(crate) fn test_highscore_assets() -> HighscoreAssets {
     HighscoreAssets {
         fli: Vec::new(),
         font,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn converts_i16_le_to_normalized_f32() {
-        // 0, i16::MIN, i16::MAX, little-endian.
-        let bytes = [0x00, 0x00, 0x00, 0x80, 0xff, 0x7f];
-        let samples = pcm_i16_le_to_f32(&bytes);
-
-        assert_eq!(samples[0], 0.0);
-        assert_eq!(samples[1], -1.0);
-        assert!((samples[2] - 0.999_969).abs() < 1e-4);
-    }
-
-    #[test]
-    fn drops_trailing_odd_byte() {
-        assert_eq!(pcm_i16_le_to_f32(&[0x00, 0x00, 0x7f]).len(), 1);
     }
 }

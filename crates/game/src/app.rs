@@ -10,11 +10,11 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::assets::{HighscoreAssets, IntroAssets, MenuAssets};
-use crate::core::framebuffer::Framebuffer;
-use crate::core::game::{Game, StepOutput};
-use crate::core::input::KeyEvent;
 use crate::highscores::HighscoreStore;
 use crate::scene::{HighscoreScreen, Intro, Menu, MusicMenu, Scene, SceneId, Transition};
+use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::game::{Game, StepOutput};
+use openprototype_core::input::KeyEvent;
 
 pub struct App {
     current: Box<dyn Scene>,
@@ -92,8 +92,8 @@ impl Game for App {
 mod tests {
     use super::*;
     use crate::assets::{test_highscore_assets, test_intro_assets, test_menu_assets};
-    use crate::core::audio::AudioCommand;
     use crate::highscores::test_store;
+    use openprototype_core::audio::AudioCommand;
 
     const FRAME: Duration = Duration::ZERO;
 

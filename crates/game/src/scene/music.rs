@@ -10,11 +10,11 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::assets::MenuAssets;
-use crate::core::audio::AudioCommand;
-use crate::core::framebuffer::Framebuffer;
-use crate::core::input::KeyEvent;
 use crate::scene::list_menu::ListMenu;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
+use openprototype_core::audio::AudioCommand;
+use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::input::KeyEvent;
 
 /// Number of songs (MUSIC 1..=7).
 const TRACK_COUNT: usize = 7;

@@ -1,6 +1,6 @@
 //! Music playback behind a trait.
 //!
-//! The core emits [`AudioCommand`](crate::core::audio::AudioCommand)s; the
+//! The core emits [`AudioCommand`](openprototype_core::audio::AudioCommand)s; the
 //! platform turns them into device calls through this trait. [`make_music_player`]
 //! picks the real CD-DA player ([`RodioMusicPlayer`], built with the `audio`
 //! feature) or, failing that, the silent [`LoggingMusicPlayer`]. The core never
@@ -63,8 +63,9 @@ mod rodio_backend {
     use rodio::source::Source;
     use rodio::{ChannelCount, DeviceSinkBuilder, MixerDeviceSink, Player, Sample, SampleRate};
 
+    use prototype_formats::pcm::append_i16_le_to_f32;
+
     use super::MusicPlayer;
-    use crate::assets::append_pcm_i16_le_as_f32;
 
     /// Red-book CD-DA: 44100 Hz, 2 channels.
     const SAMPLE_RATE: u32 = 44100;
@@ -181,7 +182,7 @@ mod rodio_backend {
             match self.disc.read_track_pcm(&chunk) {
                 Ok(bytes) => {
                     self.buffer.clear();
-                    append_pcm_i16_le_as_f32(&bytes, &mut self.buffer);
+                    append_i16_le_to_f32(&bytes, &mut self.buffer);
                     self.position = 0;
                     self.next_lba = chunk_end;
                 }

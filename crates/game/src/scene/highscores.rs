@@ -20,10 +20,10 @@ use std::time::Duration;
 use prototype_formats::{Dimensions, Highscores, IndexedImage, Palette, Rgb};
 
 use crate::assets::HighscoreAssets;
-use crate::core::flic_player::FlicPlayer;
-use crate::core::framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
-use crate::core::input::KeyEvent;
+use crate::flic_player::FlicPlayer;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
+use openprototype_core::framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::input::KeyEvent;
 
 /// `HIGHSCOR.FLI` plays at 4 ticks per frame (`cs:[0x3022]=4` before `0x4077`).
 const FLI_FRAME_DELAY: Duration = Duration::from_micros(4 * 1_000_000 / 70);

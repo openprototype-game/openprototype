@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/disc", "crates/formats", "crates/game", "crates/integration-tests", "crates/tools"]
+members = ["crates/backend", "crates/core", "crates/disc", "crates/formats", "crates/game", "crates/integration-tests", "crates/tools"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,3 +11,5 @@ publish = false
 [workspace.dependencies]
 prototype-formats = { path = "crates/formats" }
 prototype-disc = { path = "crates/disc" }
+openprototype-core = { path = "crates/core" }
+openprototype-backend = { path = "crates/backend", default-features = false }

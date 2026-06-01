@@ -13,9 +13,9 @@
 
 use std::time::Duration;
 
-use crate::core::audio::AudioCommand;
-use crate::core::framebuffer::Framebuffer;
-use crate::core::input::KeyEvent;
+use crate::audio::AudioCommand;
+use crate::framebuffer::Framebuffer;
+use crate::input::KeyEvent;
 
 /// The side effects a single [`Game::step`] produced. The framebuffer is read
 /// separately via [`Game::framebuffer`] so a step never has to clone 64 KB.

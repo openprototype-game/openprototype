@@ -25,11 +25,11 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::core::audio::AudioCommand;
-use crate::core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
-use crate::core::game::Game;
-use crate::core::input::KeyEvent;
-use crate::platform::audio::{MusicPlayer, make_music_player};
+use crate::audio::{MusicPlayer, make_music_player};
+use openprototype_core::audio::AudioCommand;
+use openprototype_core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::game::Game;
+use openprototype_core::input::KeyEvent;
 
 const INITIAL_SCALE: u32 = 4;
 

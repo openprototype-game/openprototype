@@ -15,7 +15,7 @@ mod desktop {
     use openprototype::app::App;
     use openprototype::assets::{load_highscore_assets, load_intro_assets, load_menu_assets};
     use openprototype::highscores::HighscoreStore;
-    use openprototype::platform::run;
+    use openprototype_backend::run;
     use prototype_disc::DiscImage;
 
     #[derive(Parser)]

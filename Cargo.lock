@@ -1637,13 +1637,32 @@ dependencies = [
  "clap",
  "directories",
  "image",
+ "openprototype-backend",
+ "openprototype-core",
+ "prototype-disc",
+ "prototype-formats",
+ "strum",
+ "tempfile",
+]
+
+[[package]]
+name = "openprototype-backend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "openprototype-core",
  "pixels",
  "prototype-disc",
  "prototype-formats",
  "rodio",
- "strum",
- "tempfile",
  "winit",
+]
+
+[[package]]
+name = "openprototype-core"
+version = "0.1.0"
+dependencies = [
+ "prototype-formats",
 ]
 
 [[package]]

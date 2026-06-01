@@ -10,7 +10,7 @@
 use std::rc::Rc;
 
 use crate::assets::MenuAssets;
-use crate::core::framebuffer::Framebuffer;
+use openprototype_core::framebuffer::Framebuffer;
 
 const LABEL_X: i32 = 90;
 const CURSOR_X: i32 = 70;

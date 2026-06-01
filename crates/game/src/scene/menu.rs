@@ -12,10 +12,10 @@ use std::time::Duration;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::assets::MenuAssets;
-use crate::core::framebuffer::Framebuffer;
-use crate::core::input::KeyEvent;
 use crate::scene::list_menu::ListMenu;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
+use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::input::KeyEvent;
 
 #[derive(Clone, Copy, PartialEq, Eq, EnumIter, Display)]
 enum MenuItem {

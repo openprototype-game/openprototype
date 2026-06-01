@@ -23,9 +23,9 @@ pub use music::MusicMenu;
 
 use std::time::Duration;
 
-use crate::core::audio::AudioCommand;
-use crate::core::framebuffer::Framebuffer;
-use crate::core::input::KeyEvent;
+use openprototype_core::audio::AudioCommand;
+use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::input::KeyEvent;
 
 /// The scenes the [`App`](crate::app::App) can switch to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

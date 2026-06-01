@@ -2,7 +2,7 @@
 //!
 //! The original game's only music is CD-DA: track 1 is data, tracks 2-8 are the
 //! seven songs, driven through MSCDEX. The core never opens an audio device. It
-//! emits these commands from [`step`](crate::core::game::Game::step) and the
+//! emits these commands from [`step`](crate::game::Game::step) and the
 //! platform drains and executes them, keeping the core free of any audio
 //! backend.
 

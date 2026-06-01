@@ -4,8 +4,23 @@
 //! the OST tracks and they decode to a non-empty, well-formed stereo `f32`
 //! buffer. Gated on the image being present.
 
-use openprototype::assets::load_track_pcm_f32;
 use openprototype_integration_tests::open_test_image;
+use prototype_disc::DiscImage;
+use prototype_formats::pcm::i16_le_to_f32;
+
+/// Read a CD-DA track fully and decode it to normalized interleaved stereo
+/// `f32`. Test-only: the music backend streams tracks chunk by chunk instead of
+/// reading a whole one up front.
+fn load_track_pcm_f32(disc: &DiscImage, cd_track: u8) -> prototype_disc::Result<Vec<f32>> {
+    let track = disc
+        .audio_tracks()
+        .iter()
+        .find(|track| track.number == cd_track)
+        .unwrap_or_else(|| panic!("disc has no audio track {cd_track}"));
+
+    let pcm = disc.read_track_pcm(track)?;
+    Ok(i16_le_to_f32(&pcm))
+}
 
 #[test]
 #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
