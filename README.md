@@ -68,3 +68,13 @@ cargo test --workspace --features disc-tests
 Early, but the front-end runs from the disc image: the intro sequence, the main
 menu, and the music jukebox. The level engine, the actual gameplay, is the next
 big piece.
+
+## Possible future extras
+
+Not needed for faithfulness, but might happen later:
+
+- A scaler menu in the style of DOSBox: pick between nearest, sharp-bilinear,
+  and pixel-art scalers (hqx, scaleNx) at runtime. The renderer already isolates
+  scaling in its own pass, so this only swaps that pass.
+- A square-pixel display toggle (16:10) alongside the period-correct 4:3, for
+  people who prefer pixel-perfect over the original aspect.
