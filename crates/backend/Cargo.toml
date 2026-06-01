@@ -21,6 +21,7 @@ prototype-disc.workspace = true
 anyhow = "1.0.102"
 winit = "0.30.13"
 wgpu = "29"
+tracing = "0.1.44"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "0.4"
 rodio = { version = "0.22.2", default-features = false, features = ["playback"], optional = true }

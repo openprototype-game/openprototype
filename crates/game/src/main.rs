@@ -17,6 +17,7 @@ mod desktop {
     use openprototype::highscores::HighscoreStore;
     use openprototype_backend::run;
     use prototype_disc::DiscImage;
+    use tracing_subscriber::EnvFilter;
 
     #[derive(Parser)]
     #[command(about = "Prototype (1995) front-end")]
@@ -26,7 +27,21 @@ mod desktop {
         cue: PathBuf,
     }
 
+    /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
+    /// `RUST_LOG` overrides this entirely when set.
+    const DEFAULT_LOG: &str = "warn,openprototype=info,openprototype_backend=info,\
+        openprototype_core=info,prototype_disc=info,prototype_formats=info";
+
+    fn init_tracing() {
+        let filter =
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_LOG));
+
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
+
     pub fn main() -> Result<()> {
+        init_tracing();
+
         let cli = Cli::parse();
 
         let disc = Arc::new(

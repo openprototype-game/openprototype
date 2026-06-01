@@ -9,6 +9,9 @@
 use std::sync::Arc;
 
 use prototype_disc::DiscImage;
+use tracing::debug;
+#[cfg(feature = "audio")]
+use tracing::warn;
 
 /// Plays the game's CD-DA music.
 pub trait MusicPlayer {
@@ -25,11 +28,11 @@ pub struct LoggingMusicPlayer;
 
 impl MusicPlayer for LoggingMusicPlayer {
     fn play_track(&mut self, track: u8) {
-        eprintln!("[audio] play track {track}");
+        debug!(track, "play track");
     }
 
     fn stop(&mut self) {
-        eprintln!("[audio] stop");
+        debug!("stop");
     }
 }
 
@@ -41,7 +44,7 @@ pub fn make_music_player(disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
     match RodioMusicPlayer::new(disc) {
         Ok(player) => Box::new(player),
         Err(error) => {
-            eprintln!("[audio] no audio output ({error:#}); music disabled");
+            warn!("no audio output ({error:#}); music disabled");
             Box::new(LoggingMusicPlayer)
         }
     }
@@ -62,6 +65,7 @@ mod rodio_backend {
     use prototype_disc::{AudioTrack, DiscImage};
     use rodio::source::Source;
     use rodio::{ChannelCount, DeviceSinkBuilder, MixerDeviceSink, Player, Sample, SampleRate};
+    use tracing::{error, warn};
 
     use prototype_formats::pcm::append_i16_le_to_f32;
 
@@ -107,7 +111,7 @@ mod rodio_backend {
             self.current = None;
 
             let Some(source) = TrackSource::new(self.disc.clone(), track) else {
-                eprintln!("[audio] disc has no audio track {track}");
+                warn!(track, "disc has no audio track");
                 return;
             };
 
@@ -187,7 +191,7 @@ mod rodio_backend {
                     self.next_lba = chunk_end;
                 }
                 Err(error) => {
-                    eprintln!("[audio] track {} read failed: {error:#}", self.track_number);
+                    error!(track = self.track_number, "track read failed: {error:#}");
                     self.ended = true;
                 }
             }
