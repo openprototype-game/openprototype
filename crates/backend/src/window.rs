@@ -3,8 +3,8 @@
 //! This is the only module that knows a windowing toolkit or a GPU surface
 //! exists. It owns the event loop, translates physical keys into [`KeyEvent`]s,
 //! drives the core's [`step`](Game::step) with the elapsed time, presents the
-//! 320x200 framebuffer scaled (pixels letterboxes to keep the 4:2.5 aspect),
-//! and routes audio commands to a [`MusicPlayer`].
+//! framebuffer scaled (its size comes from the frame itself), and routes audio
+//! commands to a [`MusicPlayer`].
 //!
 //! When the game is static (a menu) the loop waits for input and only steps on
 //! a key. When it reports [`is_animating`](Game::is_animating) (the intro) the
@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use pixels::{Pixels, SurfaceTexture};
 use prototype_disc::DiscImage;
+use prototype_formats::Dimensions;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
@@ -27,7 +28,6 @@ use winit::window::{Window, WindowId};
 
 use crate::audio::{MusicPlayer, make_music_player};
 use openprototype_core::audio::AudioCommand;
-use openprototype_core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use openprototype_core::game::Game;
 use openprototype_core::input::KeyEvent;
 
@@ -120,7 +120,8 @@ impl App {
             return Ok(());
         };
 
-        let rgba = self.game.framebuffer().to_rgba8();
+        let frame = self.game.framebuffer();
+        let rgba = frame.image.to_rgba8(&frame.palette);
         render.pixels.frame_mut().copy_from_slice(&rgba);
         render.pixels.render().context("presenting the frame")?;
         Ok(())
@@ -145,7 +146,9 @@ impl ApplicationHandler for App {
             return;
         }
 
-        match create_render(event_loop) {
+        let source = self.game.framebuffer().image.size;
+
+        match create_render(event_loop, source) {
             Ok(render) => {
                 self.render = Some(render);
                 self.request_redraw(); // draw the first frame
@@ -207,12 +210,12 @@ impl ApplicationHandler for App {
     }
 }
 
-fn create_render(event_loop: &ActiveEventLoop) -> Result<Render> {
-    let size = LogicalSize::new(SCREEN_WIDTH * INITIAL_SCALE, SCREEN_HEIGHT * INITIAL_SCALE);
+fn create_render(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<Render> {
+    let initial = LogicalSize::new(source.width * INITIAL_SCALE, source.height * INITIAL_SCALE);
     let attributes = Window::default_attributes()
         .with_title("Prototype")
-        .with_inner_size(size)
-        .with_min_inner_size(LogicalSize::new(SCREEN_WIDTH, SCREEN_HEIGHT));
+        .with_inner_size(initial)
+        .with_min_inner_size(LogicalSize::new(source.width, source.height));
 
     let window = Arc::new(
         event_loop
@@ -222,7 +225,7 @@ fn create_render(event_loop: &ActiveEventLoop) -> Result<Render> {
 
     let physical = window.inner_size();
     let surface_texture = SurfaceTexture::new(physical.width, physical.height, window.clone());
-    let pixels = Pixels::new(SCREEN_WIDTH, SCREEN_HEIGHT, surface_texture)
+    let pixels = Pixels::new(source.width, source.height, surface_texture)
         .context("creating the pixel surface")?;
 
     Ok(Render { window, pixels })

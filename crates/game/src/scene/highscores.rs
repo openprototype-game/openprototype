@@ -22,7 +22,8 @@ use prototype_formats::{Dimensions, Highscores, IndexedImage, Palette, Rgb};
 use crate::assets::HighscoreAssets;
 use crate::flic_player::FlicPlayer;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
-use openprototype_core::framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 
 /// `HIGHSCOR.FLI` plays at 4 ticks per frame (`cs:[0x3022]=4` before `0x4077`).
@@ -75,7 +76,7 @@ impl HighscoreScreen {
         let mut screen = Self {
             assets,
             scores,
-            framebuffer: Framebuffer::new(black()),
+            framebuffer: Framebuffer::new(Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT), black()),
             phase: Phase::Resting,
         };
 

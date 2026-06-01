@@ -9,7 +9,10 @@
 
 use std::rc::Rc;
 
+use prototype_formats::Dimensions;
+
 use crate::assets::MenuAssets;
+use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use openprototype_core::framebuffer::Framebuffer;
 
 const LABEL_X: i32 = 90;
@@ -34,7 +37,10 @@ impl ListMenu {
     pub fn new(assets: Rc<MenuAssets>, labels: Vec<String>) -> Self {
         debug_assert!(!labels.is_empty(), "a list menu needs at least one row");
 
-        let framebuffer = Framebuffer::new(assets.palette.clone());
+        let framebuffer = Framebuffer::new(
+            Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+            assets.palette.clone(),
+        );
         let mut menu = Self {
             assets,
             framebuffer,

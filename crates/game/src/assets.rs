@@ -11,7 +11,7 @@ use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw};
 
-use openprototype_core::framebuffer::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 /// Everything the main menu needs to render.
 pub struct MenuAssets {

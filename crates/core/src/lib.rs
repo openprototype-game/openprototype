@@ -15,6 +15,6 @@ pub mod game;
 pub mod input;
 
 pub use audio::AudioCommand;
-pub use framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+pub use framebuffer::Framebuffer;
 pub use game::{Game, StepOutput};
 pub use input::KeyEvent;

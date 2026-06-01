@@ -23,8 +23,9 @@ use crate::assets::{IntroAssets, MenuAssets};
 use crate::fade::PaletteFade;
 use crate::flic_player::FlicPlayer;
 use crate::scene::{Menu, Scene, SceneId, SceneOutput, Transition};
+use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use openprototype_core::audio::AudioCommand;
-use openprototype_core::framebuffer::{Framebuffer, SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 
 /// The CD-DA track the intro starts (the title theme), kept playing into the
@@ -134,7 +135,7 @@ impl Intro {
         ];
 
         let mut intro = Self {
-            framebuffer: Framebuffer::new(black()),
+            framebuffer: Framebuffer::new(Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT), black()),
             assets,
             menu_assets,
             script,

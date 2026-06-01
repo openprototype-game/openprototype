@@ -52,6 +52,20 @@ impl IndexedImage {
 
         out
     }
+
+    /// Resolve through a palette to packed RGBA (`width * height * 4` bytes).
+    /// Every pixel is fully opaque: VGA has no alpha, so this is for backends
+    /// that need a four-channel buffer (e.g. `pixels`).
+    pub fn to_rgba8(&self, palette: &Palette) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.pixels.len() * 4);
+
+        for &index in &self.pixels {
+            let color = palette.colors[index as usize];
+            out.extend_from_slice(&[color.r, color.g, color.b, 0xff]);
+        }
+
+        out
+    }
 }
 
 #[cfg(test)]

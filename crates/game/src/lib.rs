@@ -20,3 +20,4 @@ pub mod fade;
 pub mod flic_player;
 pub mod highscores;
 pub mod scene;
+pub mod screen;
