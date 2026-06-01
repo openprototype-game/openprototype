@@ -3,7 +3,7 @@
 //! The core emits [`AudioCommand`](openprototype_core::audio::AudioCommand)s; the
 //! platform turns them into device calls through this trait. [`make_music_player`]
 //! picks the real CD-DA player ([`RodioMusicPlayer`], built with the `audio`
-//! feature) or, failing that, the silent [`LoggingMusicPlayer`]. The core never
+//! feature) or, failing that, the silent [`NullMusicPlayer`]. The core never
 //! sees any of this.
 
 use std::sync::Arc;
@@ -22,37 +22,44 @@ pub trait MusicPlayer {
     fn stop(&mut self);
 }
 
-/// A no-op player that logs the commands it receives. Used when the `audio`
-/// feature is off or no audio device could be opened.
-pub struct LoggingMusicPlayer;
+/// A silent player used when the `audio` feature is off or no audio device
+/// could be opened. It announces once that music is disabled, then ignores
+/// every command, so the app runs without sound and without log noise.
+pub struct NullMusicPlayer;
 
-impl MusicPlayer for LoggingMusicPlayer {
-    fn play_track(&mut self, track: u8) {
-        debug!(track, "play track");
+// `new` logs a one-time notice, so a derived `Default` would hide that side
+// effect behind an implicit call.
+#[allow(clippy::new_without_default)]
+impl NullMusicPlayer {
+    pub fn new() -> Self {
+        debug!("music disabled");
+        Self
     }
+}
 
-    fn stop(&mut self) {
-        debug!("stop");
-    }
+impl MusicPlayer for NullMusicPlayer {
+    fn play_track(&mut self, _track: u8) {}
+
+    fn stop(&mut self) {}
 }
 
 /// Build the best available music player for `disc`. With the `audio` feature
 /// this is a [`RodioMusicPlayer`]; if the audio device cannot be opened (or the
-/// feature is off) it falls back to [`LoggingMusicPlayer`] so the app still runs.
+/// feature is off) it falls back to [`NullMusicPlayer`] so the app still runs.
 #[cfg(feature = "audio")]
 pub fn make_music_player(disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
     match RodioMusicPlayer::new(disc) {
         Ok(player) => Box::new(player),
         Err(error) => {
             warn!("no audio output ({error:#}); music disabled");
-            Box::new(LoggingMusicPlayer)
+            Box::new(NullMusicPlayer::new())
         }
     }
 }
 
 #[cfg(not(feature = "audio"))]
 pub fn make_music_player(_disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
-    Box::new(LoggingMusicPlayer)
+    Box::new(NullMusicPlayer::new())
 }
 
 #[cfg(feature = "audio")]
