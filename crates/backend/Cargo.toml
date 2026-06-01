@@ -20,5 +20,7 @@ prototype-formats.workspace = true
 prototype-disc.workspace = true
 anyhow = "1.0.102"
 winit = "0.30.13"
-pixels = "0.17.1"
+wgpu = "29"
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "0.4"
 rodio = { version = "0.22.2", default-features = false, features = ["playback"], optional = true }

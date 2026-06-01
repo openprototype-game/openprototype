@@ -5,6 +5,8 @@
 //! this crate alone. The game drives it through [`run`].
 
 pub mod audio;
+pub mod compositor;
+pub mod renderer;
 pub mod window;
 
 pub use window::run;

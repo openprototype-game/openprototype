@@ -1,32 +1,33 @@
-//! The winit + pixels backend.
+//! The winit event loop driving the wgpu [`Renderer`].
 //!
-//! This is the only module that knows a windowing toolkit or a GPU surface
-//! exists. It owns the event loop, translates physical keys into [`KeyEvent`]s,
-//! drives the core's [`step`](Game::step) with the elapsed time, presents the
-//! framebuffer scaled (its size comes from the frame itself), and routes audio
-//! commands to a [`MusicPlayer`].
+//! This is the only module that knows a windowing toolkit exists. It owns the
+//! event loop, translates physical keys into [`KeyEvent`]s, drives the core's
+//! [`step`](Game::step) with the elapsed time, presents the framebuffer through
+//! the renderer, and routes audio commands to a [`MusicPlayer`].
 //!
-//! When the game is static (a menu) the loop waits for input and only steps on
-//! a key. When it reports [`is_animating`](Game::is_animating) (the intro) the
-//! loop drives frames on a ~70 Hz timer, the original's VGA retrace rate.
-//! Swapping backends means rewriting this file and nothing in `core`.
+//! When the game is static (a menu) the loop waits for input and only steps on a
+//! key. When it reports [`is_animating`](Game::is_animating) (the intro) the loop
+//! drives frames on a ~70 Hz timer, the original's VGA retrace rate.
+//!
+//! Alt+Enter toggles borderless fullscreen here (the OpenTyrian binding); it is
+//! handled in this layer and never reaches the core as a key.
 
 use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use pixels::{Pixels, SurfaceTexture};
 use prototype_disc::DiscImage;
 use prototype_formats::Dimensions;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::audio::{MusicPlayer, make_music_player};
+use crate::renderer::Renderer;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::game::Game;
 use openprototype_core::input::KeyEvent;
@@ -47,8 +48,9 @@ pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
     let mut app = App {
         game,
         music: make_music_player(disc),
-        render: None,
+        renderer: None,
         pending_input: Vec::new(),
+        modifiers: ModifiersState::empty(),
         last_frame: None,
         next_frame: None,
         pending_error: None,
@@ -64,18 +66,14 @@ pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
     }
 }
 
-/// The window and its GPU surface, created once the event loop is active.
-struct Render {
-    window: Arc<Window>,
-    pixels: Pixels<'static>,
-}
-
 struct App {
     game: Box<dyn Game>,
     music: Box<dyn MusicPlayer>,
-    render: Option<Render>,
+    renderer: Option<Renderer>,
     /// Keys that arrived since the last frame, drained into the next step.
     pending_input: Vec<KeyEvent>,
+    /// Held modifiers, tracked for the Alt+Enter fullscreen toggle.
+    modifiers: ModifiersState,
     /// When the previous frame ran, for measuring `dt`.
     last_frame: Option<Instant>,
     /// When the next animating frame is due (only meaningful while animating).
@@ -104,7 +102,9 @@ impl App {
             }
         }
 
-        if let Err(error) = self.present() {
+        if let Some(renderer) = self.renderer.as_mut()
+            && let Err(error) = renderer.render(self.game.framebuffer())
+        {
             self.fail(event_loop, error);
             return;
         }
@@ -114,22 +114,9 @@ impl App {
         }
     }
 
-    /// Copy the current framebuffer into the surface and draw it.
-    fn present(&mut self) -> Result<()> {
-        let Some(render) = self.render.as_mut() else {
-            return Ok(());
-        };
-
-        let frame = self.game.framebuffer();
-        let rgba = frame.image.to_rgba8(&frame.palette);
-        render.pixels.frame_mut().copy_from_slice(&rgba);
-        render.pixels.render().context("presenting the frame")?;
-        Ok(())
-    }
-
     fn request_redraw(&self) {
-        if let Some(render) = &self.render {
-            render.window.request_redraw();
+        if let Some(renderer) = &self.renderer {
+            renderer.window().request_redraw();
         }
     }
 
@@ -142,15 +129,15 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.render.is_some() {
+        if self.renderer.is_some() {
             return;
         }
 
         let source = self.game.framebuffer().image.size;
 
-        match create_render(event_loop, source) {
-            Ok(render) => {
-                self.render = Some(render);
+        match create_renderer(event_loop, source) {
+            Ok(renderer) => {
+                self.renderer = Some(renderer);
                 self.request_redraw(); // draw the first frame
             }
             Err(error) => self.fail(event_loop, error),
@@ -167,16 +154,28 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
 
             WindowEvent::Resized(size) => {
-                if let Some(render) = self.render.as_mut() {
-                    let _ = render.pixels.resize_surface(size.width, size.height);
-                    render.window.request_redraw();
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.resize(size.width, size.height);
                 }
+
+                self.request_redraw();
             }
 
             WindowEvent::RedrawRequested => self.frame(event_loop),
 
+            WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
+
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state != ElementState::Pressed || event.repeat {
+                    return;
+                }
+
+                if self.modifiers.alt_key() && event.logical_key == Key::Named(NamedKey::Enter) {
+                    if let Some(renderer) = &self.renderer {
+                        renderer.toggle_fullscreen();
+                    }
+
+                    self.request_redraw();
                     return;
                 }
 
@@ -210,12 +209,15 @@ impl ApplicationHandler for App {
     }
 }
 
-fn create_render(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<Render> {
-    let initial = LogicalSize::new(source.width * INITIAL_SCALE, source.height * INITIAL_SCALE);
+/// Create the window at a 4:3 shape (so it fills with no letterbox bars) and
+/// build the renderer for the initial `source` frame size.
+fn create_renderer(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<Renderer> {
+    let width = source.width * INITIAL_SCALE;
+    let height = width * 3 / 4;
     let attributes = Window::default_attributes()
         .with_title("Prototype")
-        .with_inner_size(initial)
-        .with_min_inner_size(LogicalSize::new(source.width, source.height));
+        .with_inner_size(LogicalSize::new(width, height))
+        .with_min_inner_size(LogicalSize::new(source.width, source.width * 3 / 4));
 
     let window = Arc::new(
         event_loop
@@ -223,12 +225,7 @@ fn create_render(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<Ren
             .context("creating the window")?,
     );
 
-    let physical = window.inner_size();
-    let surface_texture = SurfaceTexture::new(physical.width, physical.height, window.clone());
-    let pixels = Pixels::new(source.width, source.height, surface_texture)
-        .context("creating the pixel surface")?;
-
-    Ok(Render { window, pixels })
+    Renderer::new(window, source)
 }
 
 fn translate_key(key: &Key) -> Option<KeyEvent> {
