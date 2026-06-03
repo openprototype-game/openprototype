@@ -23,13 +23,10 @@ const LAG_WRAP: u16 = 0x74;
 /// `lag_b` starts `0x2e` bytes in.
 const LAG_B_START: u16 = 0x2e;
 
-/// Byte offset `0x74` is word index 58, one past the 58 words the seeder fills,
-/// so the generator can read a 59th "wrap" slot the seeder never initialises. It
-/// keeps its loaded-image value; for LEVEL_1 that is `0x800`. This is per-WAD and
-/// must be re-read when porting levels 3/5/7.
-const WRAP_SLOT_INIT: u16 = 0x800;
-
-/// Number of words the seeder fills (the wrap slot at index 58 is excluded).
+/// Number of words the seeder fills. Byte offset `0x74` (the lag wrap target) is
+/// word index 58, one past these, so the table is 59 words. The seeder never
+/// touches the wrap slot; it starts zero and is written by feedback once `si`
+/// reaches `0x74`. (Verified: a non-zero init breaks the byte-exact match.)
 const SEEDED_WORDS: usize = 58;
 
 pub struct EngineRng {
@@ -42,7 +39,7 @@ pub struct EngineRng {
 
 impl EngineRng {
     /// Build and seed the generator exactly as the level init does: the seeder
-    /// fills words 0..=57 from the LCG; the wrap slot keeps its image value.
+    /// fills words 0..=57 from the LCG; the wrap slot (index 58) stays zero.
     pub fn new(seed: u16) -> Self {
         let mut rng = Self {
             table: [0; SEEDED_WORDS + 1],
@@ -50,7 +47,6 @@ impl EngineRng {
             lag_b: LAG_B_START,
         };
 
-        rng.table[SEEDED_WORDS] = WRAP_SLOT_INIT;
         rng.seed(seed);
         rng
     }
@@ -123,9 +119,9 @@ mod tests {
     }
 
     #[test]
-    fn seeder_leaves_the_wrap_slot() {
+    fn wrap_slot_starts_zero() {
         let rng = EngineRng::new(0);
-        assert_eq!(rng.table[SEEDED_WORDS], WRAP_SLOT_INIT);
+        assert_eq!(rng.table[SEEDED_WORDS], 0);
     }
 
     #[test]

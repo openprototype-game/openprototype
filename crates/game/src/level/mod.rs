@@ -6,4 +6,6 @@
 //! and the emitter library that writes the object records. See
 //! `reference/formats/level-layout.md` for the disassembly it mirrors.
 
+pub mod generator;
+pub mod level_1;
 pub mod prng;
