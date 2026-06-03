@@ -337,18 +337,14 @@ pub fn post_pass() -> Vec<Overwrite> {
 #[cfg(test)]
 mod tests {
     use super::{post_pass, script};
-    use crate::level::generator::Record;
+    use crate::level::golden_hash;
     use crate::level::prng::EngineRng;
     use crate::level::slot::generate;
 
-    fn record(x_step: u16, sprite: u16, depth: u16, y: u16) -> Record {
-        Record {
-            x_step,
-            sprite,
-            depth,
-            y,
-        }
-    }
+    /// FNV-1a over the full 508-record buffer (post-pass included) for the
+    /// validated seed. Locks the layout byte-for-byte against refactors;
+    /// regenerate and re-verify against the capture if it ever changes.
+    const GOLDEN: &str = "106fd7cea5770a65";
 
     #[test]
     fn reproduces_the_validated_capture() {
@@ -356,21 +352,7 @@ mod tests {
         let records = generate(&script(), &post_pass(), &mut EngineRng::new(0x1a94));
 
         assert_eq!(records.len(), 508);
-
-        // Spot-checks across the emitter variety and the post-pass overwrites.
-        assert_eq!(records[0], record(0x28, 0x5818, 0x8c, 0x10)); // SlotSingle lead
-        assert_eq!(records[1], record(0xc, 0x58b0, 0xbe, 0x68)); // 0x58b0 overwrite
-        assert_eq!(records[50], record(0xf, 0x57e2, 0x64, 0x53)); // Grid row
-        assert_eq!(records[294], record(0xf, 0x54d6, 0x47e, 0x60)); // FixedRun tail
-        assert_eq!(records[309], record(0xbe, 0x54b0, 0x82, 0x14)); // SlotSingle lead
-        assert_eq!(records[345], record(0xf, 0x583e, 0x8c, 0x1f));
-        assert_eq!(records[507], record(0x14, 0x588a, 0x50, 0x23)); // last record
-
-        // The post-pass stamps a fixed number of each landmark sprite.
-        let count = |sprite| records.iter().filter(|r| r.sprite == sprite).count();
-        assert_eq!(count(0x58b0), 6);
-        assert_eq!(count(0x5ac4), 21);
-        assert_eq!(count(0x5c20), 1);
+        assert_eq!(golden_hash(&records), GOLDEN);
     }
 
     #[test]

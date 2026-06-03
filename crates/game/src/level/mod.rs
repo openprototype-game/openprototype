@@ -11,3 +11,26 @@ pub mod level_1;
 pub mod level_3;
 pub mod prng;
 pub mod slot;
+
+/// A stable fingerprint of a generated layout, for full-buffer golden tests.
+///
+/// FNV-1a over every record's little-endian `u16` fields. It is deterministic
+/// across platforms and Rust versions (unlike `std`'s `DefaultHasher`), so the
+/// hex digest can be committed as a golden and will only change if the generated
+/// records change. Not cryptographic; it is a regression fence, not a security
+/// boundary.
+#[cfg(test)]
+pub(crate) fn golden_hash(records: &[generator::Record]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+
+    for record in records {
+        for word in [record.x_step, record.sprite, record.depth, record.y] {
+            for byte in word.to_le_bytes() {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+    }
+
+    format!("{hash:016x}")
+}

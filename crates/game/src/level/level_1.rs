@@ -340,17 +340,14 @@ pub fn script() -> Vec<Step> {
 #[cfg(test)]
 mod tests {
     use super::script;
-    use crate::level::generator::{Record, generate};
+    use crate::level::generator::generate;
+    use crate::level::golden_hash;
     use crate::level::prng::EngineRng;
 
-    fn record(x_step: u16, sprite: u16, depth: u16, y: u16) -> Record {
-        Record {
-            x_step,
-            sprite,
-            depth,
-            y,
-        }
-    }
+    /// FNV-1a over the full 446-record buffer for the validated seed. Locks the
+    /// layout byte-for-byte against refactors; regenerate and re-verify against
+    /// the capture (not just rebless) if it ever changes.
+    const GOLDEN: &str = "9538acce1f4be2ae";
 
     #[test]
     fn reproduces_the_validated_capture() {
@@ -358,16 +355,7 @@ mod tests {
         let records = generate(&script(), &mut EngineRng::new(0x3b95));
 
         assert_eq!(records.len(), 446);
-
-        // Spot-checks across the emitter variety, from the validated capture.
-        assert_eq!(records[0], record(0x96, 0x382c, 250, 0x42)); // Once landmark
-        assert_eq!(records[1], record(0x39, 0x3308, 100, 0xf)); // Single (e776)
-        assert_eq!(records[46], record(0x20, 0x3308, 100, 0x0));
-        assert_eq!(records[123], record(0x1f, 0x3308, 100, 0x4));
-        assert_eq!(records[200], record(0x64, 0x338e, 500, 0x16)); // Repeat (ecbd)
-        assert_eq!(records[300], record(0x1e, 0x3308, 100, 0x2));
-        assert_eq!(records[400], record(0x2b, 0x38b0, 160, 0x1e));
-        assert_eq!(records[445], record(0x0, 0x36ea, 250, 0x4b)); // Fixed tail (eb92)
+        assert_eq!(golden_hash(&records), GOLDEN);
     }
 
     #[test]
