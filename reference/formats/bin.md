@@ -161,3 +161,29 @@ exhausts), covering 228 of the 232 subroutines.
 
 Addresses are r2 flat vaddr for `LEVEL_1.WAD`; file offset = vaddr + `0x200`
 (the MZ header).
+
+## The Mode X sprite blitter (the placement-layer renderer)
+
+A sprite-drawing routine (LEVEL_2 vaddr `0x6744`..`0x6829`, a family of
+near-identical loops) is the Mode X blitter that draws the catalog. It walks the BIN
+sprite catalog, not the level's object-layout table (its loop cursor is screen
+memory). This is the rendering side of the layout system in `level-layout.md`.
+
+- The loop's `si` is a VRAM destination cursor: setup computes `si = row * 80 + x`
+  (Mode X is 80 bytes per row), and `si += 8` per step moves 32 pixels right. The
+  `add si, 8` is screen columns, not a data-record stride.
+- Objects are drawn on a 32-pixel horizontal grid with on-screen culling (x between
+  -32 and 288).
+- The per-object sprite data is a 10-byte array walked by `bx` (`bx += 0xA`, base from
+  a control struct via `cs:[di+6]`): a word EMS page id followed by four words that
+  are compiled-sprite plane entry points. This is exactly the **BIN sprite catalog**
+  decoded above (`decode_banked`, e.g. `OUT_BIN_CATALOG`).
+- The sprites are compiled code: the blitter patches a `0xCB` (`retf`) into the
+  sprite, calls into it, then restores the byte. Four near-identical loop variants are
+  selected by a jump table on `x & 3`, the four Mode X pixel phases.
+- Sprite pages are banked through EMS: the helper at vaddr `0x56EA` maps a page with
+  `int 0x67` (`ax = 0x4400`) behind a 4-slot LRU cache (`cs:[0x4F32..]`).
+
+For the Rust port none of the EMS banking or compiled-sprite machinery carries over
+(no 640 KB limit); what matters is the data it ultimately places. Addresses in this
+section are LEVEL_2 vaddr.
