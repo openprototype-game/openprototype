@@ -9,6 +9,7 @@
 pub mod generator;
 pub mod level_1;
 pub mod level_3;
+pub mod level_5;
 pub mod prng;
 pub mod slot;
 

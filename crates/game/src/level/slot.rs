@@ -114,12 +114,45 @@ pub enum Emitter {
         run: (u16, u16),
         count: u16,
     },
+    /// `0xfd82`/`0xff16`: a run of `count` records (`count = rng + base`) sharing
+    /// one y, drawn once before the loop. x = x_start + x_step; sprite/depth are
+    /// hardcoded.
+    Row {
+        count: Rand,
+        sprite: u16,
+        depth: u16,
+        y: Rand,
+    },
+    /// `0xffe0`: `rows` rows (`rows = rng + base`). A single `rng(3)` picks the
+    /// y-pair shared by every row — result `1` selects `if_one`, anything else
+    /// `otherwise`. Each row emits two records: the first x = x_start + x_step,
+    /// the second x = 0. sprite/depth hardcoded.
+    BranchRows {
+        rows: Rand,
+        sprite: u16,
+        depth: u16,
+        if_one: (u16, u16),
+        otherwise: (u16, u16),
+    },
+    /// `0x10119`/`0x10146`: a fixed run with no PRNG draws. The lead record's x is
+    /// x_start + x_step; each `rest` record carries its own literal
+    /// `(x, sprite, depth, y)`.
+    Fixed {
+        lead_sprite: u16,
+        lead_depth: u16,
+        lead_y: u16,
+        rest: Vec<(u16, u16, u16, u16)>,
+    },
 }
 
-/// One dispatcher step: write some slots, then run an emitter.
+/// One dispatcher step: write some slots, then run an emitter. When `repeat` is
+/// set, the count is drawn once (before the slot writes) and the slot-write +
+/// emitter body runs that many times — a loop the dispatcher builds around a
+/// `call`.
 pub struct Step {
     pub set: SlotPatch,
     pub emitter: Emitter,
+    pub repeat: Option<Rand>,
 }
 
 /// A find-by-position overwrite (`0x12c26` + a half-emitter): walk the buffer
@@ -136,11 +169,13 @@ pub struct Overwrite {
 /// call sites.
 pub struct StepBuilder {
     set: SlotPatch,
+    repeat: Option<Rand>,
 }
 
 pub fn step() -> StepBuilder {
     StepBuilder {
         set: SlotPatch::default(),
+        repeat: None,
     }
 }
 
@@ -175,10 +210,17 @@ impl StepBuilder {
         self
     }
 
+    /// Repeat this step `rng(count) + base` times (a dispatcher-level loop).
+    pub fn repeat(mut self, count: Rand) -> Self {
+        self.repeat = Some(count);
+        self
+    }
+
     pub fn emit(self, emitter: Emitter) -> Step {
         Step {
             set: self.set,
             emitter,
+            repeat: self.repeat,
         }
     }
 }
@@ -193,8 +235,17 @@ pub fn generate(script: &[Step], overwrites: &[Overwrite], rng: &mut EngineRng) 
     let mut out = Vec::new();
 
     for step in script {
-        slots.apply(&step.set);
-        run(&step.emitter, &mut slots, rng, &mut out);
+        // A repeated step draws its count once, then re-applies its slot writes
+        // and runs its emitter each iteration (the dispatcher's `call` loop).
+        let times = match step.repeat {
+            Some(count) => draw(rng, count),
+            None => 1,
+        };
+
+        for _ in 0..times {
+            slots.apply(&step.set);
+            run(&step.emitter, &mut slots, rng, &mut out);
+        }
     }
 
     for overwrite in overwrites {
@@ -309,6 +360,79 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
                     sprite: *sprite,
                     depth: *depth,
                     y: run.1,
+                });
+            }
+        }
+
+        Emitter::Row {
+            count,
+            sprite,
+            depth,
+            y,
+        } => {
+            let n = draw(rng, *count);
+            let row_y = draw(rng, *y); // one y for the whole run
+
+            for _ in 0..n {
+                out.push(Record {
+                    x_step: slots.step_x(),
+                    sprite: *sprite,
+                    depth: *depth,
+                    y: row_y,
+                });
+            }
+        }
+
+        Emitter::BranchRows {
+            rows,
+            sprite,
+            depth,
+            if_one,
+            otherwise,
+        } => {
+            let n = draw(rng, *rows);
+            // One rng(3) picks the shared y-pair for every row.
+            let (y_lead, y_tail) = if rng.next(3) == 1 {
+                *if_one
+            } else {
+                *otherwise
+            };
+
+            for _ in 0..n {
+                out.push(Record {
+                    x_step: slots.step_x(),
+                    sprite: *sprite,
+                    depth: *depth,
+                    y: y_lead,
+                });
+                out.push(Record {
+                    x_step: 0,
+                    sprite: *sprite,
+                    depth: *depth,
+                    y: y_tail,
+                });
+            }
+        }
+
+        Emitter::Fixed {
+            lead_sprite,
+            lead_depth,
+            lead_y,
+            rest,
+        } => {
+            out.push(Record {
+                x_step: slots.step_x(),
+                sprite: *lead_sprite,
+                depth: *lead_depth,
+                y: *lead_y,
+            });
+
+            for &(x_step, sprite, depth, y) in rest {
+                out.push(Record {
+                    x_step,
+                    sprite,
+                    depth,
+                    y,
                 });
             }
         }

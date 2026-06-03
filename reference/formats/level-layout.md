@@ -5,15 +5,15 @@ mechanisms, one record format:
 
 - **Race levels (2, 4, 6)** bake a static placement table into the EXE (`0x1690`).
 - **Generated levels (1, 3, 5, 7)** build the layout at load from a PRNG-driven
-  layout script. LEVEL_1 and LEVEL_3 are fully decoded, ported, and validated
-  byte-for-byte against the running game; the same engine is confirmed in 5, 7 by
-  disassembly.
+  layout script. LEVEL_1, LEVEL_3, and LEVEL_5 are fully decoded, ported, and
+  validated byte-for-byte against the running game; the same engine is confirmed in
+  7 by disassembly.
 
 Both kinds emit the same 8-byte object record. The WAD container itself (MZ image,
 palette, asset strings) is in `wad.md`; this doc is only the layout system.
 
 Remaining: transcribe the per-level data (script + emitter table + depth table) for
-5 and 7.
+7.
 
 ## The object record
 
@@ -333,6 +333,36 @@ C-runtime marker + `0x62`, and seed **`0x1a94`** reproduces every one (record 0'
 differs by 1, the 1px scroll). Ported in `crates/game/src/level/slot.rs` (the
 slot-model interpreter) and `level_3.rs` (the script, depth table, and post-pass).
 
+### LEVEL_5: shared-row and branch-grid emitters
+
+LEVEL_5 (TECHNO) uses the same slot engine as LEVEL_3, adding three emitter shapes
+LEVEL_3 doesn't and no post-pass. Its depths sit in runtime slots `cs:[bd9e..bdae]`,
+one per sprite type (`0x3a2c`→`0xfa`/`0x96`, `0x3ac2`→`0x708`, `0x3b70`→`0x10e7`,
+`0x3c4e`/`0x3c84`→`0x32`, `0x3cf0`→`0x96`, `0x3d46`→`0x140`/`0x5aa`, `0x426e`→
+`0x3a98`); x-start is `cs:[bd16]`, x-step `cs:[bd9c]`, shared row-y `cs:[bdb0]`. The
+PRNG is at file `0x97a0`.
+
+New emitter kinds (file offsets):
+
+- **Row** (`0xfd82`/`0xff16`): `count = rng(a) + b` records sharing one y, drawn
+  **once** before the loop (vs Single's per-record y). `x = xstart + step`.
+- **BranchRows** (`0xffe0`): `rows = rng(a) + b` rows; a single `rng(3)` picks the
+  y-pair for every row (result `1` → y `0x47`,`0x48`, else `0x45`,`0x46`). Each row
+  emits two `0x3cf0` records, the first `x = xstart + step`, the second `x = 0`.
+- **Fixed** (`0x10119`/`0x10146`): no PRNG. A lead record at `x = xstart + step`
+  then literal records. Covers the lone `0x3b70` marker and the 6-record `0x426e`
+  post-amble (a landmark, then five `0x3764` background rows with stepping y).
+
+Three dispatcher steps wrap their emitter in a `rng(3) + k` repeat loop (the two
+grid runs and the `0x3a2c`/`0x3c84` row runs). One r2 caveat: with `-n`, near-call
+targets aren't IP-wrapped, so dispatcher calls print `0x10000` high — the real body
+offset is `target & 0xffff`.
+
+Validated like the others: the GET-READY buffer is 521 records at the C-runtime
+marker + `0x4d`, and seed **`0x2d93`** reproduces every one (record 0's x differs by
+1, the 1px scroll). Ported in `slot.rs` (the Row/BranchRows/Fixed variants and the
+step-repeat) and `level_5.rs` (the 48-step script and depth constants).
+
 ### Generalized across the generated levels
 
 LEVEL_3, 5, 7 use the identical engine, confirmed by disassembling each one's
@@ -343,7 +373,7 @@ engine:
 |-----|----------------|-------------------------|-------------------|
 | LEVEL_1 | `0x798c` | `0xbf6b` (x), `0xbf82`/`0xbf84` (cfg) | 18 |
 | LEVEL_3 | `0x1bb2a` | `0xdab7` (x), `0xdab9`/`0xdabb` (cfg) | 13 (+ post-pass) |
-| LEVEL_5 | `0x97a0` | `0xbd16` (x), `0xbd9c` (cfg) | ~13 |
+| LEVEL_5 | `0x97a0` | `0xbd16` (x), `0xbd9c` (cfg) | 16 |
 | LEVEL_7 | `0x1bd52` | `0xcf4b` (x), `0xcfd1`..`0xcfd9` (cfg) | ~8 |
 
 Every emitter is the same body: `count = rng() + bx`, then a loop writing
@@ -355,20 +385,22 @@ scenery constants into per-emitter code; LEVEL_3 (and the later levels) drive ge
 emitters from engine slots. Either way the port is one interpreter + an `Emitter` enum
 + per-level data, no per-level code.
 
-**Ported.** Both validated generators live in `crates/game/src/level/` (`prng.rs` is
+**Ported.** The validated generators live in `crates/game/src/level/` (`prng.rs` is
 the shared PRNG). LEVEL_1 uses the baked-constant model: `generator.rs` (the `Emitter`
 enum + interpreter) and `level_1.rs` (38-step script + depth table), seed `0x3b95`.
-LEVEL_3 uses the slot model: `slot.rs` (the slot interpreter + post-pass) and
-`level_3.rs` (script, depth table, 28-call post-pass), seed `0x1a94`. The two
-interpreters fold into one once LEVEL_7 lands and the slot model has covered every
+LEVEL_3 and LEVEL_5 use the slot model: `slot.rs` (the slot interpreter, post-pass,
+and step-repeat) with `level_3.rs` (script, depth table, 28-call post-pass, seed
+`0x1a94`) and `level_5.rs` (48-step script + depth constants, seed `0x2d93`). Each
+generator has a full-buffer golden-hash test that locks its output byte-for-byte. The
+two interpreters fold into one once LEVEL_7 lands and the slot model has covered every
 emitter shape.
 
 ## Open
 
-- Transcribe the per-level data for 5 and 7 (dispatcher script + emitter table + depth
-  table) given each WAD's offsets (table above) and feed it to the slot interpreter.
-  Recover each one's capture seed the same way to validate. Then fold LEVEL_1 onto the
-  slot model and drop the baked `generator.rs`.
+- Transcribe the per-level data for 7 (dispatcher script + emitter table + depth
+  table) given the WAD's offsets (table above) and feed it to the slot interpreter.
+  Recover its capture seed the same way to validate. Then fold LEVEL_1 onto the slot
+  model and drop the baked `generator.rs`.
 - Static landmark records at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
   `{0xfa,0x3f8e,0x1770,0x46}` in `{x,spr,depth,y}` form, then the default template
   `(8,0x7d00,0x3308,10)`.
