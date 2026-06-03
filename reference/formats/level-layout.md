@@ -34,10 +34,9 @@ Authoritative from the generator's write trace (`cs:[bp+0..6]`).
 The same 8-byte shape appears in the race levels' static `0x1690` table, so both
 level kinds share one object-record format.
 
-Field-order caveat: reading the runtime buffer back at the C-runtime-marker base
-puts the rng-driven fields in `word0`/`word1` and sprite/depth in `word2`/`word3`,
-the reverse of the write trace. That is a buffer-base alignment question to settle
-when wiring the consumer; the write-side order above is the authoritative one.
+Runtime buffer base: the records start at the C-runtime marker + `0x48` (the earlier
++`0x46` was one word low, which is what made the fields look reordered). Read there,
+the runtime records are exactly `{x, sprite, depth, y}`, matching the write trace.
 
 ## Level architecture (parallax strips)
 
@@ -115,6 +114,12 @@ State: DGROUP `0x56f5` (modulus), `0x56f7`/`0x56f9` (saved lag pointers),
 `0x56fb`..`0x576f` (the 58-word table). This is the engine's general-purpose RNG
 (**46 call sites**); the cluster at vaddr `0xe776`..`0xed8b` is the object scatter.
 
+The wrap target byte `0x74` is word index 58, one past the 58 words the seeder
+fills, so the table is effectively 59 words. That 59th slot starts **zero** (it is
+read at the first wrap and written by feedback once `si` reaches `0x74`); a non-zero
+init breaks the byte-exact match. The earlier static-file value at that address is
+not what the runtime sees.
+
 One quirk to replicate: after both lags first reach 0, the generator saves them as
 `(0, 0)` again every call, so it reseeds on every subsequent call and the tail of a
 very long draw stream goes constant. With LEVEL_1's lag start (period 59/58) the
@@ -145,9 +150,10 @@ per-object position scatter changes, which is why the opening looks the same to 
 eye. The `0x3039` (12345) reseed value is *not* the initial seed.
 
 The port seeds the generator from the clock at level start, faithfully. Bit-for-bit
-portable: `A=0x7ab7`, `C=0x11`, reseed `12345`, lags `0x74`/`0x2e` over a 58-word
-ring, feedback `X[i] += X[j]`, init seed from the clock. A *specific* captured layout
-is reproducible only by recovering that capture's seed (brute-forceable).
+portable: `A=0x7ab7`, `C=0x11`, reseed `12345`, lags `0x74`/`0x2e`, feedback
+`X[i] += X[j]`, init seed from the clock. The GET-READY capture's seed was recovered
+by brute force: **`0x3b95`** reproduces all 445 of its records exactly (record 0's x
+differs by 1, a 1px scroll). That seed is the regression fixture for the port.
 
 ### The dispatcher: a hand-coded layout script
 
@@ -303,16 +309,16 @@ per-level *code* with their scenery constants compiled in, but every one is an
 instance of the shared kinds, so the port is one interpreter + the `Emitter` enum +
 per-level data, no per-level code.
 
+**Ported.** LEVEL_1's generator is implemented in `crates/game/src/level/`
+(`prng.rs`, `generator.rs` with the `Emitter` enum + interpreter, `level_1.rs` with
+the 38-step script and depth table). A test asserts seed `0x3b95` reproduces the
+validated record set.
+
 ## Open
 
 - Transcribe the per-level data for 3/5/7 (dispatcher script + emitter table + depth
-  table) via `re/parse_gen.py` given each WAD's offsets (table above), then build the
-  Rust interpreter + `Emitter` enum (faithful-by-algorithm: PRNG + script + depth
-  table → byte-exact layout).
-- Buffer field-order: settle the runtime-read alignment vs the write-trace order
-  (see "The object record").
-- x-start: confirm exactly when `cs:[0xbf6b]` adds to record `x` (added then zeroed,
-  so first record of a band only; consistent with the live `0x3308` band).
+  table) via `re/parse_gen.py` given each WAD's offsets (table above) and feed it to
+  the shared interpreter. Recover each one's capture seed the same way to validate.
 - Static landmark records at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
   `{0xfa,0x3f8e,0x1770,0x46}` in `{x,spr,depth,y}` form, then the default template
   `(8,0x7d00,0x3308,10)`.
