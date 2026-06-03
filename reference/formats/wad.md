@@ -1,12 +1,11 @@
 # WAD: level files
 
 Status: container and palette solved (Stage 1). Stage 2: the object-record format
-is known (8-byte records, two position fields + sprite + a per-sprite field).
-Race levels bake the table into the EXE (0x1690); the others fill it at load.
-LEVEL_1's 446-record buffer was captured at runtime via a DOSBox-X savestate.
-Current task: find the filler code that populates that buffer, to settle whether
-the non-race levels are generated (likely) or decompressed. See "Level
-architecture" below for the parallax model and the pending retcons.
+is known (8-byte records, `{x-step, sprite ptr, depth, y}`). Race levels bake the
+layout into the EXE (`0x1690` table); the non-race levels generate it at load. The
+LEVEL_1 generator (the per-level layout script + emitters + PRNG) is decoded and
+validated against the running game; see "The generator" below. Remaining: port it,
+and transcribe the other 6 WADs' scripts.
 
 `LEVEL_1.WAD` .. `LEVEL_7.WAD`, one per level. Each is the level's program plus
 its embedded palette and data; gameplay assets are loaded from separate disc
@@ -117,15 +116,13 @@ What the table looks like in the file (LEVEL_2):
 
 This is the structure as it sits in the file. The code that reads it has not
 yet been found, so the field meaning above is a data-side reading, not confirmed
-from the consumer. (An earlier version of this note claimed a specific blit loop
-walked this table; that was wrong, see below.)
+from the consumer.
 
 ## Stage 2: the Mode X sprite blitter (a separate, traced routine)
 
-While chasing the table I traced a sprite-drawing routine (LEVEL_2 vaddr
-0x6744 .. 0x6829, a family of near-identical loops). It is worth recording, but
-it is **not** confirmed to consume the 0x1690 table: I reached it by a byte
-coincidence, and its loop cursor turned out to be screen memory, not the table.
+A sprite-drawing routine (LEVEL_2 vaddr 0x6744 .. 0x6829, a family of
+near-identical loops) is the Mode X blitter. It walks the BIN sprite catalog, not
+the `0x1690` table (its loop cursor is screen memory).
 
 What it does:
 
@@ -162,16 +159,13 @@ level builds:
   (`c6 84` = `mov byte [si+disp16]`) and clip-header tables, so `word0` is a
   reference into the level's BIN. This is consistent with `0x1690` being the
   scenery placement layer, though it is not yet rendered.
-- **LEVEL_1 (CANYON) has no such static table.** At the equivalent spot it holds
-  an 800-slot buffer (LEVEL_1 file 0x36DA) filled with a single default record,
-  so its scenery layout is populated at runtime from another source. That source
-  is not a `0x7D00` placement table inside `OUT.BIN` either (OUT.BIN is ~2 MB of
-  mostly compiled-sprite code). Finding it needs dynamic tracing (watch what
-  fills the 0x36DA buffer at level load), not more static scanning.
+- **LEVEL_1 (CANYON) has no such static table.** At the equivalent spot (file
+  0x36DA, vaddr `0x34dc`) it holds a buffer filled with a single default record;
+  its scenery layout is **generated at load** by the per-level layout script
+  decoded below ("The generator").
 
-So the non-race levels likely share the runtime-loaded scheme, and the race
-levels are the special case that bakes the layout in. The race `0x1690` table is
-the one concrete, static level-data format found so far.
+So the non-race levels generate their layout at load, and the race levels are the
+special case that bakes it into a static `0x1690` table.
 
 ## Stage 2: LEVEL_1 layout captured at runtime (DOSBox-X savestate)
 
@@ -185,36 +179,23 @@ state there. The `.sav` is a zip; its `Memory` member is zlib-compressed RAM.
 Decompress, find the runtime location by the C-runtime marker `0123456789ABCDEF`
 (at WAD file 0x3694), and the 0x36DA buffer follows at marker + 0x46.
 
-At runtime the 800-slot buffer is fully populated (the static file holds only a
-default record). LEVEL_1 holds a header record then **446 object records**, then
-default-record fill to slot 800. Each record is 8 bytes, four little-endian
-words:
+At runtime the buffer is fully populated (the static file holds only the default
+template). The records are the `{word0 = x-step, word1 = sprite ptr, word2 = depth,
+word3 = y}` format documented in the generator section above (read aligned to the
+buffer base at vaddr `0x34dc`). Across LEVEL_1 there are ~11 distinct sprite values
+(the canyon scenery set), each placed many times.
 
-- `word2`: the sprite. Only 11 distinct values across the level (the canyon
-  scenery set), each placed many times.
-- `word3`: a per-sprite property, fixed per `word2` (0x3308 -> 100, 0x38B0 ->
-  160, ...). First read as width, but given the parallax model below it is more
-  likely the **depth / scroll-speed / layer** the sprite belongs to. Retcon
-  candidate; not yet confirmed.
-- `word0`: the **horizontal step** to this object. Its running sum is the x
-  position along the scrolling level (CANYON totals ~11,759 px, ~37 screens).
-- `word1`: the **vertical position** (0..163).
-- header (record 0) = `(0, 149, 0x382C, 250)`.
+`word1` is a **direct OUT.BIN offset** to the scenery sprite's compiled Mode X code
+(`c6 84`/`c7 84` plane writes at `0x3308`, `0x33F4`, `0x338E`, ...), not a catalog
+index; some sprites sit in a higher EMS page. Plotting the captured records back out
+(x = running sum of `word0`, depth from `word2`, y from `word3`) yields a coherent,
+themed-by-region canyon (`re/plot_layout.py`).
 
-`word2` is a **direct OUT.BIN offset** to the scenery sprite's compiled Mode X
-code (`c6 84`/`c7 84` plane writes at 0x3308, 0x33F4, 0x338E, ...), not a catalog
-index; some sprites sit in a higher EMS page. Field meanings were confirmed by
-plotting the 434 captured records back out (x = running sum of `word0`, y =
-`word1`, colour = `word2`, width = `word3`): the result is a coherent,
-themed-by-region canyon layout (`re/plot_layout.py`, `re/canyon_layout.png`).
-
-This 8-byte record shape matches the race levels' `0x1690` table, so both level
-kinds share one object-record format; the race levels bake it into the EXE and
-the others decompress it in at load.
-
-The exact runtime bytes do **not** appear verbatim in any game file (LEVEL_1.WAD,
-OUT.BIN, the other BINs), so the level is built or decompressed at load. The
-snapshot lives in `re/` (gitignored); the analysis scripts are `re/*.py`.
+This 8-byte record shape matches the race levels' `0x1690` table, so both level kinds
+share one object-record format: the race levels bake it into the EXE, the others
+generate it at load. The runtime bytes do not appear verbatim in any game file, which
+first pointed to generation; the generator is now decoded (above). The snapshot and
+analysis scripts live in `re/` (gitignored).
 
 ## Level architecture (from the original programmer, via the user)
 
@@ -230,42 +211,39 @@ Recording it because it reframes several findings:
   vertically a little, so the full height is not always visible. The **seams**
   between strips should be visible in the Stage 1 combined render
   (`re/canyon_*`), which is where it gets cut.
-- Scenery **objects are attached to the strips** and scroll with them. This
-  explains the multiple object tables the directory at `0x56e6` points at
-  (`0x34da`, `0x3442`, `0x3492`, ...): they are the per-strip object lists. So
-  the `0x34da` 446-record buffer is **one strip's objects, not the whole level**.
-- For the non-race levels the object lists are almost certainly **generated by a
-  scatter algorithm at load**, not stored. Rationale (the user's): race levels
-  are obstacle courses needing hand-picked placement, so they bake an exact table
-  (`0x1690`); the other levels' objects are decorative filler with no reason to
-  author or store, so a routine populates them. This is the leading hypothesis
-  for what the filler does.
-
-Pending retcon this implies (the user has OK'd retconning earlier commits):
-- `word3` may be the **strip / depth / scroll-speed** the object belongs to
-  rather than width (it is fixed per sprite type, which fits either). Not yet
-  confirmed. (Stage 1's four-planes reading is correct, no retcon there.)
+- Scenery **objects are attached to the strips** and scroll with them. The
+  per-object **depth** (`word2`, fixed per sprite type, from the depth table) is which
+  strip / layer the object belongs to, and so its scroll speed. All of one level's
+  objects live in the single generated buffer at vaddr `0x34dc`; the depth field
+  sorts them onto strips at render time.
+- For the non-race levels the object lists are **generated by a scatter algorithm
+  at load** (decoded above), not stored. Rationale (the user's): race levels are
+  obstacle courses needing hand-picked placement, so they bake an exact table
+  (`0x1690`); the other levels' objects are decorative filler a routine populates.
 
 Loader-source decision (in progress): the data-strategy line is **creative
 assets** (sprite pixels, audio, palettes, backgrounds: read from the user's disc,
 never bundled) vs **the recreated game** (logic plus the design data that drives
 it: layout, spawns, timings, attack patterns: the Rust port's own content,
 derived by RE, may live in the repo like the rewritten logic). Under this,
-baking decoded design data is not the asset-bundling we purged. If the levels are
-generated (likely), "loader-source" mostly dissolves: we port the generator and
-its small per-layer config; nothing to decompress or extract.
+baking decoded design data is not the asset-bundling we purged. The non-race levels
+are generated, so "loader-source" mostly dissolves: we port the generator and its
+small per-layer config (script + depth table); nothing to decompress or extract.
 
-## Stage 2 resolved: the layout is generated, not stored
+## Stage 2: LEVEL_1's layout is generated at load
 
-Settled the generated-vs-compressed question by comparing the WAD file bytes at
-the buffer's load address against the runtime RAM:
+The non-race level layouts are procedurally generated, not stored or compressed. On
+disk the obstacle buffer holds only a repeating default template
+`(8, 0x7d00, 0x3308, 10)`; the real records are written at init by the generator
+decoded below. Confirmed against the running game (debugger trace, see Validation).
 
-- The buffer lives at DGROUP offset `0x34DA`. The MZ header is `0x200` bytes, so
-  that maps to file offset `0x36DA`. The file there is **not** the records: it is
-  the default sentinel tuple `(8, 0x7d00, 0x3308, 10)` repeated, with `(0, ...)`
-  in record 0. The file ships the buffer as a **template** (BSS-style initialized
-  data); the runtime holds the 446 varied records. So the loader **writes** the
-  buffer at init: generated, not loaded, not decompressed.
+**Address convention.** Addresses here are file-relative: `vaddr = file − 0x200`. At
+runtime the WAD's code/data segment sits `0x27F0` higher than that origin, so a code
+operand `cs:[X]` resolves to **vaddr `X + 0x27F0`** (file `X + 0x29F0`). This matters
+in two places: the dispatcher's buffer base `bp = 0xcec` is the obstacle buffer at
+vaddr `0x34dc`, and the emitters' config reads `cs:[bf6d..bf7b]` hit the depth table
+at vaddr `0xe75d`. (The PRNG `call 0x579c` is file `0x818c`.) Everything below is in
+the file-relative `vaddr` convention.
 
 ### The engine PRNG (additive lagged-Fibonacci)
 
@@ -286,32 +264,177 @@ file offsets (DGROUP vaddr = file − `0x200`):
 
 State lives in DGROUP `0x56f5` (modulus), `0x56f7`/`0x56f9` (saved lag pointers),
 `0x56fb`..`0x576f` (the 58-word table). The generator is the engine's
-general-purpose RNG: **46 call sites**. A dense cluster at vaddr `0xe777`..`0xeab5`
-(many RNG calls packed together) is the likely object-scatter routine / buffer
-filler; not yet traced end-to-end to the `0x34da` write.
+general-purpose RNG: **46 call sites**. The dense cluster at vaddr
+`0xe776`..`0xed8b` is the object-scatter code (see next section).
 
 This is portable bit-for-bit: constants `A=0x7ab7`, `C=0x11`, seed `12345`, lags
 at `0x74`/`0x2e` over a 58-word ring, feedback `X[i] += X[j]`. Replicating it
 reproduces the original's exact random stream and therefore the exact layout.
 
-### Caveat on the earlier "directory at 0x56e6"
+### The generator: a hand-coded per-level layout script
 
-The `0x56fb`..`0x576f` region I'd read as a directory of per-strip pointers is in
-fact this PRNG **state table**, overwritten at load by the seeder. The `da 34`
-(= `0x34da`) bytes seen there in the *file* are the static initial image of that
-region, not a live pointer table. There are still `0x34da` references in the file
-**beyond** the table (≥ `0x577f`) that may be a real per-strip pointer list; that
-needs re-examination separately. The three strip buffers `0x34da`/`0x3442`/`0x3492`
-and the consumer pointer-setup (`mov word [di], 0x34da` at vaddr `0xc28c`/`0xd2ad`)
-still stand.
+The obstacle buffer is at vaddr `0x34dc` (file `0x36dc`); the generator's
+`mov bp, 0xcec` targets it (runtime offset `0xcec` = vaddr `0x34dc`, per the address
+convention above).
+
+The fill is driven by a **dispatcher** at vaddr `0xed8b`..`0xef6c` (file
+`0xef8b`..`0xf16c`). It is not a loop over a data table. It is a hand-written,
+straight-line **layout script** for LEVEL_1: roughly 40 placement steps, each of
+the shape
+
+```
+mov word cs:[0xbf6b], <screen-x start>   ; where this band begins along the scroll
+mov word cs:[0xbf84], <rng base>         ; additive base for the per-object coord
+mov word cs:[0xbf82], <rng modulus>      ; spread of the per-object coord
+mov ax, <a>  /  mov bx, <b>              ; band object count = rng() + b (a is a 2nd modulus)
+call <band-emitter>                      ; emit that band into the buffer at bp
+```
+
+`bp` is set once to `0xcec` at the top and is the persistent write cursor; every
+emitter does `add bp, 8` per record and none resets it, so the bands append into
+one growing buffer. `cs:[0xbf6b]` is the running screen-x; an emitter adds it to
+the first record's x then zeroes it.
+
+The record is 8 bytes / 4 words: `{word0 = x-step, word1 = sprite-descriptor pointer,
+word2 = depth, word3 = y}`. `word0` is a horizontal **step**: the emitter computes
+`rng(xmod) + xbase` (plus the x-start `cs:[0xbf6b]` on a band's first record, then
+zeroes it), and the consumer running-sums these to the absolute x along the scroll
+(CANYON totals ~11,800 px, ~37 screens). `word3` (`y`) is a small per-band vertical
+jitter, `rng() % m + base`. `word2` is a per-sprite-type **depth / draw-layer** the
+emitter reads from `cs:[bf6d..bf7b]` (the depth table at vaddr `0xe75d`):
+`100, 160, 500, 600, 200, 200, 1000, 14000, 10000`, one per type.
+
+**Emitter kinds.** The 18 emitters are not one shape with different constants.
+They fall into 5 structural kinds (this is the fact that drives the port's
+`Emitter` enum):
+
+1. **Single**: `count = rng(a) + b` (a, b from the dispatcher's `ax`/`bx`); per
+   iteration emit one record, `x = rng(xmod) + xbase + xstart`, `y = rng(ym) + yb`.
+   For emitter `0xe776` the x spread `xmod`/`xbase` come from `cs:[0xbf82]`/`[0xbf84]`
+   (set by the dispatcher); the others hardcode them.
+2. **Row**: like Single but `y` is computed **once per band** (`rng(4) + K` into
+   `cs:[0xbf7f]`) and shared by every record. A horizontal row at one height.
+3. **Choice**: per iteration roll `rng(5)`; `> 1` (3/5) emits object type A, else
+   (2/5) type B. Each type has its own sprite ptr / config / x / y. One record per
+   iteration, but the roll consumes a PRNG draw, so it shifts the stream.
+4. **Row + every-Nth**: a Row that also inserts an extra record every 2nd
+   iteration (counter in `cs:[0xbf81]`), at `x = 0`, a different sprite type.
+5. **Fixed**: no count loop. Emits a hardcoded handful of records (e.g. `0xeb35`
+   places exactly 2: at `x = xstart` and `x = 0x3c`). Landmark/structure pieces;
+   ignores the dispatcher's count params.
+
+**Emitter catalog (LEVEL_1)**: vaddr, kind, sprite ptr (`word1`), depth slot
+(`word2`, read from `cs:[bf6d..bf7b]`), and the x / y formulas. `xacc` =
+`cs:[0xbf6b]` (x-start, added once):
+
+| vaddr | kind | sprite | cfg | x | y |
+|-------|------|--------|-----|---|---|
+| `0xe776` | Single | `0x3308` | `[bf6d]` | `rng([bf82])+[bf84]+xacc` | `rng(0x12)` |
+| `0xe7bb` | Single | `0x38b0` | `[bf6f]` | `rng(0x1e)+0x1e+xacc` | `rng(5)+0x1a` |
+| `0xe800` | Single | `0x338e` | `[bf71]` | `rng(0x32)+0x50+xacc` | `rng(5)+0x15` |
+| `0xe845` | Single | `0x39a4` | `[bf73]` | `rng(0x32)+0x78+xacc` | `rng(6)+0x36` |
+| `0xe88a` | Row | `0x3a92` | `[bf75]` | `0x14+xacc` | `[bf7f]` once |
+| `0xe8d5` | Row | `0x33f4` | `[bf77]` | `0x14+xacc` | `[bf7f]` once |
+| `0xe920` | Single | `0x3a92` | `[bf75]` | `rng(0x1e)+0x14+xacc` | `rng(6)+0x2c` |
+| `0xe965` | Single | `0x33f4` | `[bf77]` | `rng(0x1e)+0x28+xacc` | `rng(6)+0x1f` |
+| `0xe9aa` | Choice | `0x338e`/`0x3308` | `[bf71]`/`[bf6d]` | `rng(0xa)+0x1e+xacc` | `rng(5)+0x15` / `rng(0x12)` |
+| `0xea2d` | Choice | `0x38b0`/`0x3308` | `[bf6f]`/`[bf6d]` | `rng(0xa)+0x1e+xacc` | `rng(5)+0x1a` / `rng(0x12)` |
+| `0xeab0` | Row+everyNth | `0x3a92` (+`0x3308` every 2nd) | `[bf75]` (+`[bf6d]`) | `0x14+xacc` (+`0`) | `rng(4)+0x28` once (+`rng(0x12)`) |
+| `0xeb35` | Fixed×2 | `0x392e` | `[bf79]` | `xacc`, then `0x3c` | `0x26`, `0x27` |
+| `0xeb72` | Fixed×1 | `0x3f8e` | `[bf7b]` | `xacc` | `0x45` |
+| `0xeb92` | Fixed | `0x36ea` | `0xfa` | `xacc` | `0x4b` |
+| `0xec39` | Single | `0x3750` | `0xfa` | `xacc` | `rng(3)+0x3c` |
+| `0xec65` | Single | `0x37b6` | `0xfa` | `xacc` | `rng(3)+0x3f` |
+| `0xec91` | Single | `0x382c` | `0xfa` | `xacc` | `rng(3)+0x42` |
+| `0xecbd` | Single | `0x338e` | `[bf71]` | `0x64` | `0x16` |
+
+The sprite-ptr constants (`0x3308`, `0x38b0`, ...) are pointers into a descriptor
+region; `0x392e`/`0x3f8e` themselves point at `0x3308`-style values (nested), so
+`word1` may be a pointer to a sprite-record rather than the sprite itself. Confirm
+when wiring the consumer.
+
+**LEVEL_1 dispatcher script**: 38 steps, in order. `xstart` carries forward when
+a step does not set it. `count = rng(a) + b`:
+
+| # | emitter (vaddr) | xstart | xmod/xbase | count rng(a)+b |
+|---|-----------------|--------|------------|----------------|
+| 1 | `0xec91` | `0x96` | — | (entry regs) |
+| 2 | `0xe776` | `0x96` | `0x1e`/`0x32` | `rng(7)+0x28` |
+| 3 | `0xe776` | `0x96` | `0xa`/`0x1e` | `rng(7)+0x8` |
+| 4 | `0xea2d` | `0x96` | — | `rng(8)+0x8` |
+| 5 | `0xe776` | `0x96` | — | `rng(0xa)+0x8` |
+| 6 | `0xe7bb` | `0xc8` | — | `rng(3)+0xc` |
+| 7 | `0xea2d` | `0xc8` | — | `rng(5)+0xf` |
+| 8 | `0xe800` | `0xc8` | — | `rng(2)+0x6` |
+| 9 | `0xe9aa` | `0xc8` | — | `rng(6)+0xa` |
+| 10 | `0xec39` | `0x28` | — | `rng(6)+0xa` |
+| 11 | `0xe88a` | `0x12c` | — | `rng(5)+0xa` |
+| 12 | `0xeb35` | `0x12c` | — | `rng(5)+0xa` (Fixed: count ignored) |
+| 13 | `0xe776` | `0x12c` | — | `rng(5)+0x5` |
+| 14 | `0xe920` | `0x12c` | — | `rng(5)+0x8` |
+| 15 | `0xe7bb` | `0x78` | — | `rng(0xa)+0x14` |
+| 16 | `0xec65` | `0x28` | — | `rng(0xa)+0x14` |
+| 17 | `0xecbd` | `0x14` | — | `rng(2)+0x2` |
+| 18 | `0xe7bb` | `0x14` | — | `rng(0xa)+0x14` |
+| 19 | `0xe800` | `0x14` | — | `rng(2)+0x6` |
+| 20 | `0xe7bb` | `0x64` | — | `rng(5)+0xa` |
+| 21 | `0xe965` | `0x64` | — | `rng(0xa)+0xa` |
+| 22 | `0xe776` | `0x64` | — | `rng(5)+0x5` |
+| 23 | `0xeab0` | `0x64` | — | `rng(5)+0x5` |
+| 24 | `0xe776` | `0x64` | — | `rng(5)+0x5` |
+| 25 | `0xeab0` | `0x64` | — | `rng(5)+0x8` |
+| 26 | `0xe776` | `0x64` | — | `rng(5)+0xa` |
+| 27 | `0xe8d5` | `0x64` | — | `rng(5)+0xa` |
+| 28 | `0xe845` | `0xdc` | — | `rng(5)+0xa` |
+| 29 | `0xec39` | `0x28` | — | `rng(5)+0xa` |
+| 30 | `0xe8d5` | `0xdc` | — | `rng(5)+0xa` |
+| 31 | `0xe7bb` | `0xdc` | — | `rng(5)+0xa` |
+| 32 | `0xeb72` | `0xfa` | — | `rng(5)+0xa` (Fixed) |
+| 33 | `0xe845` | `0xdc` | — | `rng(5)+0xa` |
+| 34 | `0xec39` | `0x28` | — | `rng(5)+0xa` |
+| 35 | `0xe8d5` | `0xdc` | — | `rng(5)+0xa` |
+| 36 | `0xe7bb` | `0xdc` | — | `rng(0x28)+0x14` |
+| 37 | `0xe776` | `0xdc` | — | `rng(0xa)+0xa` |
+| 38 | `0xeb92` | `0xfa` | — | `rng(0xa)+0xa` (Fixed) |
+
+(`xmod`/`xbase` only matter for emitter `0xe776`, which reads them from
+`cs:[0xbf82]`/`[0xbf84]`; later steps leave the last-set values in place. The
+dispatcher decode is reproducible via `re/parse_gen.py`.)
+
+**Validation (against the running game).** Two independent checks confirm this decode:
+
+- **Debugger trace.** A heavy-debug DOSBox-X (`~/dev/dosbox-x`, `build-debug-sdl2`)
+  with a `BPM` write-breakpoint on the obstacle buffer stopped on emitter `0xe776`
+  building a record: `mov word cs:[bp+2],3308; mov ax,cs:[bf6d] (=0x64); mov
+  cs:[bp+4],ax; mov ax,0x12; call <rng>; mov cs:[bp+6],ax; add bp,8`, byte-for-byte
+  this catalog, with `bp` walking the buffer and `cs:[bf6d]=0x64` the live depth.
+- **GET-READY savestate** (`re/save`, tools `re/live.py`/`re/verify.py`). The 812
+  live records match the emitter formulas (the `0x3308` band has `x ∈ [0x32,0x50)` =
+  `rng(0x1e)+0x32`, `y ∈ [0,0x12)` = `rng(0x12)`), the dispatcher order (record 0 is
+  `spr 0x382c` from step 1; the Choice emitter shows as interleaved `0x38b0`/`0x3308`
+  rolls), and the depths (`0x3308`→100, `0x38b0`→160, `0x338e`→500, `0x39a4`→600,
+  `0x33f4`/`0x3a92`→200, `0x392e`→1000, `0x3f8e`→14000).
+
+**Porting.** Faithful reconstruction needs: (1) the PRNG, (2) this dispatcher script
+per WAD, (3) the 5-kind emitter library with each emitter's constants, (4) the depth
+table. Run them against the seeded PRNG and the byte-exact original layout falls out.
 
 ## Open (Stage 2 continued)
 
-- Trace the filler: confirm the `0xe7xx` RNG cluster writes the `0x34da` buffer,
-  and read the per-strip config it consumes (sprite id, count, y-band, x-spacing)
-  so the generator can be ported with its inputs.
-- Re-examine the `≥0x577f` `0x34da` references now that `0x56fb`+ is known to be
-  PRNG state, to find the real per-strip pointer/config list (if any).
+- LEVEL_1 generator is decoded and validated. Remaining: transcribe the other 6
+  WADs' dispatcher scripts the same way (`re/parse_gen.py`, given each WAD's
+  dispatcher/emitter offsets), then build the Rust 5-kind emitter library +
+  interpreter (faithful-by-algorithm: PRNG + script + depth table → byte-exact layout).
+- `word1` (sprite-descriptor pointer): its target is a 4-word descriptor
+  `(0x0008, 0x7d00, 0x3308, 0x000a)` where `0x7d00` is a sprite-data / OUT.BIN offset.
+  The pointer-vs-index resolution is a render-side detail to pin when wiring sprites.
+- x-start detail: confirm exactly when `cs:[0xbf6b]` adds to record `x`. The code adds
+  it then zeroes it, so it applies to the first record of a band only; the live
+  `0x3308` band (`x ∈ [0x32,0x50)` = `rng(0x1e)+0x32`) is consistent with that. Verify
+  against the emitter when porting so the x stream matches bit-for-bit.
+- Static landmark records exist at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
+  `{0xfa,0x3f8e,0x1770,0x46}` in `{x,spr,depth,y}` form (the Fixed `0x3f8e` object),
+  then the repeating default template `(8,0x7d00,0x3308,10)`.
 - Pixel render: decode the Mode X compiled sprites at each `word2` OUT.BIN offset
   (4 planes) and draw them over the CANYON background, replacing the colour-bar
   placeholders. Format is validated; this is the remaining visual polish.
