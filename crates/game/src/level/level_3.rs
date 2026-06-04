@@ -3,8 +3,7 @@
 //! validated byte-for-byte against the running game (seed `0x1a94` reproduces
 //! the GET-READY capture). See `reference/formats/level-layout.md`.
 
-use super::generator::rand;
-use super::slot::{Emitter, Overwrite, PostOp, Step, step};
+use super::slot::{Emitter, Overwrite, PostOp, Step, rand, step};
 
 /// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
 /// table at `cs:[dac5..dad5]`.

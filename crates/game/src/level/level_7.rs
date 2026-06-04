@@ -3,8 +3,7 @@
 //! validated byte-for-byte against the running game (seed `0x3e94` reproduces the
 //! GET-READY capture). See `reference/formats/level-layout.md`.
 
-use super::generator::rand;
-use super::slot::{Emitter, Insert, PostOp, Step, step};
+use super::slot::{Emitter, Insert, PostOp, Step, rand, step};
 
 /// The foreground depth the landmark `Once` emitters hardcode (`0xfa`).
 const FOREGROUND: u16 = 0xfa;

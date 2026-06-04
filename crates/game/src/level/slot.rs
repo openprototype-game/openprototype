@@ -1,19 +1,78 @@
-//! The slot-based layout interpreter (generated levels 3/5/7).
+//! The layout interpreter for all four generated levels (1, 3, 5, 7).
 //!
-//! Unlike LEVEL_1's emitters, which bake their scenery constants, the later
-//! levels drive *generic* emitters: the dispatcher writes a handful of engine
-//! slots (sprite, depth, x-step, row-reset, row-y offset) before each call, and
-//! the emitters read them. Some slots persist across steps. The script also ends
-//! with a find-by-position post-pass that rewrites already-emitted records in
-//! place. This interpreter mirrors the disassembly, validated byte-for-byte
-//! against the running game (LEVEL_3 seed `0x1a94` reproduces its GET-READY
-//! capture). See `reference/formats/level-layout.md`.
-//!
-//! LEVEL_1 still uses the baked [`super::generator`] model; both fold into this
-//! one once LEVEL_7 is in (the generated-level set is then complete).
+//! Every generated level is a straight-line script of placement steps, each
+//! running one emitter that appends 8-byte records to a growing buffer, sharing
+//! the engine PRNG so the draw order is load-bearing. Emitters range from
+//! baked-constant (LEVEL_1's `Scatter`/`RowOnce`/`Cells`, which carry their
+//! sprite/depth) to slot-driven (LEVEL_3+'s `SlotSingle`/`Grid`, which read
+//! engine slots the dispatcher writes between steps and that persist across
+//! them). A script may end with a post-pass that either overwrites a record in
+//! place (LEVEL_3) or inserts one by splitting the covered record's x-step
+//! (LEVEL_7). This mirrors the disassembly, validated byte-for-byte against the
+//! running game (each level's golden test reproduces its GET-READY capture). See
+//! `reference/formats/level-layout.md`.
 
-use super::generator::{Rand, Record};
 use super::prng::EngineRng;
+
+/// One placed object. `x_step` is a horizontal step (the consumer running-sums
+/// these to an absolute scroll position); `depth` is the parallax layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Record {
+    pub x_step: u16,
+    pub sprite: u16,
+    pub depth: u16,
+    pub y: u16,
+}
+
+/// A bounded draw: `rng(modulus) + base`. Every layout draw passes a nonzero
+/// modulus.
+#[derive(Clone, Copy)]
+pub struct Rand {
+    pub modulus: u16,
+    pub base: u16,
+}
+
+pub const fn rand(modulus: u16, base: u16) -> Rand {
+    Rand { modulus, base }
+}
+
+/// A scatter spec for a `Choice` arm: an rng x and an rng y.
+#[derive(Clone, Copy)]
+pub struct Arm {
+    pub x: Rand,
+    pub sprite: u16,
+    pub depth: u16,
+    pub y: Rand,
+}
+
+/// The extra object a `RowEveryNth` inserts every second record (always x = 0).
+#[derive(Clone, Copy)]
+pub struct Extra {
+    pub sprite: u16,
+    pub depth: u16,
+    pub y: Rand,
+}
+
+/// How a fixed `Cell` uses the running x-start.
+#[derive(Clone, Copy)]
+pub enum XStart {
+    /// Ignore it (x = base).
+    None,
+    /// Add it, then zero it (the common consume).
+    Consume,
+    /// Add it but leave it set (the Fixed landmark emitters).
+    Peek,
+}
+
+/// One record of a no-count block (`Cells` / `Repeat`). Always a constant y.
+#[derive(Clone, Copy)]
+pub struct Cell {
+    pub x_base: u16,
+    pub x_start: XStart,
+    pub sprite: u16,
+    pub depth: u16,
+    pub y: u16,
+}
 
 /// The mutable engine slots the dispatcher writes and the emitters read.
 #[derive(Default)]
@@ -26,8 +85,9 @@ struct Slots {
     row_y_offset: u16,
 }
 
-/// The slot writes a step performs before running its emitter. Only the fields
-/// the original sets are `Some`; the rest carry over from earlier steps.
+/// A step's writes to the engine slots, applied before its emitter runs. Only
+/// the fields the original sets are `Some`; the rest carry over from earlier
+/// steps.
 #[derive(Default, Clone, Copy)]
 pub struct SlotPatch {
     pub x_start: Option<u16>,
@@ -145,6 +205,42 @@ pub enum Emitter {
         lead_y: u16,
         rest: Vec<(u16, u16, u16, u16)>,
     },
+    /// LEVEL_1's `0xe776` family: `count` records, each x = `rng(x) + x_start`
+    /// (consume, no x-step slot) and y = rng. The per-record x draw is what sets
+    /// it apart from `Single`.
+    Scatter {
+        count: Rand,
+        x: Rand,
+        sprite: u16,
+        depth: u16,
+        y: Rand,
+    },
+    /// LEVEL_1's `0xe88a`/`0xe8d5`: like `Row`, but the shared y is drawn *before*
+    /// the count and x = `x_base + x_start` (consume, no x-step slot).
+    RowOnce {
+        count: Rand,
+        x_base: u16,
+        sprite: u16,
+        depth: u16,
+        y_once: Rand,
+    },
+    /// LEVEL_1's `0xe9aa`/`0xea2d`: `count` records, each `rng(5) > 1 ? hi : lo`.
+    Choice { count: Rand, lo: Arm, hi: Arm },
+    /// LEVEL_1's `0xeab0`: a `RowOnce` that also inserts an extra object (x = 0)
+    /// every second record.
+    RowEveryNth {
+        count: Rand,
+        x_base: u16,
+        sprite: u16,
+        depth: u16,
+        y_once: Rand,
+        extra: Extra,
+    },
+    /// LEVEL_1's `0xeb35`/`0xeb72`/`0xeb92`: a fixed handful of records, no count
+    /// loop, each cell choosing how it uses the running x-start.
+    Cells(&'static [Cell]),
+    /// LEVEL_1's `0xecbd`: `count` iterations, each emitting a fixed `block`.
+    Repeat { count: Rand, block: &'static [Cell] },
 }
 
 /// One dispatcher step: write some slots, then run an emitter. When `repeat` is
@@ -471,7 +567,130 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
                 });
             }
         }
+
+        Emitter::Scatter {
+            count,
+            x,
+            sprite,
+            depth,
+            y,
+        } => {
+            let n = draw(rng, *count);
+
+            for _ in 0..n {
+                // x draws before y; the x-start is consumed during x.
+                let x_step = draw(rng, *x).wrapping_add(slots.consume_x());
+                let y = draw(rng, *y);
+                out.push(Record {
+                    x_step,
+                    sprite: *sprite,
+                    depth: *depth,
+                    y,
+                });
+            }
+        }
+
+        Emitter::RowOnce {
+            count,
+            x_base,
+            sprite,
+            depth,
+            y_once,
+        } => {
+            // The shared y is drawn once, before the count.
+            let y = draw(rng, *y_once);
+            let n = draw(rng, *count);
+
+            for _ in 0..n {
+                out.push(Record {
+                    x_step: x_base.wrapping_add(slots.consume_x()),
+                    sprite: *sprite,
+                    depth: *depth,
+                    y,
+                });
+            }
+        }
+
+        Emitter::Choice { count, lo, hi } => {
+            let n = draw(rng, *count);
+
+            for _ in 0..n {
+                let arm = if rng.next(5) > 1 { hi } else { lo };
+                let x_step = draw(rng, arm.x).wrapping_add(slots.consume_x());
+                let y = draw(rng, arm.y);
+                out.push(Record {
+                    x_step,
+                    sprite: arm.sprite,
+                    depth: arm.depth,
+                    y,
+                });
+            }
+        }
+
+        Emitter::RowEveryNth {
+            count,
+            x_base,
+            sprite,
+            depth,
+            y_once,
+            extra,
+        } => {
+            let y = draw(rng, *y_once);
+            let n = draw(rng, *count);
+            let mut counter = 0u16;
+
+            for _ in 0..n {
+                out.push(Record {
+                    x_step: x_base.wrapping_add(slots.consume_x()),
+                    sprite: *sprite,
+                    depth: *depth,
+                    y,
+                });
+                counter += 1;
+
+                if counter == 2 {
+                    counter = 0;
+                    out.push(Record {
+                        x_step: 0,
+                        sprite: extra.sprite,
+                        depth: extra.depth,
+                        y: draw(rng, extra.y),
+                    });
+                }
+            }
+        }
+
+        Emitter::Cells(cells) => {
+            for cell in *cells {
+                emit_cell(cell, slots, out);
+            }
+        }
+
+        Emitter::Repeat { count, block } => {
+            let n = draw(rng, *count);
+
+            for _ in 0..n {
+                for cell in *block {
+                    emit_cell(cell, slots, out);
+                }
+            }
+        }
     }
+}
+
+fn emit_cell(cell: &Cell, slots: &mut Slots, out: &mut Vec<Record>) {
+    let xs = match cell.x_start {
+        XStart::None => 0,
+        XStart::Consume => slots.consume_x(),
+        XStart::Peek => slots.x_start,
+    };
+
+    out.push(Record {
+        x_step: cell.x_base.wrapping_add(xs),
+        sprite: cell.sprite,
+        depth: cell.depth,
+        y: cell.y,
+    });
 }
 
 fn apply_overwrite(overwrite: &Overwrite, out: &mut [Record]) {

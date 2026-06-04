@@ -11,8 +11,8 @@ mechanisms, one record format:
 Both kinds emit the same 8-byte object record. The WAD container itself (MZ image,
 palette, asset strings) is in `wad.md`; this doc is only the layout system.
 
-Remaining: fold LEVEL_1's baked model onto the slot interpreter and drop
-`generator.rs` (the slot model now covers every emitter shape).
+All four run through one interpreter (`slot.rs`); the per-level data is in
+`level_<n>.rs`.
 
 ## The object record
 
@@ -390,9 +390,8 @@ every one. Ported in `slot.rs` (the `Insert`/`PostOp` post-pass and `Fixed`'s
 
 ### Generalized across the generated levels
 
-LEVEL_3, 5, 7 use the identical engine, confirmed by disassembling each one's
-dispatcher and emitters. Only data and link addresses differ; the code shape is one
-engine:
+All four use the identical engine, confirmed by disassembling each one's dispatcher
+and emitters. Only data and link addresses differ; the code shape is one engine:
 
 | WAD | PRNG generator | dispatcher config block | distinct emitters |
 |-----|----------------|-------------------------|-------------------|
@@ -405,27 +404,24 @@ Every emitter is the same body: `count = rng() + bx`, then a loop writing
 `cs:[bp+0..6] = {x-step, sprite ptr, depth, y}` and `add bp, 8`, with the same
 xstart-added-once trick and the same 4-word `0x7d00` descriptor. The dispatcher is the
 same straight-line script in all four. The PRNG is the same routine at a relinked
-address (the `0x7ab7` multiplier appears exactly once in every WAD). LEVEL_1 bakes its
-scenery constants into per-emitter code; LEVEL_3 (and the later levels) drive generic
-emitters from engine slots. Either way the port is one interpreter + an `Emitter` enum
-+ per-level data, no per-level code.
+address (the `0x7ab7` multiplier appears exactly once in every WAD). The emitters
+range from baked-constant (LEVEL_1 carries its scenery in the variant) to slot-driven
+(LEVEL_3+ read engine slots the dispatcher writes), but it is one interpreter + one
+`Emitter` enum + per-level data, no per-level code.
 
-**Ported.** The validated generators live in `crates/game/src/level/` (`prng.rs` is
-the shared PRNG). LEVEL_1 uses the baked-constant model: `generator.rs` (the `Emitter`
-enum + interpreter) and `level_1.rs` (38-step script + depth table), seed `0x3b95`.
-LEVEL_3/5/7 use the slot model: `slot.rs` (the slot interpreter, overwrite/insert
-post-pass, and step-repeat) with `level_3.rs` (seed `0x1a94`, 28-call overwrite
-post-pass), `level_5.rs` (seed `0x2d93`), and `level_7.rs` (seed `0x3e94`, 9-op
-insert post-pass). Each generator has a full-buffer golden-hash test that locks its
-output byte-for-byte. The two interpreters now fold into one: the slot model has
-covered every emitter shape, so LEVEL_1 can move onto it and `generator.rs` can go.
+**Ported.** All four validated generators live in `crates/game/src/level/` and share
+**one** interpreter: `slot.rs` (the `generate` loop, the `Emitter` enum spanning every
+shape from both the baked and slot-driven levels, the overwrite/insert post-pass, and
+the step-repeat) plus `prng.rs` (the shared PRNG) and `Record`/`Rand` types. Per-level
+data: `level_1.rs` (seed `0x3b95`, `Scatter`/`RowOnce`/`Cells`/`Choice`/`RowEveryNth`),
+`level_3.rs` (seed `0x1a94`, 28-call overwrite post-pass), `level_5.rs` (seed `0x2d93`),
+`level_7.rs` (seed `0x3e94`, 9-op insert post-pass). Each has a full-buffer golden-hash
+test that locks its output byte-for-byte. The old baked `generator.rs` is gone: its
+LEVEL_1-only emitters moved into the slot `Emitter` enum (renamed off the slot variants
+they clashed with), so there is no second interpreter.
 
 ## Open
 
-- Fold LEVEL_1 onto the slot model and drop the baked `generator.rs`. The slot model
-  now covers every emitter shape (Once, Single, SlotSingle, Row, Grid, BranchRows,
-  FixedRun, Fixed) plus both post-pass kinds, so LEVEL_1's baked emitters can be
-  re-expressed as slot data with no interpreter left in `generator.rs`.
 - Static landmark records at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
   `{0xfa,0x3f8e,0x1770,0x46}` in `{x,spr,depth,y}` form, then the default template
   `(8,0x7d00,0x3308,10)`.

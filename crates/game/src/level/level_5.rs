@@ -3,8 +3,7 @@
 //! running game (seed `0x2d93` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
-use super::generator::rand;
-use super::slot::{Emitter, Step, step};
+use super::slot::{Emitter, Step, rand, step};
 
 // Per-sprite-type depth (parallax layer), read by the original from runtime
 // slots `cs:[bd9e..bdae]`. Two sprites share `D_3C4E`.

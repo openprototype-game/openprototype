@@ -3,7 +3,7 @@
 //! against the running game (seed `0x3b95` reproduces the GET-READY capture).
 //! See `reference/formats/level-layout.md`.
 
-use super::generator::{Arm, Cell, Emitter, Extra, Rand, Step, XStart, rand};
+use super::slot::{Arm, Cell, Emitter, Extra, Rand, Step, XStart, rand, step};
 
 /// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
 /// table at `cs:[bf6d..]`.
@@ -134,7 +134,7 @@ const ECBD: [Cell; 6] = [
 // code addresses.
 
 fn e776(count: Rand, x: Rand) -> Emitter {
-    Emitter::Single {
+    Emitter::Scatter {
         count,
         x,
         sprite: 0x3308,
@@ -144,7 +144,7 @@ fn e776(count: Rand, x: Rand) -> Emitter {
 }
 
 fn e7bb(count: Rand) -> Emitter {
-    Emitter::Single {
+    Emitter::Scatter {
         count,
         x: rand(0x1e, 0x1e),
         sprite: 0x38b0,
@@ -154,7 +154,7 @@ fn e7bb(count: Rand) -> Emitter {
 }
 
 fn e800(count: Rand) -> Emitter {
-    Emitter::Single {
+    Emitter::Scatter {
         count,
         x: rand(0x32, 0x50),
         sprite: 0x338e,
@@ -164,7 +164,7 @@ fn e800(count: Rand) -> Emitter {
 }
 
 fn e845(count: Rand) -> Emitter {
-    Emitter::Single {
+    Emitter::Scatter {
         count,
         x: rand(0x32, 0x78),
         sprite: 0x39a4,
@@ -174,7 +174,7 @@ fn e845(count: Rand) -> Emitter {
 }
 
 fn e920(count: Rand) -> Emitter {
-    Emitter::Single {
+    Emitter::Scatter {
         count,
         x: rand(0x1e, 0x14),
         sprite: 0x3a92,
@@ -184,7 +184,7 @@ fn e920(count: Rand) -> Emitter {
 }
 
 fn e965(count: Rand) -> Emitter {
-    Emitter::Single {
+    Emitter::Scatter {
         count,
         x: rand(0x1e, 0x28),
         sprite: 0x33f4,
@@ -194,7 +194,7 @@ fn e965(count: Rand) -> Emitter {
 }
 
 fn e88a(count: Rand) -> Emitter {
-    Emitter::Row {
+    Emitter::RowOnce {
         count,
         x_base: 0x14,
         sprite: 0x3a92,
@@ -204,7 +204,7 @@ fn e88a(count: Rand) -> Emitter {
 }
 
 fn e8d5(count: Rand) -> Emitter {
-    Emitter::Row {
+    Emitter::RowOnce {
         count,
         x_base: 0x14,
         sprite: 0x33f4,
@@ -279,70 +279,64 @@ fn ecbd(count: Rand) -> Emitter {
     }
 }
 
-fn step(emitter: Emitter) -> Step {
-    Step {
-        set_x_start: None,
-        emitter,
-    }
+fn plain(emitter: Emitter) -> Step {
+    step().emit(emitter)
 }
 
-fn step_at(x_start: u16, emitter: Emitter) -> Step {
-    Step {
-        set_x_start: Some(x_start),
-        emitter,
-    }
+fn at(x_start: u16, emitter: Emitter) -> Step {
+    step().x_start(x_start).emit(emitter)
 }
 
 /// LEVEL_1's 38-step layout script, in order.
 pub fn script() -> Vec<Step> {
     vec![
-        step_at(0x96, once(0x382c, rand(3, 0x42))),
-        step(e776(rand(7, 0x28), rand(0x1e, 0x32))),
-        step(e776(rand(7, 8), rand(0xa, 0x1e))),
-        step(ea2d(rand(8, 8))),
-        step(e776(rand(0xa, 8), rand(0xa, 0x1e))),
-        step_at(0xc8, e7bb(rand(3, 0xc))),
-        step(ea2d(rand(5, 0xf))),
-        step_at(0xc8, e800(rand(2, 6))),
-        step(e9aa(rand(6, 0xa))),
-        step_at(0x28, once(0x3750, rand(3, 0x3c))),
-        step_at(0x12c, e88a(rand(5, 0xa))),
-        step_at(0x12c, Emitter::Fixed(&EB35)),
-        step(e776(rand(5, 5), rand(0xa, 0x1e))),
-        step(e920(rand(5, 8))),
-        step_at(0x78, e7bb(rand(0xa, 0x14))),
-        step_at(0x28, once(0x37b6, rand(3, 0x3f))),
-        step_at(0x14, ecbd(rand(2, 2))),
-        step(e7bb(rand(0xa, 0x14))),
-        step(e800(rand(2, 6))),
-        step_at(0x64, e7bb(rand(5, 0xa))),
-        step_at(0x64, e965(rand(0xa, 0xa))),
-        step_at(0x64, e776(rand(5, 5), rand(0xa, 0x1e))),
-        step(eab0(rand(5, 5))),
-        step(e776(rand(5, 5), rand(0xa, 0x1e))),
-        step(eab0(rand(5, 8))),
-        step(e776(rand(5, 0xa), rand(0xa, 0x1e))),
-        step_at(0x64, e8d5(rand(5, 0xa))),
-        step_at(0xdc, e845(rand(5, 0xa))),
-        step_at(0x28, once(0x3750, rand(3, 0x3c))),
-        step_at(0xdc, e8d5(rand(5, 0xa))),
-        step(e7bb(rand(5, 0xa))),
-        step_at(0xfa, Emitter::Fixed(&EB72)),
-        step_at(0xdc, e845(rand(5, 0xa))),
-        step_at(0x28, once(0x3750, rand(3, 0x3c))),
-        step_at(0xdc, e8d5(rand(5, 0xa))),
-        step(e7bb(rand(0x28, 0x14))),
-        step(e776(rand(0xa, 0xa), rand(0xa, 0x1e))),
-        step_at(0xfa, Emitter::Fixed(&EB92)),
+        at(0x96, once(0x382c, rand(3, 0x42))),
+        plain(e776(rand(7, 0x28), rand(0x1e, 0x32))),
+        plain(e776(rand(7, 8), rand(0xa, 0x1e))),
+        plain(ea2d(rand(8, 8))),
+        plain(e776(rand(0xa, 8), rand(0xa, 0x1e))),
+        at(0xc8, e7bb(rand(3, 0xc))),
+        plain(ea2d(rand(5, 0xf))),
+        at(0xc8, e800(rand(2, 6))),
+        plain(e9aa(rand(6, 0xa))),
+        at(0x28, once(0x3750, rand(3, 0x3c))),
+        at(0x12c, e88a(rand(5, 0xa))),
+        at(0x12c, Emitter::Cells(&EB35)),
+        plain(e776(rand(5, 5), rand(0xa, 0x1e))),
+        plain(e920(rand(5, 8))),
+        at(0x78, e7bb(rand(0xa, 0x14))),
+        at(0x28, once(0x37b6, rand(3, 0x3f))),
+        at(0x14, ecbd(rand(2, 2))),
+        plain(e7bb(rand(0xa, 0x14))),
+        plain(e800(rand(2, 6))),
+        at(0x64, e7bb(rand(5, 0xa))),
+        at(0x64, e965(rand(0xa, 0xa))),
+        at(0x64, e776(rand(5, 5), rand(0xa, 0x1e))),
+        plain(eab0(rand(5, 5))),
+        plain(e776(rand(5, 5), rand(0xa, 0x1e))),
+        plain(eab0(rand(5, 8))),
+        plain(e776(rand(5, 0xa), rand(0xa, 0x1e))),
+        at(0x64, e8d5(rand(5, 0xa))),
+        at(0xdc, e845(rand(5, 0xa))),
+        at(0x28, once(0x3750, rand(3, 0x3c))),
+        at(0xdc, e8d5(rand(5, 0xa))),
+        plain(e7bb(rand(5, 0xa))),
+        at(0xfa, Emitter::Cells(&EB72)),
+        at(0xdc, e845(rand(5, 0xa))),
+        at(0x28, once(0x3750, rand(3, 0x3c))),
+        at(0xdc, e8d5(rand(5, 0xa))),
+        plain(e7bb(rand(0x28, 0x14))),
+        plain(e776(rand(0xa, 0xa), rand(0xa, 0x1e))),
+        at(0xfa, Emitter::Cells(&EB92)),
     ]
 }
 
 #[cfg(test)]
 mod tests {
     use super::script;
-    use crate::level::generator::generate;
     use crate::level::golden_hash;
     use crate::level::prng::EngineRng;
+    use crate::level::slot::generate;
 
     /// FNV-1a over the full 446-record buffer for the validated seed. Locks the
     /// layout byte-for-byte against refactors; regenerate and re-verify against
@@ -352,7 +346,7 @@ mod tests {
     #[test]
     fn reproduces_the_validated_capture() {
         // Seed 0x3b95 is the wall-clock seed of the captured GET-READY state.
-        let records = generate(&script(), &mut EngineRng::new(0x3b95));
+        let records = generate(&script(), &[], &mut EngineRng::new(0x3b95));
 
         assert_eq!(records.len(), 446);
         assert_eq!(golden_hash(&records), GOLDEN);
@@ -360,8 +354,8 @@ mod tests {
 
     #[test]
     fn is_deterministic_for_a_seed() {
-        let a = generate(&script(), &mut EngineRng::new(0x1234));
-        let b = generate(&script(), &mut EngineRng::new(0x1234));
+        let a = generate(&script(), &[], &mut EngineRng::new(0x1234));
+        let b = generate(&script(), &[], &mut EngineRng::new(0x1234));
         assert_eq!(a, b);
     }
 }

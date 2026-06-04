@@ -6,7 +6,6 @@
 //! and the emitter library that writes the object records. See
 //! `reference/formats/level-layout.md` for the disassembly it mirrors.
 
-pub mod generator;
 pub mod level_1;
 pub mod level_3;
 pub mod level_5;
@@ -22,7 +21,7 @@ pub mod slot;
 /// records change. Not cryptographic; it is a regression fence, not a security
 /// boundary.
 #[cfg(test)]
-pub(crate) fn golden_hash(records: &[generator::Record]) -> String {
+pub(crate) fn golden_hash(records: &[slot::Record]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 
     for record in records {
