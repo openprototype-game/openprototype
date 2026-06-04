@@ -1,7 +1,8 @@
-//! LEVEL_1 (CANYON) layout data: the dispatcher script, emitter constants, and
-//! depth table, transcribed from the disassembly and validated byte-for-byte
-//! against the running game (seed `0x3b95` reproduces the GET-READY capture).
-//! See `reference/formats/level-layout.md`.
+//! LEVEL_1 (CANYON) layout data: script, emitter constants, and depth table.
+//!
+//! Transcribed from the disassembly and validated byte-for-byte against the
+//! running game (seed `0x3b95` reproduces the GET-READY capture). See
+//! `reference/formats/level-layout.md`.
 
 use super::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
@@ -295,7 +296,7 @@ fn at(x_start: u16, emitter: Emitter) -> Step {
     step().x_start(x_start).emit(emitter)
 }
 
-/// LEVEL_1's 38-step layout script, in order.
+/// Returns LEVEL_1's 38-step layout script, in order.
 pub fn script() -> Vec<Step> {
     vec![
         at(0x96, once(0x382c, rand(3, 0x42))),

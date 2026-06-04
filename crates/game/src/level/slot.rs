@@ -14,8 +14,10 @@
 
 use super::prng::EngineRng;
 
-/// One placed object. `x_step` is a horizontal step (the consumer running-sums
-/// these to an absolute scroll position); `depth` is the parallax layer.
+/// One placed scenery object.
+///
+/// `x_step` is a horizontal step; a consumer running-sums these into an
+/// absolute scroll position. `depth` is the parallax layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Record {
     pub x_step: u16,
@@ -24,19 +26,21 @@ pub struct Record {
     pub y: u16,
 }
 
-/// A bounded draw: `rng(modulus) + base`. Every layout draw passes a nonzero
-/// modulus.
+/// A bounded PRNG draw, `rng(modulus) + base`.
+///
+/// Every layout draw passes a nonzero modulus.
 #[derive(Clone, Copy)]
 pub struct Rand {
     pub modulus: u16,
     pub base: u16,
 }
 
+/// Builds a [`Rand`] from a modulus and a base.
 pub const fn rand(modulus: u16, base: u16) -> Rand {
     Rand { modulus, base }
 }
 
-/// A scatter spec for a `Choice` arm: an rng x and an rng y.
+/// One arm of a [`Choice`](Emitter::Choice): a sprite/depth with rng x and y.
 #[derive(Clone, Copy)]
 pub struct Arm {
     pub x: Rand,
@@ -45,8 +49,9 @@ pub struct Arm {
     pub y: Rand,
 }
 
-/// The extra object a [`Row`](Emitter::Row) inserts every second record (always
-/// x = 0).
+/// The object a [`Row`](Emitter::Row) inserts after every second record.
+///
+/// It is always placed at x = 0.
 #[derive(Clone, Copy)]
 pub struct Extra {
     pub sprite: u16,
@@ -59,24 +64,29 @@ pub struct Extra {
 pub enum Fill {
     /// Hardcoded in the emitter.
     Baked { sprite: u16, depth: u16 },
-    /// From the engine slots the dispatcher wrote. The original's slot-reading
-    /// routine also computes a row-y it never uses, so this form burns one
-    /// vestigial `rng(0xa)` draw before the loop (load-bearing for draw order).
+    /// From the engine slots the dispatcher wrote.
+    ///
+    /// The original's slot-reading routine also computes a row-y it never
+    /// uses, so this form burns one vestigial `rng(0xa)` draw before the
+    /// loop (load-bearing for draw order).
     Slots,
 }
 
-/// How a [`Row`](Emitter::Row) places its records and when it draws the shared y.
-/// The two forms are different relinked routines, so each is its own draw order.
+/// How a [`Row`](Emitter::Row) lays out records and draws its shared y.
+///
+/// The two forms are different relinked routines, each with its own draw
+/// order, so they are not interchangeable.
 #[derive(Clone, Copy)]
 pub enum RowStyle {
-    /// y drawn *after* the count; x = x_start + x_step.
+    /// Draws the shared y after the count; x = x_start + x_step.
     Stepped,
-    /// y drawn *before* the count; x = x_base + x_start. `extra` inserts an object
-    /// (x = 0) after every second record.
+    /// Draws the shared y before the count; x = x_base + x_start.
+    ///
+    /// `extra` inserts an object (x = 0) after every second record.
     Anchored { x_base: u16, extra: Option<Extra> },
 }
 
-/// How a fixed `Cell` uses the running x-start.
+/// How a [`Cell`] uses the running x-start.
 #[derive(Clone, Copy)]
 pub enum XStart {
     /// Ignore it (x = base).
@@ -89,8 +99,10 @@ pub enum XStart {
     Step,
 }
 
-/// One record of a [`Fixed`](Emitter::Fixed) block. Always a constant y; the
-/// `x_start` mode says how it uses the running x-start.
+/// One record of a [`Fixed`](Emitter::Fixed) block.
+///
+/// Always a constant y; the `x_start` mode says how it uses the running
+/// x-start.
 #[derive(Clone, Copy)]
 pub struct Cell {
     pub x_base: u16,
@@ -111,9 +123,10 @@ struct Slots {
     row_y_offset: u16,
 }
 
-/// A step's writes to the engine slots, applied before its emitter runs. Only
-/// the fields the original sets are `Some`; the rest carry over from earlier
-/// steps.
+/// A step's writes to the engine slots, applied before its emitter runs.
+///
+/// Only the fields the original sets are `Some`; the rest carry over from
+/// earlier steps.
 #[derive(Default, Clone, Copy)]
 pub struct SlotPatch {
     pub x_start: Option<u16>,
@@ -166,28 +179,38 @@ impl Slots {
     }
 }
 
-/// The emitter kinds. Each has a fixed PRNG draw sequence (encoded in [`run`]) and
-/// a record-placement rule. The doc on each notes the original routine it mirrors.
+/// The placement emitters a step can run.
+///
+/// Each has a fixed PRNG draw sequence (see the `run` dispatch) and a
+/// record-placement rule; its doc notes the original routine it mirrors.
 pub enum Emitter {
-    /// `0x121e7`/`12213`/`1223f`: one record, x = x_start, fixed `depth`.
+    /// Emits one record at x = x_start with a fixed sprite/depth.
+    ///
+    /// (orig `0x121e7`/`12213`/`1223f`.)
     Once { sprite: u16, depth: u16, y: Rand },
-    /// `count` records at a stepped x (x = x_start + x_step, no x draw) with a
-    /// per-record random y. `fill` is the sprite/depth source: `Baked` (hardcoded)
-    /// or `Slots` (read from the engine slots, which also burns a vestigial draw).
-    /// (orig `0x1226b`/`122ab`; the `Slots` form `0x123de`/`12434`.)
+    /// Emits `count` stepped records (x = x_start + x_step), random y each.
+    ///
+    /// `fill` is the sprite/depth source: [`Baked`](Fill::Baked) hardcodes
+    /// them, [`Slots`](Fill::Slots) reads them from the engine slots and burns
+    /// one vestigial draw. (orig `0x1226b`/`122ab`; `Slots` form
+    /// `0x123de`/`12434`.)
     Steps { count: Rand, y: Rand, fill: Fill },
-    /// `0x122eb`/`12367`: `outer` rows of `inner` records (slot sprite/depth). A
-    /// row-y is drawn once per row; `0` inner modulus skips the inner-count draw.
-    /// After each row the x-start resets to `row_reset`.
+    /// Emits `outer` rows of `inner` records, with slot sprite/depth.
+    ///
+    /// A row-y is drawn once per row; a zero `inner` modulus uses a fixed
+    /// inner count with no draw. After each row the x-start resets to
+    /// `row_reset`. (orig `0x122eb`/`12367`.)
     Grid {
         outer: Rand,
         inner: Rand,
         row_y: Rand,
         row_y_uses_offset: bool,
     },
-    /// `count` records sharing one drawn y, laid out per `style` (see [`RowStyle`]
-    /// for the x rule and the y draw order). sprite/depth hardcoded.
-    /// (orig `0xfd82`/`0xff16`; the anchored forms `0xe88a`/`0xe8d5`/`0xeab0`.)
+    /// Emits `count` records sharing one drawn y, laid out per `style`.
+    ///
+    /// See [`RowStyle`] for the x rule and the y draw order; sprite/depth are
+    /// hardcoded. (orig `0xfd82`/`0xff16`; anchored forms
+    /// `0xe88a`/`0xe8d5`/`0xeab0`.)
     Row {
         count: Rand,
         sprite: u16,
@@ -195,10 +218,11 @@ pub enum Emitter {
         y: Rand,
         style: RowStyle,
     },
-    /// `rows` rows of two records each, all sharing one y-pair chosen by a single
-    /// `rng(3)` draw: result `1` selects `pair_when_one`, anything else
-    /// `pair_otherwise`. Per row the lead record's x = x_start + x_step and the
-    /// tail's x = 0. sprite/depth hardcoded. (orig `0xffe0`.)
+    /// Emits `rows` rows of two records at a y-pair picked by one `rng(3)`.
+    ///
+    /// Result `1` selects `pair_when_one`, anything else `pair_otherwise`. Per
+    /// row the lead's x = x_start + x_step and the tail's x = 0; sprite/depth
+    /// are hardcoded. (orig `0xffe0`.)
     PairedRows {
         rows: Rand,
         sprite: u16,
@@ -206,19 +230,22 @@ pub enum Emitter {
         pair_when_one: (u16, u16),
         pair_otherwise: (u16, u16),
     },
-    /// A list of literal `cells` (no per-record draw), emitted once when `repeat`
-    /// is `None`, or `rng(repeat) + base` times when `Some` — the only family-wide
-    /// no-rng block. Each cell's `x_start` says how it touches the running x-start.
-    /// (`repeat` is this emitter's own loop, not the dispatcher-level
-    /// [`Step::repeat`]. orig L1 `0xeb35`/`eb72`/`eb92`/`ecbd`, L3 `0x1248a`,
-    /// L5/L7 landmark blocks.)
+    /// Emits a list of literal `cells` with no per-record draw.
+    ///
+    /// Runs once when `repeat` is `None`, or `rng(repeat) + base` times when
+    /// `Some` — this emitter's own loop, not the dispatcher-level
+    /// [`Step::repeat`]. Each cell's `x_start` says how it touches the running
+    /// x-start. (orig L1 `0xeb35`/`eb72`/`eb92`/`ecbd`, L3 `0x1248a`, L5/L7
+    /// landmark blocks.)
     Fixed {
         repeat: Option<Rand>,
         cells: Vec<Cell>,
     },
-    /// `count` records, each at a per-record drawn x (`rng(x) + x_start`, consume,
-    /// no x-step) with a random y. The per-record x draw is what sets it apart from
-    /// [`Steps`](Emitter::Steps). (orig LEVEL_1's `0xe776` family.)
+    /// Emits `count` records, each at a per-record drawn x with a random y.
+    ///
+    /// x = `rng(x) + x_start` (consume, no x-step); the per-record x draw is
+    /// what sets it apart from [`Steps`](Emitter::Steps). (orig LEVEL_1's
+    /// `0xe776` family.)
     Scatter {
         count: Rand,
         x: Rand,
@@ -226,23 +253,28 @@ pub enum Emitter {
         depth: u16,
         y: Rand,
     },
-    /// LEVEL_1's `0xe9aa`/`0xea2d`: `count` records, each `rng(5) > 1 ? hi : lo`.
+    /// Emits `count` records, each picking `rng(5) > 1 ? hi : lo`.
+    ///
+    /// (orig LEVEL_1's `0xe9aa`/`0xea2d`.)
     Choice { count: Rand, lo: Arm, hi: Arm },
 }
 
-/// One dispatcher step: write some slots, then run an emitter. When `repeat` is
-/// set, the count is drawn once (before the slot writes) and the slot-write +
-/// emitter body runs that many times — a loop the dispatcher builds around a
-/// `call`.
+/// One dispatcher step: write some slots, then run an emitter.
+///
+/// When `repeat` is set, the count is drawn once (before the slot writes) and
+/// the slot-write + emitter body runs that many times — a loop the dispatcher
+/// builds around a `call`.
 pub struct Step {
     pub set: SlotPatch,
     pub emitter: Emitter,
     pub repeat: Option<Rand>,
 }
 
-/// A find-by-position overwrite (`0x12c26` + a half-emitter): walk the buffer
-/// summing x-steps, find the record covering `target_x`, rewrite its x-step, and
-/// replace its sprite/depth/y. Mutates an already-built record.
+/// A find-by-position overwrite of an already-built record.
+///
+/// Walks the buffer summing x-steps, finds the record covering `target_x`,
+/// rewrites its x-step, and replaces its sprite/depth/y. (orig `0x12c26` plus a
+/// half-emitter.)
 pub struct Overwrite {
     pub target_x: u16,
     pub sprite: u16,
@@ -250,36 +282,40 @@ pub struct Overwrite {
     pub y: u16,
 }
 
-/// A find-by-position insert (L7's `0x12381` + fill): walk the buffer summing
-/// x-steps, find the record covering `target_x`, open a one-record gap there
-/// (splitting that record's x-step into `target_x - before` / `after - target_x`),
-/// then write `records` at the gap. The first entry fills the inserted slot (its
-/// split x-step is kept); each later entry overwrites the following record with
-/// `x = 0`. Mirrors the original's `rep movsb` buffer shift and the 5-record
-/// template / single-landmark fills.
+/// A find-by-position insert that opens a one-record gap in the buffer.
+///
+/// Walks the buffer summing x-steps, finds the record covering `target_x`, and
+/// splits its x-step into `target_x - before` / `after - target_x` to open the
+/// gap. `records[0]` fills the inserted slot (keeping its split x-step); each
+/// later entry overwrites the following record at x = 0. Mirrors the original's
+/// `rep movsb` shift and the 5-record template / single-landmark fills. (orig L7
+/// `0x12381` plus fill.)
 pub struct Insert {
     pub target_x: u16,
     pub records: Vec<(u16, u16, u16)>,
 }
 
-/// A post-pass step: either an in-place overwrite (L3) or a buffer-shifting
-/// insert (L7).
+/// A post-pass step: an in-place overwrite (L3) or a buffer-shift insert (L7).
 pub enum PostOp {
     Overwrite(Overwrite),
     Insert(Insert),
 }
 
-/// The generated buffer's fixed capacity (`(0x2c3a - 0xd02) / 8`); an insert past
-/// it drops the tail, matching the original's bounded `rep movsb`.
+/// The generated buffer's fixed capacity, `(0x2c3a - 0xd02) / 8` records.
+///
+/// An insert past it drops the tail, matching the original's bounded
+/// `rep movsb`.
 const BUFFER_CAPACITY: usize = (0x2c3a - 0xd02) / 8;
 
-/// A fluent builder for a [`Step`]; keeps the slot writes readable at the script
-/// call sites.
+/// A fluent builder for a [`Step`].
+///
+/// Keeps the slot writes readable at the script call sites.
 pub struct StepBuilder {
     set: SlotPatch,
     repeat: Option<Rand>,
 }
 
+/// Starts a [`StepBuilder`] with no slot writes and no repeat.
 pub fn step() -> StepBuilder {
     StepBuilder {
         set: SlotPatch::default(),
@@ -288,42 +324,49 @@ pub fn step() -> StepBuilder {
 }
 
 impl StepBuilder {
+    /// Sets the x-start slot for this step.
     pub fn x_start(mut self, v: u16) -> Self {
         self.set.x_start = Some(v);
         self
     }
 
+    /// Sets the x-step slot for this step.
     pub fn x_step(mut self, v: u16) -> Self {
         self.set.x_step = Some(v);
         self
     }
 
+    /// Sets the sprite slot (read by the slot-driven emitters).
     pub fn sprite(mut self, v: u16) -> Self {
         self.set.sprite = Some(v);
         self
     }
 
+    /// Sets the depth slot (read by the slot-driven emitters).
     pub fn depth(mut self, v: u16) -> Self {
         self.set.depth = Some(v);
         self
     }
 
+    /// Sets the row-reset x slot (used by [`Grid`](Emitter::Grid) between rows).
     pub fn row_reset(mut self, v: u16) -> Self {
         self.set.row_reset = Some(v);
         self
     }
 
+    /// Sets the row-y offset slot (added by an offset [`Grid`](Emitter::Grid)).
     pub fn row_y_offset(mut self, v: u16) -> Self {
         self.set.row_y_offset = Some(v);
         self
     }
 
-    /// Repeat this step `rng(count) + base` times (a dispatcher-level loop).
+    /// Repeats this step `rng(count) + base` times (a dispatcher-level loop).
     pub fn repeat(mut self, count: Rand) -> Self {
         self.repeat = Some(count);
         self
     }
 
+    /// Finishes the builder, attaching `emitter` to produce the [`Step`].
     pub fn emit(self, emitter: Emitter) -> Step {
         Step {
             set: self.set,
@@ -337,7 +380,25 @@ fn draw(rng: &mut EngineRng, r: Rand) -> u16 {
     rng.next(r.modulus).wrapping_add(r.base)
 }
 
-/// Run a slot-model script against a seeded PRNG, then apply the post-pass.
+/// Runs a script against a seeded PRNG and applies its post-pass.
+///
+/// Returns the generated [`Record`] buffer.
+///
+/// # Examples
+///
+/// ```
+/// use openprototype::level::level_1;
+/// use openprototype::level::prng::EngineRng;
+/// use openprototype::level::slot::generate;
+///
+/// // Seed 0x3b95 reproduces LEVEL_1's validated GET-READY capture.
+/// let records = generate(&level_1::script(), &[], &mut EngineRng::new(0x3b95));
+/// assert_eq!(records.len(), 446);
+/// ```
+///
+/// # Panics
+///
+/// Panics if a [`PostOp::Insert`] carries an empty `records` list.
 pub fn generate(script: &[Step], post: &[PostOp], rng: &mut EngineRng) -> Vec<Record> {
     let mut slots = Slots::default();
     let mut out = Vec::new();

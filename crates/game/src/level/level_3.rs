@@ -1,7 +1,8 @@
-//! LEVEL_3 (WALD) layout data: the dispatcher script, emitter constants, depth
-//! table, and find-by-position post-pass, transcribed from the disassembly and
-//! validated byte-for-byte against the running game (seed `0x1a94` reproduces
-//! the GET-READY capture). See `reference/formats/level-layout.md`.
+//! LEVEL_3 (WALD) layout data: script, constants, depth table, and post-pass.
+//!
+//! Transcribed from the disassembly and validated byte-for-byte against the
+//! running game (seed `0x1a94` reproduces the GET-READY capture). See
+//! `reference/formats/level-layout.md`.
 
 use super::slot::{Cell, Emitter, Fill, Overwrite, PostOp, Step, XStart, rand, step};
 
@@ -120,8 +121,9 @@ fn fixed1248a(count: u16) -> Emitter {
     }
 }
 
-/// LEVEL_3's 38-step append script, in order. Steps set only the slots the
-/// original writes; the rest carry over.
+/// Returns LEVEL_3's 38-step append script, in order.
+///
+/// Steps set only the slots the original writes; the rest carry over.
 pub fn script() -> Vec<Step> {
     vec![
         step()
@@ -320,8 +322,10 @@ fn overwrite(target_x: u16, sprite: u16, depth: u16, y: u16) -> PostOp {
     })
 }
 
-/// LEVEL_3's find-by-position post-pass: 6 `0x58b0` landmarks near the start, 21
-/// `0x5ac4` markers across the mid scroll, and a single `0x5c20` at the far end.
+/// Returns LEVEL_3's find-by-position overwrite post-pass.
+///
+/// Stamps 6 `0x58b0` landmarks near the start, 21 `0x5ac4` markers across the
+/// mid scroll, and a single `0x5c20` at the far end.
 pub fn post_pass() -> Vec<PostOp> {
     let mut out = Vec::new();
 

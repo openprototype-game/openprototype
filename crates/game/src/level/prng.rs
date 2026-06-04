@@ -13,9 +13,11 @@
 const LCG_MUL: u16 = 0x7ab7;
 const LCG_INC: u16 = 0x11;
 
-/// The seed used when both lag pointers wrap to zero mid-stream. This is *not*
-/// the initial seed: the original seeds from the wall clock at level start, so
-/// the layout varies per play (the port passes that seed to [`EngineRng::new`]).
+/// The seed used when both lag pointers wrap to zero mid-stream.
+///
+/// This is *not* the initial seed: the original seeds from the wall clock at
+/// level start, so the layout varies per play (the port passes that seed to
+/// [`EngineRng::new`]).
 const RESEED: u16 = 0x3039;
 
 /// Both lag pointers wrap to byte offset `0x74`; `lag_a` also starts there.
@@ -23,12 +25,15 @@ const LAG_WRAP: u16 = 0x74;
 /// `lag_b` starts `0x2e` bytes in.
 const LAG_B_START: u16 = 0x2e;
 
-/// Number of words the seeder fills. Byte offset `0x74` (the lag wrap target) is
-/// word index 58, one past these, so the table is 59 words. The seeder never
-/// touches the wrap slot; it starts zero and is written by feedback once `si`
-/// reaches `0x74`. (Verified: a non-zero init breaks the byte-exact match.)
+/// Number of words the seeder fills.
+///
+/// Byte offset `0x74` (the lag wrap target) is word index 58, one past these,
+/// so the table is 59 words. The seeder never touches the wrap slot; it starts
+/// zero and is written by feedback once `si` reaches `0x74`. (Verified: a
+/// non-zero init breaks the byte-exact match.)
 const SEEDED_WORDS: usize = 58;
 
+/// The engine's additive lagged-Fibonacci PRNG, seeded by a 16-bit LCG.
 pub struct EngineRng {
     /// 59 words: the 58 the seeder fills plus the wrap slot at index 58.
     table: [u16; SEEDED_WORDS + 1],
@@ -38,8 +43,10 @@ pub struct EngineRng {
 }
 
 impl EngineRng {
-    /// Build and seed the generator exactly as the level init does: the seeder
-    /// fills words 0..=57 from the LCG; the wrap slot (index 58) stays zero.
+    /// Builds and seeds the generator exactly as the level init does.
+    ///
+    /// The seeder fills words 0..=57 from the LCG; the wrap slot (index 58)
+    /// stays zero.
     pub fn new(seed: u16) -> Self {
         let mut rng = Self {
             table: [0; SEEDED_WORDS + 1],
@@ -51,7 +58,8 @@ impl EngineRng {
         rng
     }
 
-    /// Refill the seeded words from the 16-bit LCG and reset the lag pointers.
+    /// Refills the seeded words from the LCG and resets the lag pointers.
+    ///
     /// The wrap slot is deliberately left untouched, matching the seeder.
     fn seed(&mut self, seed: u16) {
         self.lag_a = LAG_WRAP;
@@ -65,8 +73,14 @@ impl EngineRng {
         }
     }
 
-    /// Draw the next value, reduced into `[0, modulus)`. Every layout draw passes
-    /// a nonzero modulus; the original's raw (modulus 0) path is unused here.
+    /// Draws the next value, reduced into `[0, modulus)`.
+    ///
+    /// Every layout draw passes a nonzero modulus; the original's raw
+    /// (modulus 0) path is unused here.
+    ///
+    /// # Panics
+    ///
+    /// In debug builds, panics if `modulus` is 0 (a debug assertion).
     pub fn next(&mut self, modulus: u16) -> u16 {
         debug_assert!(modulus != 0, "layout draws always pass a nonzero modulus");
 

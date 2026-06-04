@@ -1,16 +1,19 @@
-//! LEVEL_7 (CITY) layout data: the dispatcher script, emitter constants, and the
-//! find-by-position insert post-pass, transcribed from the disassembly and
-//! validated byte-for-byte against the running game (seed `0x3e94` reproduces the
-//! GET-READY capture). See `reference/formats/level-layout.md`.
+//! LEVEL_7 (CITY) layout data: script, constants, and an insert post-pass.
+//!
+//! Transcribed from the disassembly and validated byte-for-byte against the
+//! running game (seed `0x3e94` reproduces the GET-READY capture). See
+//! `reference/formats/level-layout.md`.
 
 use super::slot::{Cell, Emitter, Insert, PostOp, Step, XStart, rand, step};
 
 /// The foreground depth the landmark `Once` emitters hardcode (`0xfa`).
 const FOREGROUND: u16 = 0xfa;
 
-/// LEVEL_7's only scatter emitter is the L3-shape Grid: `outer = rng(dx) + cx`
-/// rows of `inner = rng(ax) + bx` records, the per-row y `rng(0xa)` plus the
-/// row-y offset slot. sprite/depth/x-step/row-reset come from the slots.
+/// Builds LEVEL_7's only scatter emitter, the L3-shape [`Grid`](Emitter::Grid).
+///
+/// `outer = rng(dx) + cx` rows of `inner = rng(ax) + bx` records; the per-row y
+/// is `rng(0xa)` plus the row-y offset slot. sprite/depth/x-step/row-reset come
+/// from the slots.
 fn grid(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
     Emitter::Grid {
         outer: rand(dx, cx),
@@ -89,8 +92,9 @@ fn fixed_4959_3() -> Emitter {
     }
 }
 
-/// LEVEL_7's 28-step append script, in order (21 Grid calls + 7 landmarks). A
-/// step omits `x_start` when the original leaves it carried from the previous
+/// Returns LEVEL_7's 28-step append script (21 Grid calls + 7 landmarks).
+///
+/// A step omits `x_start` when the original leaves it carried from the previous
 /// emitter (a Grid leaves it at its row-reset, which the next landmark reads).
 pub fn script() -> Vec<Step> {
     vec![
@@ -279,8 +283,10 @@ fn landmark(target_x: u16, y: u16) -> PostOp {
     })
 }
 
-/// LEVEL_7's find-by-position insert post-pass: a 5-record `0x7d00` template
-/// block, then eight `0x4689` landmarks, each inserted at its absolute-x.
+/// Returns LEVEL_7's find-by-position insert post-pass.
+///
+/// Inserts a 5-record `0x7d00` template block, then eight `0x4689` landmarks,
+/// each at its absolute-x.
 pub fn post_pass() -> Vec<PostOp> {
     vec![
         PostOp::Insert(Insert {

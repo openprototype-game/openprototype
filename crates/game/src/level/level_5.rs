@@ -1,5 +1,6 @@
-//! LEVEL_5 (TECHNO) layout data: the dispatcher script and emitter constants,
-//! transcribed from the disassembly and validated byte-for-byte against the
+//! LEVEL_5 (TECHNO) layout data: the dispatcher script and emitter constants.
+//!
+//! Transcribed from the disassembly and validated byte-for-byte against the
 //! running game (seed `0x2d93` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
@@ -159,9 +160,9 @@ fn row_3c84(ax: u16, bx: u16) -> Emitter {
     }
 }
 
-/// `0xffe0`: `rows = rng(ax) + bx` rows; one rng(3) picks the y-pair for all of
-/// them. Each row emits two `0x3cf0` records (lead x = x_start + x_step, tail
-/// x = 0).
+/// Builds LEVEL_5's `0x3cf0` paired-rows grid for the given counts.
+///
+/// `rows = rng(ax) + bx` rows; one rng(3) picks the y-pair for all of them.
 fn grid_3cf0(ax: u16, bx: u16) -> Emitter {
     Emitter::PairedRows {
         rows: rand(ax, bx),
@@ -172,7 +173,9 @@ fn grid_3cf0(ax: u16, bx: u16) -> Emitter {
     }
 }
 
-/// `0x10119`: one `0x3b70` record, x = x_start + x_step, fixed y, no draws.
+/// Builds the lone `0x3b70` marker: one stepped record, no draws.
+///
+/// (orig `0x10119`.)
 fn fixed_3b70() -> Emitter {
     Emitter::Fixed {
         repeat: None,
@@ -186,8 +189,10 @@ fn fixed_3b70() -> Emitter {
     }
 }
 
-/// `0x10146`: the post-amble — a `0x426e` landmark (x = x_start + x_step) then
-/// five fixed `0x3764` background records with stepping y.
+/// Builds LEVEL_5's post-amble block.
+///
+/// A `0x426e` landmark (x = x_start + x_step) then five fixed `0x3764`
+/// background records with stepping y. (orig `0x10146`.)
 fn tail_426e() -> Emitter {
     let bg = |x_base: u16, y: u16| Cell {
         x_base,
@@ -216,9 +221,10 @@ fn tail_426e() -> Emitter {
     }
 }
 
-/// LEVEL_5's 48-step append script, in order. Steps set only the slots the
-/// original writes; the rest carry over. Three steps repeat under a
-/// dispatcher-level loop.
+/// Returns LEVEL_5's 48-step append script, in order.
+///
+/// Steps set only the slots the original writes; the rest carry over. Three
+/// steps repeat under a dispatcher-level loop.
 pub fn script() -> Vec<Step> {
     vec![
         step()
