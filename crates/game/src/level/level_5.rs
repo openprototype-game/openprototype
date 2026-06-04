@@ -158,6 +158,7 @@ fn grid_3cf0(ax: u16, bx: u16) -> Emitter {
 /// `0x10119`: one `0x3b70` record, x = x_start + x_step, fixed y, no draws.
 fn fixed_3b70() -> Emitter {
     Emitter::Fixed {
+        lead_step: true,
         lead_sprite: 0x3b70,
         lead_depth: D_3B70,
         lead_y: 0x53,
@@ -169,6 +170,7 @@ fn fixed_3b70() -> Emitter {
 /// five fixed `0x3764` background records with stepping y.
 fn tail_426e() -> Emitter {
     Emitter::Fixed {
+        lead_step: true,
         lead_sprite: 0x426e,
         lead_depth: D_426E,
         lead_y: 0x5d,

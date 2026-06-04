@@ -134,10 +134,12 @@ pub enum Emitter {
         if_one: (u16, u16),
         otherwise: (u16, u16),
     },
-    /// `0x10119`/`0x10146`: a fixed run with no PRNG draws. The lead record's x is
-    /// x_start + x_step; each `rest` record carries its own literal
-    /// `(x, sprite, depth, y)`.
+    /// `0x10119`/`0x10146` (L5), `0x1222f`/`0x1224e`/`0x12289` (L7): a fixed run
+    /// with no PRNG draws. The lead record's x is x_start + x_step when `lead_step`
+    /// (L5), or x_start alone when not (L7's landmark blocks); each `rest` record
+    /// carries its own literal `(x, sprite, depth, y)`.
     Fixed {
+        lead_step: bool,
         lead_sprite: u16,
         lead_depth: u16,
         lead_y: u16,
@@ -164,6 +166,29 @@ pub struct Overwrite {
     pub depth: u16,
     pub y: u16,
 }
+
+/// A find-by-position insert (L7's `0x12381` + fill): walk the buffer summing
+/// x-steps, find the record covering `target_x`, open a one-record gap there
+/// (splitting that record's x-step into `target_x - before` / `after - target_x`),
+/// then write `records` at the gap. The first entry fills the inserted slot (its
+/// split x-step is kept); each later entry overwrites the following record with
+/// `x = 0`. Mirrors the original's `rep movsb` buffer shift and the 5-record
+/// template / single-landmark fills.
+pub struct Insert {
+    pub target_x: u16,
+    pub records: Vec<(u16, u16, u16)>,
+}
+
+/// A post-pass step: either an in-place overwrite (L3) or a buffer-shifting
+/// insert (L7).
+pub enum PostOp {
+    Overwrite(Overwrite),
+    Insert(Insert),
+}
+
+/// The generated buffer's fixed capacity (`(0x2c3a - 0xd02) / 8`); an insert past
+/// it drops the tail, matching the original's bounded `rep movsb`.
+const BUFFER_CAPACITY: usize = (0x2c3a - 0xd02) / 8;
 
 /// A fluent builder for a [`Step`]; keeps the slot writes readable at the script
 /// call sites.
@@ -230,7 +255,7 @@ fn draw(rng: &mut EngineRng, r: Rand) -> u16 {
 }
 
 /// Run a slot-model script against a seeded PRNG, then apply the post-pass.
-pub fn generate(script: &[Step], overwrites: &[Overwrite], rng: &mut EngineRng) -> Vec<Record> {
+pub fn generate(script: &[Step], post: &[PostOp], rng: &mut EngineRng) -> Vec<Record> {
     let mut slots = Slots::default();
     let mut out = Vec::new();
 
@@ -248,8 +273,11 @@ pub fn generate(script: &[Step], overwrites: &[Overwrite], rng: &mut EngineRng) 
         }
     }
 
-    for overwrite in overwrites {
-        apply_overwrite(overwrite, &mut out);
+    for op in post {
+        match op {
+            PostOp::Overwrite(overwrite) => apply_overwrite(overwrite, &mut out),
+            PostOp::Insert(insert) => apply_insert(insert, &mut out),
+        }
     }
 
     out
@@ -415,13 +443,20 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
         }
 
         Emitter::Fixed {
+            lead_step,
             lead_sprite,
             lead_depth,
             lead_y,
             rest,
         } => {
+            let x_step = if *lead_step {
+                slots.step_x()
+            } else {
+                slots.consume_x()
+            };
+
             out.push(Record {
-                x_step: slots.step_x(),
+                x_step,
                 sprite: *lead_sprite,
                 depth: *lead_depth,
                 y: *lead_y,
@@ -451,6 +486,52 @@ fn apply_overwrite(overwrite: &Overwrite, out: &mut [Record]) {
             record.sprite = overwrite.sprite;
             record.depth = overwrite.depth;
             record.y = overwrite.y;
+            return;
+        }
+    }
+}
+
+fn apply_insert(insert: &Insert, out: &mut Vec<Record>) {
+    let mut cumulative = 0u16;
+
+    for i in 0..out.len() {
+        let before = cumulative;
+        cumulative = cumulative.wrapping_add(out[i].x_step);
+
+        if cumulative > insert.target_x {
+            // Split the covered record's x-step across the new gap, then shift the
+            // tail up one slot (dropping anything past the buffer capacity).
+            let new_x_step = insert.target_x.wrapping_sub(before);
+            let remainder_x_step = cumulative.wrapping_sub(insert.target_x);
+
+            out.insert(
+                i,
+                Record {
+                    x_step: new_x_step,
+                    sprite: 0,
+                    depth: 0,
+                    y: 0,
+                },
+            );
+            out[i + 1].x_step = remainder_x_step;
+            out.truncate(BUFFER_CAPACITY);
+
+            // First entry fills the inserted slot (keeping its split x-step); each
+            // later entry overwrites the following record at x = 0.
+            let (sprite, depth, y) = insert.records[0];
+            out[i].sprite = sprite;
+            out[i].depth = depth;
+            out[i].y = y;
+
+            for (offset, &(sprite, depth, y)) in insert.records[1..].iter().enumerate() {
+                out[i + 1 + offset] = Record {
+                    x_step: 0,
+                    sprite,
+                    depth,
+                    y,
+                };
+            }
+
             return;
         }
     }

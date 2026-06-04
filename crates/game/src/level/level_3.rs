@@ -4,7 +4,7 @@
 //! the GET-READY capture). See `reference/formats/level-layout.md`.
 
 use super::generator::rand;
-use super::slot::{Emitter, Overwrite, Step, step};
+use super::slot::{Emitter, Overwrite, PostOp, Step, step};
 
 /// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
 /// table at `cs:[dac5..dad5]`.
@@ -279,18 +279,18 @@ pub fn script() -> Vec<Step> {
     ]
 }
 
-fn overwrite(target_x: u16, sprite: u16, depth: u16, y: u16) -> Overwrite {
-    Overwrite {
+fn overwrite(target_x: u16, sprite: u16, depth: u16, y: u16) -> PostOp {
+    PostOp::Overwrite(Overwrite {
         target_x,
         sprite,
         depth,
         y,
-    }
+    })
 }
 
 /// LEVEL_3's find-by-position post-pass: 6 `0x58b0` landmarks near the start, 21
 /// `0x5ac4` markers across the mid scroll, and a single `0x5c20` at the far end.
-pub fn post_pass() -> Vec<Overwrite> {
+pub fn post_pass() -> Vec<PostOp> {
     let mut out = Vec::new();
 
     for (target_x, y) in [
