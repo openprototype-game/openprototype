@@ -3,7 +3,7 @@
 //! against the running game (seed `0x3b95` reproduces the GET-READY capture).
 //! See `reference/formats/level-layout.md`.
 
-use super::slot::{Arm, Cell, Emitter, Extra, Rand, Step, XStart, rand, step};
+use super::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
 /// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
 /// table at `cs:[bf6d..]`.
@@ -194,22 +194,28 @@ fn e965(count: Rand) -> Emitter {
 }
 
 fn e88a(count: Rand) -> Emitter {
-    Emitter::RowOnce {
+    Emitter::Row {
         count,
-        x_base: 0x14,
         sprite: 0x3a92,
         depth: DEPTHS[4],
-        y_once: rand(4, 0x28),
+        y: rand(4, 0x28),
+        style: RowStyle::Anchored {
+            x_base: 0x14,
+            extra: None,
+        },
     }
 }
 
 fn e8d5(count: Rand) -> Emitter {
-    Emitter::RowOnce {
+    Emitter::Row {
         count,
-        x_base: 0x14,
         sprite: 0x33f4,
         depth: DEPTHS[5],
-        y_once: rand(4, 0x32),
+        y: rand(4, 0x32),
+        style: RowStyle::Anchored {
+            x_base: 0x14,
+            extra: None,
+        },
     }
 }
 
@@ -250,16 +256,18 @@ fn ea2d(count: Rand) -> Emitter {
 }
 
 fn eab0(count: Rand) -> Emitter {
-    Emitter::RowEveryNth {
+    Emitter::Row {
         count,
-        x_base: 0x14,
         sprite: 0x3a92,
         depth: DEPTHS[4],
-        y_once: rand(4, 0x28),
-        extra: Extra {
-            sprite: 0x3308,
-            depth: DEPTHS[0],
-            y: rand(0x12, 0),
+        y: rand(4, 0x28),
+        style: RowStyle::Anchored {
+            x_base: 0x14,
+            extra: Some(Extra {
+                sprite: 0x3308,
+                depth: DEPTHS[0],
+                y: rand(0x12, 0),
+            }),
         },
     }
 }
@@ -273,9 +281,9 @@ fn once(sprite: u16, y: Rand) -> Emitter {
 }
 
 fn ecbd(count: Rand) -> Emitter {
-    Emitter::Repeat {
-        count,
-        block: &ECBD,
+    Emitter::Fixed {
+        repeat: Some(count),
+        cells: ECBD.to_vec(),
     }
 }
 
@@ -301,7 +309,13 @@ pub fn script() -> Vec<Step> {
         plain(e9aa(rand(6, 0xa))),
         at(0x28, once(0x3750, rand(3, 0x3c))),
         at(0x12c, e88a(rand(5, 0xa))),
-        at(0x12c, Emitter::Cells(&EB35)),
+        at(
+            0x12c,
+            Emitter::Fixed {
+                repeat: None,
+                cells: EB35.to_vec(),
+            },
+        ),
         plain(e776(rand(5, 5), rand(0xa, 0x1e))),
         plain(e920(rand(5, 8))),
         at(0x78, e7bb(rand(0xa, 0x14))),
@@ -321,13 +335,25 @@ pub fn script() -> Vec<Step> {
         at(0x28, once(0x3750, rand(3, 0x3c))),
         at(0xdc, e8d5(rand(5, 0xa))),
         plain(e7bb(rand(5, 0xa))),
-        at(0xfa, Emitter::Cells(&EB72)),
+        at(
+            0xfa,
+            Emitter::Fixed {
+                repeat: None,
+                cells: EB72.to_vec(),
+            },
+        ),
         at(0xdc, e845(rand(5, 0xa))),
         at(0x28, once(0x3750, rand(3, 0x3c))),
         at(0xdc, e8d5(rand(5, 0xa))),
         plain(e7bb(rand(0x28, 0x14))),
         plain(e776(rand(0xa, 0xa), rand(0xa, 0x1e))),
-        at(0xfa, Emitter::Cells(&EB92)),
+        at(
+            0xfa,
+            Emitter::Fixed {
+                repeat: None,
+                cells: EB92.to_vec(),
+            },
+        ),
     ]
 }
 

@@ -2,11 +2,11 @@
 //!
 //! Every generated level is a straight-line script of placement steps, each
 //! running one emitter that appends 8-byte records to a growing buffer, sharing
-//! the engine PRNG so the draw order is load-bearing. Emitters range from
-//! baked-constant (LEVEL_1's `Scatter`/`RowOnce`/`Cells`, which carry their
-//! sprite/depth) to slot-driven (LEVEL_3+'s `SlotSingle`/`Grid`, which read
-//! engine slots the dispatcher writes between steps and that persist across
-//! them). A script may end with a post-pass that either overwrites a record in
+//! the engine PRNG so the draw order is load-bearing. Most emitters bake their
+//! sprite/depth into the variant; a couple ([`Steps`](Emitter::Steps) with
+//! [`Fill::Slots`] and [`Grid`](Emitter::Grid)) instead read them from engine
+//! slots the dispatcher writes between steps and that persist across them. A
+//! script may end with a post-pass that either overwrites a record in
 //! place (LEVEL_3) or inserts one by splitting the covered record's x-step
 //! (LEVEL_7). This mirrors the disassembly, validated byte-for-byte against the
 //! running game (each level's golden test reproduces its GET-READY capture). See
@@ -45,12 +45,35 @@ pub struct Arm {
     pub y: Rand,
 }
 
-/// The extra object a `RowEveryNth` inserts every second record (always x = 0).
+/// The extra object a [`Row`](Emitter::Row) inserts every second record (always
+/// x = 0).
 #[derive(Clone, Copy)]
 pub struct Extra {
     pub sprite: u16,
     pub depth: u16,
     pub y: Rand,
+}
+
+/// Where a [`Steps`](Emitter::Steps) emitter gets each record's sprite/depth.
+#[derive(Clone, Copy)]
+pub enum Fill {
+    /// Hardcoded in the emitter.
+    Baked { sprite: u16, depth: u16 },
+    /// From the engine slots the dispatcher wrote. The original's slot-reading
+    /// routine also computes a row-y it never uses, so this form burns one
+    /// vestigial `rng(0xa)` draw before the loop (load-bearing for draw order).
+    Slots,
+}
+
+/// How a [`Row`](Emitter::Row) places its records and when it draws the shared y.
+/// The two forms are different relinked routines, so each is its own draw order.
+#[derive(Clone, Copy)]
+pub enum RowStyle {
+    /// y drawn *after* the count; x = x_start + x_step.
+    Stepped,
+    /// y drawn *before* the count; x = x_base + x_start. `extra` inserts an object
+    /// (x = 0) after every second record.
+    Anchored { x_base: u16, extra: Option<Extra> },
 }
 
 /// How a fixed `Cell` uses the running x-start.
@@ -60,11 +83,14 @@ pub enum XStart {
     None,
     /// Add it, then zero it (the common consume).
     Consume,
-    /// Add it but leave it set (the Fixed landmark emitters).
+    /// Add it but leave it set (the landmark leads that peek).
     Peek,
+    /// Add x_start + x_step, then zero x_start (a stepped lead).
+    Step,
 }
 
-/// One record of a no-count block (`Cells` / `Repeat`). Always a constant y.
+/// One record of a [`Fixed`](Emitter::Fixed) block. Always a constant y; the
+/// `x_start` mode says how it uses the running x-start.
 #[derive(Clone, Copy)]
 pub struct Cell {
     pub x_base: u16,
@@ -140,21 +166,16 @@ impl Slots {
     }
 }
 
-/// The emitter kinds, named for the original routine each transcribes.
+/// The emitter kinds. Each has a fixed PRNG draw sequence (encoded in [`run`]) and
+/// a record-placement rule. The doc on each notes the original routine it mirrors.
 pub enum Emitter {
     /// `0x121e7`/`12213`/`1223f`: one record, x = x_start, fixed `depth`.
     Once { sprite: u16, depth: u16, y: Rand },
-    /// `0x1226b`/`122ab`: count loop, x = x_start + x_step (no x draw), with a
-    /// hardcoded sprite/depth.
-    Single {
-        count: Rand,
-        sprite: u16,
-        depth: u16,
-        y: Rand,
-    },
-    /// `0x123de`/`12434`: like `Single` but the sprite/depth come from the slots,
-    /// and one dead `rng(0xa)` row-y draw is burned before the count loop.
-    SlotSingle { count: Rand, y: Rand },
+    /// `count` records at a stepped x (x = x_start + x_step, no x draw) with a
+    /// per-record random y. `fill` is the sprite/depth source: `Baked` (hardcoded)
+    /// or `Slots` (read from the engine slots, which also burns a vestigial draw).
+    /// (orig `0x1226b`/`122ab`; the `Slots` form `0x123de`/`12434`.)
+    Steps { count: Rand, y: Rand, fill: Fill },
     /// `0x122eb`/`12367`: `outer` rows of `inner` records (slot sprite/depth). A
     /// row-y is drawn once per row; `0` inner modulus skips the inner-count draw.
     /// After each row the x-start resets to `row_reset`.
@@ -164,50 +185,40 @@ pub enum Emitter {
         row_y: Rand,
         row_y_uses_offset: bool,
     },
-    /// `0x1248a`: a fixed lead (rec0 x = x_start + x_step; rec1 x = `mid.0`) then
-    /// `count` trailing records at `run.0`. No PRNG draws.
-    FixedRun {
-        sprite: u16,
-        depth: u16,
-        y_lead: u16,
-        mid: (u16, u16),
-        run: (u16, u16),
-        count: u16,
-    },
-    /// `0xfd82`/`0xff16`: a run of `count` records (`count = rng + base`) sharing
-    /// one y, drawn once before the loop. x = x_start + x_step; sprite/depth are
-    /// hardcoded.
+    /// `count` records sharing one drawn y, laid out per `style` (see [`RowStyle`]
+    /// for the x rule and the y draw order). sprite/depth hardcoded.
+    /// (orig `0xfd82`/`0xff16`; the anchored forms `0xe88a`/`0xe8d5`/`0xeab0`.)
     Row {
         count: Rand,
         sprite: u16,
         depth: u16,
         y: Rand,
+        style: RowStyle,
     },
-    /// `0xffe0`: `rows` rows (`rows = rng + base`). A single `rng(3)` picks the
-    /// y-pair shared by every row — result `1` selects `if_one`, anything else
-    /// `otherwise`. Each row emits two records: the first x = x_start + x_step,
-    /// the second x = 0. sprite/depth hardcoded.
-    BranchRows {
+    /// `rows` rows of two records each, all sharing one y-pair chosen by a single
+    /// `rng(3)` draw: result `1` selects `pair_when_one`, anything else
+    /// `pair_otherwise`. Per row the lead record's x = x_start + x_step and the
+    /// tail's x = 0. sprite/depth hardcoded. (orig `0xffe0`.)
+    PairedRows {
         rows: Rand,
         sprite: u16,
         depth: u16,
-        if_one: (u16, u16),
-        otherwise: (u16, u16),
+        pair_when_one: (u16, u16),
+        pair_otherwise: (u16, u16),
     },
-    /// `0x10119`/`0x10146` (L5), `0x1222f`/`0x1224e`/`0x12289` (L7): a fixed run
-    /// with no PRNG draws. The lead record's x is x_start + x_step when `lead_step`
-    /// (L5), or x_start alone when not (L7's landmark blocks); each `rest` record
-    /// carries its own literal `(x, sprite, depth, y)`.
+    /// A list of literal `cells` (no per-record draw), emitted once when `repeat`
+    /// is `None`, or `rng(repeat) + base` times when `Some` — the only family-wide
+    /// no-rng block. Each cell's `x_start` says how it touches the running x-start.
+    /// (`repeat` is this emitter's own loop, not the dispatcher-level
+    /// [`Step::repeat`]. orig L1 `0xeb35`/`eb72`/`eb92`/`ecbd`, L3 `0x1248a`,
+    /// L5/L7 landmark blocks.)
     Fixed {
-        lead_step: bool,
-        lead_sprite: u16,
-        lead_depth: u16,
-        lead_y: u16,
-        rest: Vec<(u16, u16, u16, u16)>,
+        repeat: Option<Rand>,
+        cells: Vec<Cell>,
     },
-    /// LEVEL_1's `0xe776` family: `count` records, each x = `rng(x) + x_start`
-    /// (consume, no x-step slot) and y = rng. The per-record x draw is what sets
-    /// it apart from `Single`.
+    /// `count` records, each at a per-record drawn x (`rng(x) + x_start`, consume,
+    /// no x-step) with a random y. The per-record x draw is what sets it apart from
+    /// [`Steps`](Emitter::Steps). (orig LEVEL_1's `0xe776` family.)
     Scatter {
         count: Rand,
         x: Rand,
@@ -215,32 +226,8 @@ pub enum Emitter {
         depth: u16,
         y: Rand,
     },
-    /// LEVEL_1's `0xe88a`/`0xe8d5`: like `Row`, but the shared y is drawn *before*
-    /// the count and x = `x_base + x_start` (consume, no x-step slot).
-    RowOnce {
-        count: Rand,
-        x_base: u16,
-        sprite: u16,
-        depth: u16,
-        y_once: Rand,
-    },
     /// LEVEL_1's `0xe9aa`/`0xea2d`: `count` records, each `rng(5) > 1 ? hi : lo`.
     Choice { count: Rand, lo: Arm, hi: Arm },
-    /// LEVEL_1's `0xeab0`: a `RowOnce` that also inserts an extra object (x = 0)
-    /// every second record.
-    RowEveryNth {
-        count: Rand,
-        x_base: u16,
-        sprite: u16,
-        depth: u16,
-        y_once: Rand,
-        extra: Extra,
-    },
-    /// LEVEL_1's `0xeb35`/`0xeb72`/`0xeb92`: a fixed handful of records, no count
-    /// loop, each cell choosing how it uses the running x-start.
-    Cells(&'static [Cell]),
-    /// LEVEL_1's `0xecbd`: `count` iterations, each emitting a fixed `block`.
-    Repeat { count: Rand, block: &'static [Cell] },
 }
 
 /// One dispatcher step: write some slots, then run an emitter. When `repeat` is
@@ -390,33 +377,23 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
             });
         }
 
-        Emitter::Single {
-            count,
-            sprite,
-            depth,
-            y,
-        } => {
+        Emitter::Steps { count, y, fill } => {
             let n = draw(rng, *count);
 
-            for _ in 0..n {
-                out.push(Record {
-                    x_step: slots.step_x(),
-                    sprite: *sprite,
-                    depth: *depth,
-                    y: draw(rng, *y),
-                });
+            if matches!(fill, Fill::Slots) {
+                rng.next(0xa); // vestigial row-y draw the slot routine never uses
             }
-        }
-
-        Emitter::SlotSingle { count, y } => {
-            let n = draw(rng, *count);
-            rng.next(0xa); // dead row-y draw (computed but unused here)
 
             for _ in 0..n {
+                let (sprite, depth) = match fill {
+                    Fill::Baked { sprite, depth } => (*sprite, *depth),
+                    Fill::Slots => (slots.sprite, slots.depth),
+                };
+
                 out.push(Record {
                     x_step: slots.step_x(),
-                    sprite: slots.sprite,
-                    depth: slots.depth,
+                    sprite,
+                    depth,
                     y: draw(rng, *y),
                 });
             }
@@ -457,69 +434,72 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
             }
         }
 
-        Emitter::FixedRun {
-            sprite,
-            depth,
-            y_lead,
-            mid,
-            run,
-            count,
-        } => {
-            out.push(Record {
-                x_step: slots.step_x(),
-                sprite: *sprite,
-                depth: *depth,
-                y: *y_lead,
-            });
-            out.push(Record {
-                x_step: mid.0,
-                sprite: *sprite,
-                depth: *depth,
-                y: mid.1,
-            });
-
-            for _ in 0..*count {
-                out.push(Record {
-                    x_step: run.0,
-                    sprite: *sprite,
-                    depth: *depth,
-                    y: run.1,
-                });
-            }
-        }
-
         Emitter::Row {
             count,
             sprite,
             depth,
             y,
+            style,
         } => {
-            let n = draw(rng, *count);
-            let row_y = draw(rng, *y); // one y for the whole run
+            // Stepped draws the shared y after the count; Anchored draws it before.
+            let (row_y, n) = match style {
+                RowStyle::Stepped => {
+                    let n = draw(rng, *count);
+                    (draw(rng, *y), n)
+                }
+                RowStyle::Anchored { .. } => {
+                    let row_y = draw(rng, *y);
+                    (row_y, draw(rng, *count))
+                }
+            };
+
+            let mut since_extra = 0u16;
 
             for _ in 0..n {
+                let x_step = match style {
+                    RowStyle::Stepped => slots.step_x(),
+                    RowStyle::Anchored { x_base, .. } => x_base.wrapping_add(slots.consume_x()),
+                };
+
                 out.push(Record {
-                    x_step: slots.step_x(),
+                    x_step,
                     sprite: *sprite,
                     depth: *depth,
                     y: row_y,
                 });
+
+                if let RowStyle::Anchored {
+                    extra: Some(extra), ..
+                } = style
+                {
+                    since_extra += 1;
+
+                    if since_extra == 2 {
+                        since_extra = 0;
+                        out.push(Record {
+                            x_step: 0,
+                            sprite: extra.sprite,
+                            depth: extra.depth,
+                            y: draw(rng, extra.y),
+                        });
+                    }
+                }
             }
         }
 
-        Emitter::BranchRows {
+        Emitter::PairedRows {
             rows,
             sprite,
             depth,
-            if_one,
-            otherwise,
+            pair_when_one,
+            pair_otherwise,
         } => {
             let n = draw(rng, *rows);
             // One rng(3) picks the shared y-pair for every row.
             let (y_lead, y_tail) = if rng.next(3) == 1 {
-                *if_one
+                *pair_when_one
             } else {
-                *otherwise
+                *pair_otherwise
             };
 
             for _ in 0..n {
@@ -538,33 +518,16 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
             }
         }
 
-        Emitter::Fixed {
-            lead_step,
-            lead_sprite,
-            lead_depth,
-            lead_y,
-            rest,
-        } => {
-            let x_step = if *lead_step {
-                slots.step_x()
-            } else {
-                slots.consume_x()
+        Emitter::Fixed { repeat, cells } => {
+            let n = match repeat {
+                Some(r) => draw(rng, *r),
+                None => 1,
             };
 
-            out.push(Record {
-                x_step,
-                sprite: *lead_sprite,
-                depth: *lead_depth,
-                y: *lead_y,
-            });
-
-            for &(x_step, sprite, depth, y) in rest {
-                out.push(Record {
-                    x_step,
-                    sprite,
-                    depth,
-                    y,
-                });
+            for _ in 0..n {
+                for cell in cells {
+                    emit_cell(cell, slots, out);
+                }
             }
         }
 
@@ -590,27 +553,6 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
             }
         }
 
-        Emitter::RowOnce {
-            count,
-            x_base,
-            sprite,
-            depth,
-            y_once,
-        } => {
-            // The shared y is drawn once, before the count.
-            let y = draw(rng, *y_once);
-            let n = draw(rng, *count);
-
-            for _ in 0..n {
-                out.push(Record {
-                    x_step: x_base.wrapping_add(slots.consume_x()),
-                    sprite: *sprite,
-                    depth: *depth,
-                    y,
-                });
-            }
-        }
-
         Emitter::Choice { count, lo, hi } => {
             let n = draw(rng, *count);
 
@@ -626,55 +568,6 @@ fn run(emitter: &Emitter, slots: &mut Slots, rng: &mut EngineRng, out: &mut Vec<
                 });
             }
         }
-
-        Emitter::RowEveryNth {
-            count,
-            x_base,
-            sprite,
-            depth,
-            y_once,
-            extra,
-        } => {
-            let y = draw(rng, *y_once);
-            let n = draw(rng, *count);
-            let mut counter = 0u16;
-
-            for _ in 0..n {
-                out.push(Record {
-                    x_step: x_base.wrapping_add(slots.consume_x()),
-                    sprite: *sprite,
-                    depth: *depth,
-                    y,
-                });
-                counter += 1;
-
-                if counter == 2 {
-                    counter = 0;
-                    out.push(Record {
-                        x_step: 0,
-                        sprite: extra.sprite,
-                        depth: extra.depth,
-                        y: draw(rng, extra.y),
-                    });
-                }
-            }
-        }
-
-        Emitter::Cells(cells) => {
-            for cell in *cells {
-                emit_cell(cell, slots, out);
-            }
-        }
-
-        Emitter::Repeat { count, block } => {
-            let n = draw(rng, *count);
-
-            for _ in 0..n {
-                for cell in *block {
-                    emit_cell(cell, slots, out);
-                }
-            }
-        }
     }
 }
 
@@ -683,6 +576,7 @@ fn emit_cell(cell: &Cell, slots: &mut Slots, out: &mut Vec<Record>) {
         XStart::None => 0,
         XStart::Consume => slots.consume_x(),
         XStart::Peek => slots.x_start,
+        XStart::Step => slots.step_x(),
     };
 
     out.push(Record {

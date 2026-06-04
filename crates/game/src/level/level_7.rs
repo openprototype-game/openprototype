@@ -3,7 +3,7 @@
 //! validated byte-for-byte against the running game (seed `0x3e94` reproduces the
 //! GET-READY capture). See `reference/formats/level-layout.md`.
 
-use super::slot::{Emitter, Insert, PostOp, Step, rand, step};
+use super::slot::{Cell, Emitter, Insert, PostOp, Step, XStart, rand, step};
 
 /// The foreground depth the landmark `Once` emitters hardcode (`0xfa`).
 const FOREGROUND: u16 = 0xfa;
@@ -48,33 +48,44 @@ fn once_4357() -> Emitter {
 
 // Fixed `0x4959` landmark blocks (no PRNG). The lead x is x_start alone (no step).
 
+fn lead_4959(y: u16) -> Cell {
+    Cell {
+        x_base: 0,
+        x_start: XStart::Consume,
+        sprite: 0x4959,
+        depth: 0xaf0,
+        y,
+    }
+}
+
+fn tail_4959(x_base: u16, y: u16) -> Cell {
+    Cell {
+        x_base,
+        x_start: XStart::None,
+        sprite: 0x4959,
+        depth: 0xaf0,
+        y,
+    }
+}
+
 fn fixed_4959_1() -> Emitter {
     Emitter::Fixed {
-        lead_step: false,
-        lead_sprite: 0x4959,
-        lead_depth: 0xaf0,
-        lead_y: 0x7d,
-        rest: Vec::new(),
+        repeat: None,
+        cells: vec![lead_4959(0x7d)],
     }
 }
 
 fn fixed_4959_2() -> Emitter {
     Emitter::Fixed {
-        lead_step: false,
-        lead_sprite: 0x4959,
-        lead_depth: 0xaf0,
-        lead_y: 0x7b,
-        rest: vec![(0x28, 0x4959, 0xaf0, 0x7e)],
+        repeat: None,
+        cells: vec![lead_4959(0x7b), tail_4959(0x28, 0x7e)],
     }
 }
 
 fn fixed_4959_3() -> Emitter {
     Emitter::Fixed {
-        lead_step: false,
-        lead_sprite: 0x4959,
-        lead_depth: 0xaf0,
-        lead_y: 0x7d,
-        rest: vec![(0, 0x4959, 0xaf0, 0x81), (0, 0x4959, 0xaf0, 0x83)],
+        repeat: None,
+        cells: vec![lead_4959(0x7d), tail_4959(0, 0x81), tail_4959(0, 0x83)],
     }
 }
 

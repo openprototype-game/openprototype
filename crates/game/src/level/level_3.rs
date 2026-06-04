@@ -3,7 +3,7 @@
 //! validated byte-for-byte against the running game (seed `0x1a94` reproduces
 //! the GET-READY capture). See `reference/formats/level-layout.md`.
 
-use super::slot::{Emitter, Overwrite, PostOp, Step, rand, step};
+use super::slot::{Cell, Emitter, Fill, Overwrite, PostOp, Step, XStart, rand, step};
 
 /// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
 /// table at `cs:[dac5..dad5]`.
@@ -24,34 +24,40 @@ fn once(sprite: u16, y_base: u16) -> Emitter {
 }
 
 fn single_56b6(count_mod: u16, count_base: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(count_mod, count_base),
-        sprite: 0x56b6,
-        depth: DEPTHS[2],
         y: rand(7, 0x57),
+        fill: Fill::Baked {
+            sprite: 0x56b6,
+            depth: DEPTHS[2],
+        },
     }
 }
 
 fn single_5928(count_mod: u16, count_base: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(count_mod, count_base),
-        sprite: 0x5928,
-        depth: DEPTHS[6],
         y: rand(7, 0x6a),
+        fill: Fill::Baked {
+            sprite: 0x5928,
+            depth: DEPTHS[6],
+        },
     }
 }
 
 fn s123de(count_mod: u16, count_base: u16) -> Emitter {
-    Emitter::SlotSingle {
+    Emitter::Steps {
         count: rand(count_mod, count_base),
         y: rand(0xe, 9),
+        fill: Fill::Slots,
     }
 }
 
 fn s12434(count_mod: u16, count_base: u16) -> Emitter {
-    Emitter::SlotSingle {
+    Emitter::Steps {
         count: rand(count_mod, count_base),
         y: rand(0xe, 0x17),
+        fill: Fill::Slots,
     }
 }
 
@@ -77,13 +83,40 @@ fn grid12367(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
 }
 
 fn fixed1248a(count: u16) -> Emitter {
-    Emitter::FixedRun {
-        sprite: 0x54d6,
-        depth: DEPTHS[1],
-        y_lead: 0x5e,
-        mid: (0x32, 0x5f),
-        run: (0xf, 0x60),
-        count,
+    let sprite = 0x54d6;
+    let depth = DEPTHS[1];
+
+    // A stepped lead, a mid record, then `count` identical trailing records.
+    let mut cells = vec![
+        Cell {
+            x_base: 0,
+            x_start: XStart::Step,
+            sprite,
+            depth,
+            y: 0x5e,
+        },
+        Cell {
+            x_base: 0x32,
+            x_start: XStart::None,
+            sprite,
+            depth,
+            y: 0x5f,
+        },
+    ];
+
+    for _ in 0..count {
+        cells.push(Cell {
+            x_base: 0xf,
+            x_start: XStart::None,
+            sprite,
+            depth,
+            y: 0x60,
+        });
+    }
+
+    Emitter::Fixed {
+        repeat: None,
+        cells,
     }
 }
 

@@ -3,7 +3,7 @@
 //! running game (seed `0x2d93` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
-use super::slot::{Emitter, Step, rand, step};
+use super::slot::{Cell, Emitter, Fill, RowStyle, Step, XStart, rand, step};
 
 // Per-sprite-type depth (parallax layer), read by the original from runtime
 // slots `cs:[bd9e..bdae]`. Two sprites share `D_3C4E`.
@@ -50,74 +50,90 @@ fn once_382a() -> Emitter {
 // they place and, where two routines share a sprite, their y band.
 
 fn single_3a2c_a(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3a2c,
-        depth: D_3A2C_A,
         y: rand(9, 0xc),
+        fill: Fill::Baked {
+            sprite: 0x3a2c,
+            depth: D_3A2C_A,
+        },
     }
 }
 
 fn single_3a2c_b(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3a2c,
-        depth: D_3A2C_B,
         y: rand(6, 0x54),
+        fill: Fill::Baked {
+            sprite: 0x3a2c,
+            depth: D_3A2C_B,
+        },
     }
 }
 
 fn single_3ac2(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3ac2,
-        depth: D_3AC2,
         y: rand(3, 0x5a),
+        fill: Fill::Baked {
+            sprite: 0x3ac2,
+            depth: D_3AC2,
+        },
     }
 }
 
 fn single_3c84(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3c84,
-        depth: D_3C4E,
         y: rand(0xb, 0x1e),
+        fill: Fill::Baked {
+            sprite: 0x3c84,
+            depth: D_3C4E,
+        },
     }
 }
 
 fn single_3c4e_2(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3c4e,
-        depth: D_3C4E,
         y: rand(0xe, 0x29),
+        fill: Fill::Baked {
+            sprite: 0x3c4e,
+            depth: D_3C4E,
+        },
     }
 }
 
 fn single_3c84_2(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3c84,
-        depth: D_3C4E,
         y: rand(0xe, 0x37),
+        fill: Fill::Baked {
+            sprite: 0x3c84,
+            depth: D_3C4E,
+        },
     }
 }
 
 fn single_3d46_a(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3d46,
-        depth: D_3D46_A,
         y: rand(7, 0x49),
+        fill: Fill::Baked {
+            sprite: 0x3d46,
+            depth: D_3D46_A,
+        },
     }
 }
 
 fn single_3d46_b(ax: u16, bx: u16) -> Emitter {
-    Emitter::Single {
+    Emitter::Steps {
         count: rand(ax, bx),
-        sprite: 0x3d46,
-        depth: D_3D46_B,
         y: rand(3, 0x50),
+        fill: Fill::Baked {
+            sprite: 0x3d46,
+            depth: D_3D46_B,
+        },
     }
 }
 
@@ -129,6 +145,7 @@ fn row_3a2c(ax: u16, bx: u16) -> Emitter {
         sprite: 0x3a2c,
         depth: D_3A2C_A,
         y: rand(9, 0xc),
+        style: RowStyle::Stepped,
     }
 }
 
@@ -138,6 +155,7 @@ fn row_3c84(ax: u16, bx: u16) -> Emitter {
         sprite: 0x3c84,
         depth: D_3C4E,
         y: rand(0xb, 0x1e),
+        style: RowStyle::Stepped,
     }
 }
 
@@ -145,40 +163,55 @@ fn row_3c84(ax: u16, bx: u16) -> Emitter {
 /// them. Each row emits two `0x3cf0` records (lead x = x_start + x_step, tail
 /// x = 0).
 fn grid_3cf0(ax: u16, bx: u16) -> Emitter {
-    Emitter::BranchRows {
+    Emitter::PairedRows {
         rows: rand(ax, bx),
         sprite: 0x3cf0,
         depth: D_3CF0,
-        if_one: (0x47, 0x48),
-        otherwise: (0x45, 0x46),
+        pair_when_one: (0x47, 0x48),
+        pair_otherwise: (0x45, 0x46),
     }
 }
 
 /// `0x10119`: one `0x3b70` record, x = x_start + x_step, fixed y, no draws.
 fn fixed_3b70() -> Emitter {
     Emitter::Fixed {
-        lead_step: true,
-        lead_sprite: 0x3b70,
-        lead_depth: D_3B70,
-        lead_y: 0x53,
-        rest: Vec::new(),
+        repeat: None,
+        cells: vec![Cell {
+            x_base: 0,
+            x_start: XStart::Step,
+            sprite: 0x3b70,
+            depth: D_3B70,
+            y: 0x53,
+        }],
     }
 }
 
 /// `0x10146`: the post-amble — a `0x426e` landmark (x = x_start + x_step) then
 /// five fixed `0x3764` background records with stepping y.
 fn tail_426e() -> Emitter {
+    let bg = |x_base: u16, y: u16| Cell {
+        x_base,
+        x_start: XStart::None,
+        sprite: 0x3764,
+        depth: FOREGROUND,
+        y,
+    };
+
     Emitter::Fixed {
-        lead_step: true,
-        lead_sprite: 0x426e,
-        lead_depth: D_426E,
-        lead_y: 0x5d,
-        rest: vec![
-            (0x96, 0x3764, FOREGROUND, 0x5e),
-            (0, 0x3764, FOREGROUND, 0x5f),
-            (0, 0x3764, FOREGROUND, 0x60),
-            (0, 0x3764, FOREGROUND, 0x61),
-            (0, 0x3764, FOREGROUND, 0x62),
+        repeat: None,
+        cells: vec![
+            Cell {
+                x_base: 0,
+                x_start: XStart::Step,
+                sprite: 0x426e,
+                depth: D_426E,
+                y: 0x5d,
+            },
+            bg(0x96, 0x5e),
+            bg(0, 0x5f),
+            bg(0, 0x60),
+            bg(0, 0x61),
+            bg(0, 0x62),
         ],
     }
 }
