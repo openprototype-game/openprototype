@@ -13,8 +13,8 @@
 //! (the WAD's split-screen line compare did not reconcile cleanly); only
 //! [`PANEL_TOP`] is provisional, the relative offsets are exact.
 
-use openprototype_core::GameState;
 use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::{GameState, Secondary};
 use prototype_formats::{Dimensions, IndexedImage};
 
 use crate::assets::HudAssets;
@@ -42,6 +42,18 @@ const NUMBER_DIGIT: Dimensions = Dimensions {
     height: 10,
 };
 
+/// Weapon charge bars: four stacked 32x4 gauges. `di` `0x172`, then `+0x230` per
+/// weapon. Each shows a 32-px window into its 64-px gradient row, slid right by
+/// the level (stored as eighths: `0..=4` -> `0,8,16,24,31` source columns).
+const BAR_BASE_DI: i32 = 0x172;
+const BAR_PITCH_DI: i32 = 0x230;
+const BAR_SIZE: Dimensions = Dimensions {
+    width: 32,
+    height: 4,
+};
+const BAR_LEVEL_STEP: usize = 8;
+const BAR_MAX_OFFSET: usize = 31;
+
 /// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`.
 fn di_to_screen(di: i32) -> (i32, i32) {
     ((di % HUD_STRIDE) * 4, PANEL_TOP + di / HUD_STRIDE)
@@ -52,6 +64,37 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) 
     frame.blit(&assets.panel, 0, PANEL_TOP);
     draw_score(state.score, assets, frame);
     draw_lives(state.lives, assets, frame);
+    draw_weapon_bars(state, assets, frame);
+}
+
+/// Draw the four weapon charge bars, stacked, each filled to its level.
+fn draw_weapon_bars(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) {
+    for (index, &secondary) in Secondary::ALL.iter().enumerate() {
+        let level = state.level(secondary).get() as usize;
+        let offset = (level * BAR_LEVEL_STEP).min(BAR_MAX_OFFSET);
+        let bar = bar_window(&assets.weapon_bars, index, offset);
+        let (x, y) = di_to_screen(BAR_BASE_DI + index as i32 * BAR_PITCH_DI);
+
+        frame.blit(&bar, x, y);
+    }
+}
+
+/// Slice the visible 32x4 window for `weapon`'s bar from the gradient sheet,
+/// starting `offset` columns in. The sheet is 64 wide with four rows per weapon.
+fn bar_window(sheet: &IndexedImage, weapon: usize, offset: usize) -> IndexedImage {
+    let sheet_width = sheet.size.width as usize;
+    let mut pixels = Vec::with_capacity(BAR_SIZE.pixel_count());
+
+    for row in 0..BAR_SIZE.height as usize {
+        let source_row = weapon * BAR_SIZE.height as usize + row;
+
+        for column in 0..BAR_SIZE.width as usize {
+            let source_column = (offset + column).min(sheet_width - 1);
+            pixels.push(sheet.pixels[source_row * sheet_width + source_column]);
+        }
+    }
+
+    IndexedImage::new(BAR_SIZE, pixels).expect("bar window matches its dimensions")
 }
 
 /// Draw the six-digit score, most significant digit first, with leading zeros.

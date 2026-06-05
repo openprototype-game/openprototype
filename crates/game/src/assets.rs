@@ -92,6 +92,9 @@ pub struct HudAssets {
     pub score_digits: IndexedImage,
     /// The count numerals 1..=9 (lives and similar), 12x10 each, stacked.
     pub number_digits: IndexedImage,
+    /// The four weapon charge bars as 64-wide gradient rows (4 rows per weapon);
+    /// a 32-px window into each slides right with the weapon's level.
+    pub weapon_bars: IndexedImage,
 }
 
 const PANEL_SIZE: Dimensions = Dimensions {
@@ -106,6 +109,10 @@ const NUMBER_DIGITS_SIZE: Dimensions = Dimensions {
     width: 12,
     height: 90,
 };
+const WEAPON_BARS_SIZE: Dimensions = Dimensions {
+    width: 64,
+    height: 16,
+};
 
 /// Load and decode the in-game HUD assets from the disc image.
 ///
@@ -118,12 +125,14 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
     let panel = decode_raw(disc, "PANEL.RAW", PANEL_SIZE)?;
     let score_digits = decode_raw(disc, "SCORE.RAW", SCORE_DIGITS_SIZE)?;
     let number_digits = decode_raw(disc, "NUMBERS.RAW", NUMBER_DIGITS_SIZE)?;
+    let weapon_bars = decode_raw(disc, "BALKEN.RAW", WEAPON_BARS_SIZE)?;
 
     Ok(HudAssets {
         palette,
         panel,
         score_digits,
         number_digits,
+        weapon_bars,
     })
 }
 
