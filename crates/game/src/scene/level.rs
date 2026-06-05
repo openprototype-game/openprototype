@@ -36,13 +36,15 @@ const BACKGROUND_TOP: i32 = 0;
 /// How long each pod animation frame holds while the pod opens and settles.
 const POD_FRAME_DURATION: Duration = Duration::from_millis(70);
 
-/// The overlay's default x, from the position table at `cs:0x9128`. A starting
-/// guess; pinned live with A/D since the table's coordinates don't map cleanly.
-const OVERLAY_X: i32 = 235;
+/// The overlay's x. Pinned live against footage; it lands on the weapon pod's
+/// column (the pod draws at screen x 252, `di` 0x3f), so the cut-off weapon top
+/// sits directly above its pod. Still nudgeable with A/D.
+const OVERLAY_X: i32 = 251;
 
-/// The overlay's default top, as rows above [`panel_top`](LevelScene::panel_top):
-/// it clips over the panel's top edge. Pinned live with W/S.
-const OVERLAY_OFFSET_Y: i32 = -8;
+/// The overlay's top, as rows above [`panel_top`](LevelScene::panel_top). Pinned
+/// live: `-7` is the overlay's own height, so its bottom edge meets the panel's
+/// top row and the cut-off top extends up from there. Still nudgeable with W/S.
+const OVERLAY_OFFSET_Y: i32 = -7;
 
 /// Per-frame slide of the overlay as it settles, `(dx, dy)` relative to the
 /// settled position, indexed by the pod animation frame. From `cs:0x9128`: it

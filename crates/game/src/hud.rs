@@ -21,9 +21,10 @@ use crate::assets::HudAssets;
 /// Mode X plane-row stride: 320 px / 4 planes.
 const HUD_STRIDE: i32 = 80;
 
-/// Default screen row of the panel's top edge: bottom-aligned in the 320x240
-/// frame (`240 - 32`). Provisional pending live confirmation against footage;
-/// the level scene can nudge it.
+/// Screen row of the panel's top edge: `PANEL.RAW` (320x32) bottom-aligned in
+/// the 320x240 frame (`240 - 32`). Confirmed live against footage. The CRTC
+/// split-screen freezes a HUD band at the bottom of the screen (line compare
+/// ~191 of the 480 scanlines); `PANEL.RAW` is the bottom 32 rows of that band.
 pub const PANEL_TOP: i32 = 208;
 
 /// Score readout: six digits, leading zeros. `di` `0x325`, `+4` (16 px) per digit.
