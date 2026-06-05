@@ -301,33 +301,63 @@ fn main() -> Result<()> {
     }
 }
 
-/// Compose the HUD over a sample game state and write it to a PNG.
+/// Render the HUD panel once per firing weapon, stacked, so all five weapon
+/// pods can be inspected at once. Each row crops to the panel; the level runs a
+/// double-scanned 320x200 mode shown with square pixels, so each is stretched to
+/// 4:3 (a 320x40 panel crop becomes 640x96).
 fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
     let disc = source.context("the hud command needs --cue to read its assets")?;
     let assets = openprototype::assets::load_hud_assets(disc).context("loading HUD assets")?;
 
-    let state = GameState {
-        score: 13477,
-        lives: Lives::new(3),
-        smart_bombs: SmartBombs::new(2),
-        weapons: [
-            WeaponLevel::new(3),
-            WeaponLevel::new(1),
-            WeaponLevel::new(0),
-            WeaponLevel::new(2),
-        ],
-        selected: Secondary::One,
-        invincible_ticks: 0,
-    };
+    // (selected, level) per row; firing_weapon() resolves to the minigun when the
+    // selected slot is empty, else that secondary, so this walks all five.
+    let firings: [(Secondary, u8); 5] = [
+        (Secondary::One, 0),
+        (Secondary::One, 4),
+        (Secondary::Two, 4),
+        (Secondary::Three, 4),
+        (Secondary::Four, 4),
+    ];
 
-    let mut frame = Framebuffer::new(Dimensions::new(320, 200), assets.palette.clone());
-    openprototype::hud::draw_hud(&state, &assets, &mut frame);
+    const CROP_TOP: u32 = 160;
+    const CROP_HEIGHT: u32 = 40;
+    const ROW_WIDTH: u32 = 640;
+    const ROW_HEIGHT: u32 = 96;
+    const GAP: u32 = 6;
 
-    // The level runs a double-scanned 320x200 mode shown with square pixels, so
-    // present it stretched to 4:3 (here 640x480) rather than the squished native.
-    let native = to_png(&frame.image, &frame.palette);
-    let square = image::imageops::resize(&native, 640, 480, image::imageops::FilterType::Nearest);
-    save(&square, output)
+    let mut rows = Vec::with_capacity(firings.len());
+    for (selected, level) in firings {
+        let mut weapons = [WeaponLevel::new(0); 4];
+        weapons[selected.index()] = WeaponLevel::new(level);
+        let state = GameState {
+            score: 13477,
+            lives: Lives::new(3),
+            smart_bombs: SmartBombs::new(2),
+            weapons,
+            selected,
+            invincible_ticks: 0,
+        };
+
+        let mut frame = Framebuffer::new(Dimensions::new(320, 200), assets.palette.clone());
+        openprototype::hud::draw_hud(&state, &assets, &mut frame);
+        let native = to_png(&frame.image, &frame.palette);
+        let panel = image::imageops::crop_imm(&native, 0, CROP_TOP, 320, CROP_HEIGHT).to_image();
+        rows.push(image::imageops::resize(
+            &panel,
+            ROW_WIDTH,
+            ROW_HEIGHT,
+            image::imageops::FilterType::Nearest,
+        ));
+    }
+
+    let total_height = ROW_HEIGHT * rows.len() as u32 + GAP * (rows.len() as u32 - 1);
+    let mut canvas = image::RgbImage::from_pixel(ROW_WIDTH, total_height, image::Rgb([20, 20, 25]));
+    for (index, row) in rows.iter().enumerate() {
+        let y = index as u32 * (ROW_HEIGHT + GAP);
+        image::imageops::overlay(&mut canvas, row, 0, i64::from(y));
+    }
+
+    save(&canvas, output)
 }
 
 /// Write mono 8-bit unsigned PCM as a WAV file (44-byte header + samples).

@@ -100,6 +100,10 @@ pub struct HudAssets {
     /// The weapon-selector lights, 12 wide: a 28-row base of four unselected
     /// slots, then four 7-row highlights, one per selected slot.
     pub selector_lights: IndexedImage,
+    /// The weapon pods drawn in the panel's right recess: 5 weapons (columns) by
+    /// 6 animation frames (rows), 56x32 each; the bottom row is the settled
+    /// state. EXTRAS.RAW, 280x192.
+    pub weapon_pods: IndexedImage,
 }
 
 const PANEL_SIZE: Dimensions = Dimensions {
@@ -126,6 +130,10 @@ const SELECTOR_LIGHTS_SIZE: Dimensions = Dimensions {
     width: 12,
     height: 56,
 };
+const WEAPON_PODS_SIZE: Dimensions = Dimensions {
+    width: 280,
+    height: 192,
+};
 
 /// Load and decode the in-game HUD assets from the disc image.
 ///
@@ -141,6 +149,7 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
     let weapon_bars = decode_raw(disc, "BALKEN.RAW", WEAPON_BARS_SIZE)?;
     let smart_frames = decode_raw(disc, "SMART.RAW", SMART_FRAMES_SIZE)?;
     let selector_lights = decode_raw(disc, "LIGHTS.RAW", SELECTOR_LIGHTS_SIZE)?;
+    let weapon_pods = decode_raw(disc, "EXTRAS.RAW", WEAPON_PODS_SIZE)?;
 
     Ok(HudAssets {
         palette,
@@ -150,6 +159,7 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
         weapon_bars,
         smart_frames,
         selector_lights,
+        weapon_pods,
     })
 }
 

@@ -14,7 +14,7 @@
 //! [`PANEL_TOP`] is provisional, the relative offsets are exact.
 
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::{GameState, Secondary};
+use openprototype_core::{GameState, Secondary, Weapon};
 use prototype_formats::{Dimensions, IndexedImage};
 
 use crate::assets::HudAssets;
@@ -73,6 +73,17 @@ const MARKER_SIZE: Dimensions = Dimensions {
     height: 7,
 };
 
+/// Weapon pod in the panel's right recess. The original copies one 56x32 cell
+/// out of the EXTRAS sheet (5 weapons across, 6 animation frames down) to panel
+/// `di` `0x3f` (screen x 252). The firing weapon picks the column; the bottom
+/// row (`5`) is the settled frame. The minigun's pod is the leftmost column.
+const POD_DI: i32 = 0x3f;
+const POD_SIZE: Dimensions = Dimensions {
+    width: 56,
+    height: 32,
+};
+const POD_SETTLED_FRAME: usize = 5;
+
 /// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`.
 fn di_to_screen(di: i32) -> (i32, i32) {
     ((di % HUD_STRIDE) * 4, PANEL_TOP + di / HUD_STRIDE)
@@ -86,6 +97,33 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) 
     draw_weapon_bars(state, assets, frame);
     draw_smart_bombs(state.smart_bombs.get(), assets, frame);
     draw_selector(state.selected, assets, frame);
+    draw_weapon_pod(state.firing_weapon(), assets, frame);
+}
+
+/// Draw the firing weapon's settled pod into the panel's right recess.
+fn draw_weapon_pod(firing: Weapon, assets: &HudAssets, frame: &mut Framebuffer) {
+    let column = firing as usize;
+    let pod = pod_cell(&assets.weapon_pods, column, POD_SETTLED_FRAME);
+    let (x, y) = di_to_screen(POD_DI);
+
+    frame.blit(&pod, x, y);
+}
+
+/// Slice one 56x32 pod cell (weapon `column`, animation `row`) from the EXTRAS
+/// sheet (which is `5 * 56` wide).
+fn pod_cell(sheet: &IndexedImage, column: usize, row: usize) -> IndexedImage {
+    let sheet_width = sheet.size.width as usize;
+    let cell_width = POD_SIZE.width as usize;
+    let x0 = column * cell_width;
+    let y0 = row * POD_SIZE.height as usize;
+    let mut pixels = Vec::with_capacity(POD_SIZE.pixel_count());
+
+    for dy in 0..POD_SIZE.height as usize {
+        let start = (y0 + dy) * sheet_width + x0;
+        pixels.extend_from_slice(&sheet.pixels[start..start + cell_width]);
+    }
+
+    IndexedImage::new(POD_SIZE, pixels).expect("pod cell matches its dimensions")
 }
 
 /// Draw the four selector lights, highlighting the active secondary's slot.
