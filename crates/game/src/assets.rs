@@ -112,8 +112,8 @@ pub struct HudAssets {
 /// overlay sprites.
 pub struct LevelAssets {
     /// The canyon background, de-interleaved from the four `.SPn` plane files to
-    /// one 320x320 still. The level scrolls a window of this; the test scene
-    /// shows a fixed window.
+    /// one 640x160 still. The canyon is wider than the screen; the level scrolls
+    /// a 320-wide window across it. The test scene shows a fixed window.
     pub background: IndexedImage,
     pub hud: HudAssets,
     /// The weapon-top overlay that clips over the panel, indexed by `Weapon`
@@ -163,13 +163,15 @@ const OVERLAY_BLOCK_FRAMES: usize = 8;
 /// Frame index of the settled position, which the slide deltas are relative to.
 const OVERLAY_SETTLED_FRAME: usize = 5;
 
-/// One Mode X plane: 80 bytes per row, 320 rows. The four `.SPn` files together
-/// make a 320x320 image.
+/// One Mode X plane: 160 bytes per row (every fourth column of a 640-wide row),
+/// 160 rows. The four `.SPn` files together make a 640x160 image: a canyon wider
+/// than the screen, scrolled horizontally, the playfield's 160 rows tall.
 const BACKGROUND_SIZE: Dimensions = Dimensions {
-    width: 320,
-    height: 320,
+    width: 640,
+    height: 160,
 };
-const SP_PLANE_LEN: usize = 80 * 320;
+const SP_PLANE_STRIDE: usize = 160;
+const SP_PLANE_LEN: usize = SP_PLANE_STRIDE * 160;
 
 const PANEL_SIZE: Dimensions = Dimensions {
     width: 320,
@@ -338,10 +340,10 @@ fn assemble_overlay(sheet: &SpriteSheet, first: usize, cells: usize) -> OverlayS
     }
 }
 
-/// De-interleave `CANYON.SP1..4` into one 320x320 still.
+/// De-interleave `CANYON.SP1..4` into one 640x160 still.
 ///
 /// Each `.SPn` file is one Mode X plane holding every fourth column, so pixel
-/// `(x, y)` lives in plane `x % 4` at byte `y * 80 + x / 4`.
+/// `(x, y)` lives in plane `x % 4` at byte `y * 160 + x / 4`.
 fn load_canyon_background(disc: &DiscImage) -> Result<IndexedImage> {
     let mut planes = Vec::with_capacity(4);
 
@@ -364,7 +366,7 @@ fn load_canyon_background(disc: &DiscImage) -> Result<IndexedImage> {
 
     for y in 0..height {
         for x in 0..width {
-            pixels[y * width + x] = planes[x & 3][y * 80 + (x >> 2)];
+            pixels[y * width + x] = planes[x & 3][y * SP_PLANE_STRIDE + (x >> 2)];
         }
     }
 
