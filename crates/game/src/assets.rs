@@ -106,6 +106,24 @@ pub struct HudAssets {
     pub weapon_pods: IndexedImage,
 }
 
+/// Everything the in-game level scene needs to render: the level's scrolling
+/// canyon background (decoded to one still here) and the HUD.
+pub struct LevelAssets {
+    /// The canyon background, de-interleaved from the four `.SPn` plane files to
+    /// one 320x320 still. The level scrolls a window of this; the test scene
+    /// shows a fixed window.
+    pub background: IndexedImage,
+    pub hud: HudAssets,
+}
+
+/// One Mode X plane: 80 bytes per row, 320 rows. The four `.SPn` files together
+/// make a 320x320 image.
+const BACKGROUND_SIZE: Dimensions = Dimensions {
+    width: 320,
+    height: 320,
+};
+const SP_PLANE_LEN: usize = 80 * 320;
+
 const PANEL_SIZE: Dimensions = Dimensions {
     width: 320,
     height: 32,
@@ -161,6 +179,47 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
         selector_lights,
         weapon_pods,
     })
+}
+
+/// Load and decode the level scene's assets: the canyon background and the HUD.
+pub fn load_level_assets(disc: &DiscImage) -> Result<LevelAssets> {
+    let background = load_canyon_background(disc)?;
+    let hud = load_hud_assets(disc)?;
+
+    Ok(LevelAssets { background, hud })
+}
+
+/// De-interleave `CANYON.SP1..4` into one 320x320 still.
+///
+/// Each `.SPn` file is one Mode X plane holding every fourth column, so pixel
+/// `(x, y)` lives in plane `x % 4` at byte `y * 80 + x / 4`.
+fn load_canyon_background(disc: &DiscImage) -> Result<IndexedImage> {
+    let mut planes = Vec::with_capacity(4);
+
+    for index in 1..=4 {
+        let name = format!("CANYON.SP{index}");
+        let bytes = disc
+            .read(&name)
+            .with_context(|| format!("reading {name}"))?;
+
+        if bytes.len() < SP_PLANE_LEN {
+            anyhow::bail!("{name} is {} bytes, expected {SP_PLANE_LEN}", bytes.len());
+        }
+
+        planes.push(bytes);
+    }
+
+    let width = BACKGROUND_SIZE.width as usize;
+    let height = BACKGROUND_SIZE.height as usize;
+    let mut pixels = vec![0u8; width * height];
+
+    for y in 0..height {
+        for x in 0..width {
+            pixels[y * width + x] = planes[x & 3][y * 80 + (x >> 2)];
+        }
+    }
+
+    Ok(IndexedImage::new(BACKGROUND_SIZE, pixels).expect("canyon still matches its dimensions"))
 }
 
 /// Read and decode a linear `.RAW` graphic of known dimensions from the disc.
