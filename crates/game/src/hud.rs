@@ -6,12 +6,11 @@
 //!
 //! Element positions are taken straight from the original's HUD draw routine
 //! (vaddr `0xde35`), which writes each element to a Mode X destination offset
-//! `di`. The screen is 320x200 logical (the level's VGA mode is double-scanned
-//! 320x200, displayed square as 320x240). A `di` maps to a screen pixel via the
-//! 80-byte Mode X plane stride: `x = (di % 80) * 4`, `y = di / 80`, offset down
-//! by the panel's top row. The panel's exact screen row is still being pinned
-//! (the WAD's split-screen line compare did not reconcile cleanly); only
-//! [`PANEL_TOP`] is provisional, the relative offsets are exact.
+//! `di`. The level runs in Mode X 320x240 (double-scanned to 480 lines, shown
+//! square as native 4:3). A `di` maps to a screen pixel via the 80-byte Mode X
+//! plane stride: `x = (di % 80) * 4`, `y = di / 80`, offset down by the panel's
+//! top row. The relative offsets are exact; the panel's top row is passed in by
+//! the caller (defaulting to [`PANEL_TOP`]) so the level scene can pin it live.
 
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::{GameState, Secondary, Weapon};
@@ -22,9 +21,10 @@ use crate::assets::HudAssets;
 /// Mode X plane-row stride: 320 px / 4 planes.
 const HUD_STRIDE: i32 = 80;
 
-/// Screen row of the panel's top edge. Provisional: bottom-aligned in the 320x200
-/// frame (`200 - 32`); the original's split-screen row is not yet pinned.
-const PANEL_TOP: i32 = 168;
+/// Default screen row of the panel's top edge: bottom-aligned in the 320x240
+/// frame (`240 - 32`). Provisional pending live confirmation against footage;
+/// the level scene can nudge it.
+pub const PANEL_TOP: i32 = 208;
 
 /// Score readout: six digits, leading zeros. `di` `0x325`, `+4` (16 px) per digit.
 const SCORE_DI: i32 = 0x325;
@@ -82,29 +82,46 @@ const POD_SIZE: Dimensions = Dimensions {
     width: 56,
     height: 32,
 };
-const POD_SETTLED_FRAME: usize = 5;
+pub const POD_SETTLED_FRAME: usize = 5;
 
-/// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`.
-fn di_to_screen(di: i32) -> (i32, i32) {
-    ((di % HUD_STRIDE) * 4, PANEL_TOP + di / HUD_STRIDE)
+/// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`,
+/// with the panel's top edge at `panel_top`.
+fn di_to_screen(di: i32, panel_top: i32) -> (i32, i32) {
+    ((di % HUD_STRIDE) * 4, panel_top + di / HUD_STRIDE)
 }
 
-/// Composite the HUD for `state` onto `frame`.
-pub fn draw_hud(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) {
-    frame.blit(&assets.panel, 0, PANEL_TOP);
-    draw_score(state.score, assets, frame);
-    draw_lives(state.lives.get(), assets, frame);
-    draw_weapon_bars(state, assets, frame);
-    draw_smart_bombs(state.smart_bombs.get(), assets, frame);
-    draw_selector(state.selected, assets, frame);
-    draw_weapon_pod(state.firing_weapon(), assets, frame);
+/// Composite the HUD for `state` onto `frame`, with the panel's top edge at
+/// `panel_top`. The weapon pod is drawn in its settled state; the level scene
+/// drives the open/settle animation with [`draw_weapon_pod`].
+pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
+    frame.blit(&assets.panel, 0, panel_top);
+    draw_score(state.score, assets, panel_top, frame);
+    draw_lives(state.lives.get(), assets, panel_top, frame);
+    draw_weapon_bars(state, assets, panel_top, frame);
+    draw_smart_bombs(state.smart_bombs.get(), assets, panel_top, frame);
+    draw_selector(state.selected, assets, panel_top, frame);
+    draw_weapon_pod(
+        state.firing_weapon(),
+        POD_SETTLED_FRAME,
+        assets,
+        panel_top,
+        frame,
+    );
 }
 
-/// Draw the firing weapon's settled pod into the panel's right recess.
-fn draw_weapon_pod(firing: Weapon, assets: &HudAssets, frame: &mut Framebuffer) {
+/// Draw the `firing` weapon's pod at animation frame `pod_frame` into the
+/// panel's right recess. Frame `0` is empty (hidden), [`POD_SETTLED_FRAME`] is
+/// the settled state; switching weapons plays `0` up to settled.
+pub fn draw_weapon_pod(
+    firing: Weapon,
+    pod_frame: usize,
+    assets: &HudAssets,
+    panel_top: i32,
+    frame: &mut Framebuffer,
+) {
     let column = firing as usize;
-    let pod = pod_cell(&assets.weapon_pods, column, POD_SETTLED_FRAME);
-    let (x, y) = di_to_screen(POD_DI);
+    let pod = pod_cell(&assets.weapon_pods, column, pod_frame);
+    let (x, y) = di_to_screen(POD_DI, panel_top);
 
     frame.blit(&pod, x, y);
 }
@@ -127,7 +144,7 @@ fn pod_cell(sheet: &IndexedImage, column: usize, row: usize) -> IndexedImage {
 }
 
 /// Draw the four selector lights, highlighting the active secondary's slot.
-fn draw_selector(selected: Secondary, assets: &HudAssets, frame: &mut Framebuffer) {
+fn draw_selector(selected: Secondary, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     let active = selected as usize;
 
     for slot in 0..MARKER_COUNT {
@@ -137,31 +154,36 @@ fn draw_selector(selected: Secondary, assets: &HudAssets, frame: &mut Framebuffe
             slot
         };
         let light = glyph(&assets.selector_lights, MARKER_SIZE, index);
-        let (x, y) = di_to_screen(MARKER_BASE_DI + slot as i32 * MARKER_PITCH_DI);
+        let (x, y) = di_to_screen(MARKER_BASE_DI + slot as i32 * MARKER_PITCH_DI, panel_top);
 
         frame.blit(&light, x, y);
     }
 }
 
 /// Draw the smart-bomb indicator for `count`, clamped to the four frames.
-fn draw_smart_bombs(count: u8, assets: &HudAssets, frame: &mut Framebuffer) {
+fn draw_smart_bombs(count: u8, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     let glyph = glyph(
         &assets.smart_frames,
         SMART_FRAME,
         count.min(SMART_MAX) as usize,
     );
-    let (x, y) = di_to_screen(SMART_DI);
+    let (x, y) = di_to_screen(SMART_DI, panel_top);
 
     frame.blit(&glyph, x, y);
 }
 
 /// Draw the four weapon charge bars, stacked, each filled to its level.
-fn draw_weapon_bars(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) {
+fn draw_weapon_bars(
+    state: &GameState,
+    assets: &HudAssets,
+    panel_top: i32,
+    frame: &mut Framebuffer,
+) {
     for (index, &secondary) in Secondary::ALL.iter().enumerate() {
         let level = state.level(secondary).get() as usize;
         let offset = (level * BAR_LEVEL_STEP).min(BAR_MAX_OFFSET);
         let bar = bar_window(&assets.weapon_bars, index, offset);
-        let (x, y) = di_to_screen(BAR_BASE_DI + index as i32 * BAR_PITCH_DI);
+        let (x, y) = di_to_screen(BAR_BASE_DI + index as i32 * BAR_PITCH_DI, panel_top);
 
         frame.blit(&bar, x, y);
     }
@@ -186,11 +208,11 @@ fn bar_window(sheet: &IndexedImage, weapon: usize, offset: usize) -> IndexedImag
 }
 
 /// Draw the six-digit score, most significant digit first, with leading zeros.
-fn draw_score(score: u32, assets: &HudAssets, frame: &mut Framebuffer) {
+fn draw_score(score: u32, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     for place in 0..SCORE_PLACES {
         let digit = (score / 10u32.pow(SCORE_PLACES - 1 - place) % 10) as usize;
         let glyph = glyph(&assets.score_digits, SCORE_DIGIT, digit);
-        let (x, y) = di_to_screen(SCORE_DI + place as i32 * SCORE_ADVANCE_DI);
+        let (x, y) = di_to_screen(SCORE_DI + place as i32 * SCORE_ADVANCE_DI, panel_top);
 
         frame.blit(&glyph, x, y);
     }
@@ -198,13 +220,13 @@ fn draw_score(score: u32, assets: &HudAssets, frame: &mut Framebuffer) {
 
 /// Draw the lives digit. The numeral sheet starts at 1, so a count of `n` draws
 /// glyph `n - 1`; zero lives draws nothing.
-fn draw_lives(lives: u8, assets: &HudAssets, frame: &mut Framebuffer) {
+fn draw_lives(lives: u8, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     if lives == 0 {
         return;
     }
 
     let glyph = glyph(&assets.number_digits, NUMBER_DIGIT, (lives - 1) as usize);
-    let (x, y) = di_to_screen(LIVES_DI);
+    let (x, y) = di_to_screen(LIVES_DI, panel_top);
 
     frame.blit(&glyph, x, y);
 }

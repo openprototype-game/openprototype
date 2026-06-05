@@ -302,9 +302,9 @@ fn main() -> Result<()> {
 }
 
 /// Render the HUD panel once per firing weapon, stacked, so all five weapon
-/// pods can be inspected at once. Each row crops to the panel; the level runs a
-/// double-scanned 320x200 mode shown with square pixels, so each is stretched to
-/// 4:3 (a 320x40 panel crop becomes 640x96).
+/// pods can be inspected at once. Each row crops to the panel; the level runs in
+/// Mode X 320x240, natively 4:3 with square pixels, so a 320x32 panel crop just
+/// scales 2x to 640x64 with no aspect correction.
 fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
     let disc = source.context("the hud command needs --cue to read its assets")?;
     let assets = openprototype::assets::load_hud_assets(disc).context("loading HUD assets")?;
@@ -319,10 +319,10 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
         (Secondary::Four, 4),
     ];
 
-    const CROP_TOP: u32 = 160;
-    const CROP_HEIGHT: u32 = 40;
+    const CROP_TOP: u32 = openprototype::hud::PANEL_TOP as u32;
+    const CROP_HEIGHT: u32 = 32;
     const ROW_WIDTH: u32 = 640;
-    const ROW_HEIGHT: u32 = 96;
+    const ROW_HEIGHT: u32 = 64;
     const GAP: u32 = 6;
 
     let mut rows = Vec::with_capacity(firings.len());
@@ -338,8 +338,8 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
             invincible_ticks: 0,
         };
 
-        let mut frame = Framebuffer::new(Dimensions::new(320, 200), assets.palette.clone());
-        openprototype::hud::draw_hud(&state, &assets, &mut frame);
+        let mut frame = Framebuffer::new(Dimensions::new(320, 240), assets.palette.clone());
+        openprototype::hud::draw_hud(&state, &assets, openprototype::hud::PANEL_TOP, &mut frame);
         let native = to_png(&frame.image, &frame.palette);
         let panel = image::imageops::crop_imm(&native, 0, CROP_TOP, 320, CROP_HEIGHT).to_image();
         rows.push(image::imageops::resize(
