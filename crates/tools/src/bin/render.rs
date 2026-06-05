@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage, Rgba as ImageRgba, RgbaImage};
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::{GameState, Secondary, Weapon, WeaponLevel};
+use openprototype_core::{GameState, Lives, Secondary, SmartBombs, WeaponLevel};
 use openprototype_tools::read_asset;
 use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
@@ -308,16 +308,16 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
 
     let state = GameState {
         score: 13477,
-        lives: 3,
-        smart_bombs: 2,
+        lives: Lives::new(3),
+        smart_bombs: SmartBombs::new(2),
         weapons: [
             WeaponLevel::new(3),
             WeaponLevel::new(1),
             WeaponLevel::new(0),
             WeaponLevel::new(2),
         ],
-        current: Weapon::Minigun,
         selected: Secondary::One,
+        invincible_ticks: 0,
     };
 
     let mut frame = Framebuffer::new(Dimensions::new(320, 200), assets.palette.clone());

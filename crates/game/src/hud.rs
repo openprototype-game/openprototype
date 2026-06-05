@@ -82,9 +82,9 @@ fn di_to_screen(di: i32) -> (i32, i32) {
 pub fn draw_hud(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) {
     frame.blit(&assets.panel, 0, PANEL_TOP);
     draw_score(state.score, assets, frame);
-    draw_lives(state.lives, assets, frame);
+    draw_lives(state.lives.get(), assets, frame);
     draw_weapon_bars(state, assets, frame);
-    draw_smart_bombs(state.smart_bombs, assets, frame);
+    draw_smart_bombs(state.smart_bombs.get(), assets, frame);
     draw_selector(state.selected, assets, frame);
 }
 

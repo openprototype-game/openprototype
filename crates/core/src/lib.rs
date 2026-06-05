@@ -10,13 +10,17 @@
 //! [`AudioCommand`]: audio::AudioCommand
 
 pub mod audio;
+pub mod bounded;
 pub mod framebuffer;
 pub mod game;
 pub mod game_state;
 pub mod input;
 
 pub use audio::AudioCommand;
+pub use bounded::BoundedU8;
 pub use framebuffer::Framebuffer;
 pub use game::{Game, StepOutput};
-pub use game_state::{GameState, Secondary, Weapon, WeaponLevel};
+pub use game_state::{
+    GameState, HitOutcome, Lives, Secondary, Severity, SmartBombs, Weapon, WeaponLevel,
+};
 pub use input::KeyEvent;
