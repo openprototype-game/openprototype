@@ -119,6 +119,10 @@ pub struct LevelAssets {
     /// The weapon-top overlay that clips over the panel, indexed by `Weapon`
     /// (`0` minigun ..= `4` secondary 4). Each is the firing weapon's cut-off top.
     pub overlays: [OverlaySprite; WEAPON_COUNT],
+    /// The overlay's per-frame slide as it settles, `(dx, dy)` relative to its
+    /// settled position, indexed by `Weapon` then animation frame. Each weapon
+    /// has its own profile (some snap, some kick sideways).
+    pub overlay_slide: [[(i32, i32); OVERLAY_FRAMES]; WEAPON_COUNT],
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -130,6 +134,10 @@ pub struct OverlaySprite {
 
 /// The five firing weapons: the minigun and the four secondaries.
 const WEAPON_COUNT: usize = 5;
+
+/// Frames in a weapon's pod/overlay open-and-settle animation (`0` hidden ..=
+/// `5` settled).
+pub const OVERLAY_FRAMES: usize = 6;
 
 /// The weapon-top overlay sprites as `(catalog index, cell count)`, indexed by
 /// `Weapon`. Read from the canyon WAD's descriptor table at `cs:0x31d0`. The
@@ -145,6 +153,15 @@ const OVERLAY_CELLS: [(usize, usize); WEAPON_COUNT] = [
 
 /// Width of one Mode X catalog cell, in pixels.
 const CELL_WIDTH: usize = 32;
+
+/// File offset of the overlay position table in `LEVEL_1.WAD` (`cs:0x9128`, with
+/// `file = cs + 0x29F0`). Per weapon: a block of [`OVERLAY_BLOCK_FRAMES`] `(x, y)`
+/// `u16` positions; the animation only uses the first [`OVERLAY_FRAMES`].
+const OVERLAY_POSITION_TABLE: usize = 0x9128 + 0x29F0;
+/// Positions stored per weapon block; frames 6 and 7 are unused padding.
+const OVERLAY_BLOCK_FRAMES: usize = 8;
+/// Frame index of the settled position, which the slide deltas are relative to.
+const OVERLAY_SETTLED_FRAME: usize = 5;
 
 /// One Mode X plane: 80 bytes per row, 320 rows. The four `.SPn` files together
 /// make a 320x320 image.
@@ -212,24 +229,27 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
 }
 
 /// Load and decode the level scene's assets: the canyon background, the HUD, and
-/// the weapon overlays.
+/// the weapon overlays with their per-weapon slide tables.
 pub fn load_level_assets(disc: &DiscImage) -> Result<LevelAssets> {
     let background = load_canyon_background(disc)?;
     let hud = load_hud_assets(disc)?;
-    let overlays = load_overlays(disc)?;
+
+    let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
+    let wad = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
+    let overlays = load_overlays(&out_bin, &wad)?;
+    let overlay_slide = read_overlay_slide(&wad)?;
 
     Ok(LevelAssets {
         background,
         hud,
         overlays,
+        overlay_slide,
     })
 }
 
 /// Decode the canyon BIN catalog and assemble the five weapon overlays.
-fn load_overlays(disc: &DiscImage) -> Result<[OverlaySprite; WEAPON_COUNT]> {
-    let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
-    let wad = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
-    let sheet = decode_banked(&out_bin, &wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
+fn load_overlays(out_bin: &[u8], wad: &[u8]) -> Result<[OverlaySprite; WEAPON_COUNT]> {
+    let sheet = decode_banked(out_bin, wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
 
     let needed = OVERLAY_CELLS
         .iter()
@@ -247,6 +267,36 @@ fn load_overlays(disc: &DiscImage) -> Result<[OverlaySprite; WEAPON_COUNT]> {
     Ok(std::array::from_fn(|index| {
         let (first, cells) = OVERLAY_CELLS[index];
         assemble_overlay(&sheet, first, cells)
+    }))
+}
+
+/// Read each weapon's overlay slide from the WAD's position table, as `(dx, dy)`
+/// per frame relative to the settled frame. Each weapon's profile differs, so
+/// this is read rather than assumed.
+fn read_overlay_slide(wad: &[u8]) -> Result<[[(i32, i32); OVERLAY_FRAMES]; WEAPON_COUNT]> {
+    let table_end = OVERLAY_POSITION_TABLE + WEAPON_COUNT * OVERLAY_BLOCK_FRAMES * 4;
+
+    if wad.len() < table_end {
+        anyhow::bail!(
+            "LEVEL_1.WAD is {} bytes, the overlay position table needs {table_end}",
+            wad.len()
+        );
+    }
+
+    let read_xy = |offset: usize| -> (i32, i32) {
+        let x = u16::from_le_bytes([wad[offset], wad[offset + 1]]);
+        let y = u16::from_le_bytes([wad[offset + 2], wad[offset + 3]]);
+        (i32::from(x), i32::from(y))
+    };
+
+    Ok(std::array::from_fn(|weapon| {
+        let block = OVERLAY_POSITION_TABLE + weapon * OVERLAY_BLOCK_FRAMES * 4;
+        let (settled_x, settled_y) = read_xy(block + OVERLAY_SETTLED_FRAME * 4);
+
+        std::array::from_fn(|frame| {
+            let (x, y) = read_xy(block + frame * 4);
+            (x - settled_x, y - settled_y)
+        })
     }))
 }
 
@@ -491,6 +541,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             size: Dimensions::new(1, 1),
             pixels: vec![None],
         }),
+        overlay_slide: [[(0, 0); OVERLAY_FRAMES]; WEAPON_COUNT],
     }
 }
 

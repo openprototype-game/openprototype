@@ -34,6 +34,12 @@ const SCREEN: Dimensions = Dimensions {
 const BACKGROUND_TOP: i32 = 0;
 
 /// How long each pod animation frame holds while the pod opens and settles.
+///
+/// TODO: 70ms is an unverified placeholder, picked so the animation is visible
+/// during dev. The faithful rate is not yet traced: it depends on the main
+/// loop's frame rate (Mode X 320x240 double-scanned to 480 lines is 60Hz if the
+/// loop is vsync-locked) and the divider on the anim counter (`cs:0x2699`). Pin
+/// it with a write-breakpoint on the counter, counting vsyncs between steps.
 const POD_FRAME_DURATION: Duration = Duration::from_millis(70);
 
 /// The overlay's x. Pinned live against footage; it lands on the weapon pod's
@@ -45,11 +51,6 @@ const OVERLAY_X: i32 = 251;
 /// live: `-7` is the overlay's own height, so its bottom edge meets the panel's
 /// top row and the cut-off top extends up from there. Still nudgeable with W/S.
 const OVERLAY_OFFSET_Y: i32 = -7;
-
-/// Per-frame slide of the overlay as it settles, `(dx, dy)` relative to the
-/// settled position, indexed by the pod animation frame. From `cs:0x9128`: it
-/// starts seven rows lower, then snaps up over the last two frames.
-const OVERLAY_SLIDE: [(i32, i32); 6] = [(0, 7), (0, 7), (0, 7), (0, 7), (2, 0), (0, 0)];
 
 pub struct LevelScene {
     assets: Rc<LevelAssets>,
@@ -132,11 +133,28 @@ impl LevelScene {
         }
     }
 
-    /// Composite the background, HUD, animated pod, and weapon overlay.
+    /// Composite the background, weapon overlay, HUD, and animated pod.
+    ///
+    /// The overlay is a playfield sprite, drawn before the panel so the opaque
+    /// `PANEL.RAW` masks its lower rows. While the pod opens its slide keeps it
+    /// at the panel's top edge (hidden behind the panel); it only clears the
+    /// panel once it snaps up to its settled row. The original gates the
+    /// playfield sprite blitter against the HUD band for the same effect.
     fn render(&mut self) {
         let firing = self.state.firing_weapon();
 
         self.frame.blit(&self.assets.background, 0, -BACKGROUND_TOP);
+
+        let overlay = &self.assets.overlays[firing as usize];
+        let slide = &self.assets.overlay_slide[firing as usize];
+        let (slide_x, slide_y) = slide[self.pod_frame.min(slide.len() - 1)];
+        self.frame.blit_transparent(
+            &overlay.pixels,
+            overlay.size,
+            self.overlay_x + slide_x,
+            self.panel_top + self.overlay_offset_y + slide_y,
+        );
+
         hud::draw_hud(
             &self.state,
             &self.assets.hud,
@@ -149,15 +167,6 @@ impl LevelScene {
             &self.assets.hud,
             self.panel_top,
             &mut self.frame,
-        );
-
-        let overlay = &self.assets.overlays[firing as usize];
-        let (slide_x, slide_y) = OVERLAY_SLIDE[self.pod_frame.min(OVERLAY_SLIDE.len() - 1)];
-        self.frame.blit_transparent(
-            &overlay.pixels,
-            overlay.size,
-            self.overlay_x + slide_x,
-            self.panel_top + self.overlay_offset_y + slide_y,
         );
     }
 }
