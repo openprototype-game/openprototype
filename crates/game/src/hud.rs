@@ -62,6 +62,17 @@ const SMART_FRAME: Dimensions = Dimensions {
 };
 const SMART_MAX: u8 = 3;
 
+/// Weapon-selector lights: four stacked slots at `di` `0x12b`, `+0x230` each. The
+/// LIGHTS sheet is eight 12x7 glyphs: 0..=3 the unselected slots, 4..=7 the
+/// highlights, so a slot draws glyph `n`, or `4 + n` when it is the active one.
+const MARKER_BASE_DI: i32 = 0x12b;
+const MARKER_PITCH_DI: i32 = 0x230;
+const MARKER_COUNT: usize = 4;
+const MARKER_SIZE: Dimensions = Dimensions {
+    width: 12,
+    height: 7,
+};
+
 /// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`.
 fn di_to_screen(di: i32) -> (i32, i32) {
     ((di % HUD_STRIDE) * 4, PANEL_TOP + di / HUD_STRIDE)
@@ -74,6 +85,24 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) 
     draw_lives(state.lives, assets, frame);
     draw_weapon_bars(state, assets, frame);
     draw_smart_bombs(state.smart_bombs, assets, frame);
+    draw_selector(state.selected, assets, frame);
+}
+
+/// Draw the four selector lights, highlighting the active secondary's slot.
+fn draw_selector(selected: Secondary, assets: &HudAssets, frame: &mut Framebuffer) {
+    let active = selected as usize;
+
+    for slot in 0..MARKER_COUNT {
+        let index = if slot == active {
+            MARKER_COUNT + slot
+        } else {
+            slot
+        };
+        let light = glyph(&assets.selector_lights, MARKER_SIZE, index);
+        let (x, y) = di_to_screen(MARKER_BASE_DI + slot as i32 * MARKER_PITCH_DI);
+
+        frame.blit(&light, x, y);
+    }
 }
 
 /// Draw the smart-bomb indicator for `count`, clamped to the four frames.

@@ -97,6 +97,9 @@ pub struct HudAssets {
     pub weapon_bars: IndexedImage,
     /// The smart-bomb indicator's four frames (counts 0..=3), 40x9 each, stacked.
     pub smart_frames: IndexedImage,
+    /// The weapon-selector lights, 12 wide: a 28-row base of four unselected
+    /// slots, then four 7-row highlights, one per selected slot.
+    pub selector_lights: IndexedImage,
 }
 
 const PANEL_SIZE: Dimensions = Dimensions {
@@ -119,6 +122,10 @@ const SMART_FRAMES_SIZE: Dimensions = Dimensions {
     width: 40,
     height: 36,
 };
+const SELECTOR_LIGHTS_SIZE: Dimensions = Dimensions {
+    width: 12,
+    height: 56,
+};
 
 /// Load and decode the in-game HUD assets from the disc image.
 ///
@@ -133,6 +140,7 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
     let number_digits = decode_raw(disc, "NUMBERS.RAW", NUMBER_DIGITS_SIZE)?;
     let weapon_bars = decode_raw(disc, "BALKEN.RAW", WEAPON_BARS_SIZE)?;
     let smart_frames = decode_raw(disc, "SMART.RAW", SMART_FRAMES_SIZE)?;
+    let selector_lights = decode_raw(disc, "LIGHTS.RAW", SELECTOR_LIGHTS_SIZE)?;
 
     Ok(HudAssets {
         palette,
@@ -141,6 +149,7 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
         number_digits,
         weapon_bars,
         smart_frames,
+        selector_lights,
     })
 }
 
