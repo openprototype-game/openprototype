@@ -95,6 +95,8 @@ pub struct HudAssets {
     /// The four weapon charge bars as 64-wide gradient rows (4 rows per weapon);
     /// a 32-px window into each slides right with the weapon's level.
     pub weapon_bars: IndexedImage,
+    /// The smart-bomb indicator's four frames (counts 0..=3), 40x9 each, stacked.
+    pub smart_frames: IndexedImage,
 }
 
 const PANEL_SIZE: Dimensions = Dimensions {
@@ -113,6 +115,10 @@ const WEAPON_BARS_SIZE: Dimensions = Dimensions {
     width: 64,
     height: 16,
 };
+const SMART_FRAMES_SIZE: Dimensions = Dimensions {
+    width: 40,
+    height: 36,
+};
 
 /// Load and decode the in-game HUD assets from the disc image.
 ///
@@ -126,6 +132,7 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
     let score_digits = decode_raw(disc, "SCORE.RAW", SCORE_DIGITS_SIZE)?;
     let number_digits = decode_raw(disc, "NUMBERS.RAW", NUMBER_DIGITS_SIZE)?;
     let weapon_bars = decode_raw(disc, "BALKEN.RAW", WEAPON_BARS_SIZE)?;
+    let smart_frames = decode_raw(disc, "SMART.RAW", SMART_FRAMES_SIZE)?;
 
     Ok(HudAssets {
         palette,
@@ -133,6 +140,7 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
         score_digits,
         number_digits,
         weapon_bars,
+        smart_frames,
     })
 }
 

@@ -54,6 +54,14 @@ const BAR_SIZE: Dimensions = Dimensions {
 const BAR_LEVEL_STEP: usize = 8;
 const BAR_MAX_OFFSET: usize = 31;
 
+/// Smart-bomb indicator: one of four frames (counts 0..=3) at `di` `0x744`.
+const SMART_DI: i32 = 0x744;
+const SMART_FRAME: Dimensions = Dimensions {
+    width: 40,
+    height: 9,
+};
+const SMART_MAX: u8 = 3;
+
 /// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`.
 fn di_to_screen(di: i32) -> (i32, i32) {
     ((di % HUD_STRIDE) * 4, PANEL_TOP + di / HUD_STRIDE)
@@ -65,6 +73,19 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, frame: &mut Framebuffer) 
     draw_score(state.score, assets, frame);
     draw_lives(state.lives, assets, frame);
     draw_weapon_bars(state, assets, frame);
+    draw_smart_bombs(state.smart_bombs, assets, frame);
+}
+
+/// Draw the smart-bomb indicator for `count`, clamped to the four frames.
+fn draw_smart_bombs(count: u8, assets: &HudAssets, frame: &mut Framebuffer) {
+    let glyph = glyph(
+        &assets.smart_frames,
+        SMART_FRAME,
+        count.min(SMART_MAX) as usize,
+    );
+    let (x, y) = di_to_screen(SMART_DI);
+
+    frame.blit(&glyph, x, y);
 }
 
 /// Draw the four weapon charge bars, stacked, each filled to its level.
