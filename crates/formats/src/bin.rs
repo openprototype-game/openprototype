@@ -44,6 +44,11 @@ const MAX_HEADER_OFFSET: usize = 0x800;
 pub struct Sprite {
     pub size: Dimensions,
     pub pixels: Vec<Option<u8>>,
+    /// The cropped sprite's top-left within its source cell, in pixels. The
+    /// decoder trims transparent margins to a tight box; this records where that
+    /// box sat, so a caller can place the sprite at its true position (to align
+    /// an overlay over another layer, or reassemble a multi-cell sprite).
+    pub origin: (i32, i32),
 }
 
 /// All sprites of one BIN, in catalog order.
@@ -219,6 +224,7 @@ fn build_sprite(pixels: &[Pixel]) -> Sprite {
         return Sprite {
             size: Dimensions::new(0, 0),
             pixels: Vec::new(),
+            origin: (0, 0),
         };
     }
 
@@ -239,6 +245,7 @@ fn build_sprite(pixels: &[Pixel]) -> Sprite {
     Sprite {
         size,
         pixels: buffer,
+        origin: (min_x as i32, min_y as i32),
     }
 }
 
