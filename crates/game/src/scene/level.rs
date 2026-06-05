@@ -2,7 +2,7 @@
 //!
 //! Not part of the normal front-end flow: the `--scene level` flag boots
 //! straight into it. It composites a still of the canyon background, the HUD
-//! panel, and the animated weapon pod into one 320x240 frame, so the panel
+//! panel, and the animated weapon pod into one 320x160 frame, so the panel
 //! geometry and the pod's open/settle animation can be checked against footage.
 //!
 //! All four secondaries start fully charged. Enter cycles the selected weapon
@@ -23,10 +23,13 @@ use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 use openprototype_core::{GameState, Lives, Secondary, SmartBombs, WeaponLevel};
 
-/// The level's Mode X frame: 320x240, native 4:3.
+/// The level's frame: hand-programmed Mode X 320x160 (480 scanlines, each row
+/// tripled to give 160 logical rows), shown on a 4:3 CRT so pixels are 1.5x
+/// taller than wide. The compositor fits this 320x160 buffer into 4:3, which
+/// reproduces that stretch. Playfield is rows 0..128, the panel rows 128..160.
 const SCREEN: Dimensions = Dimensions {
     width: 320,
-    height: 240,
+    height: 160,
 };
 
 /// Which canyon row sits at the top of the playfield. A fixed window stands in
@@ -37,8 +40,8 @@ const BACKGROUND_TOP: i32 = 0;
 ///
 /// TODO: 70ms is an unverified placeholder, picked so the animation is visible
 /// during dev. The faithful rate is not yet traced: it depends on the main
-/// loop's frame rate (Mode X 320x240 double-scanned to 480 lines is 60Hz if the
-/// loop is vsync-locked) and the divider on the anim counter (`cs:0x2699`). Pin
+/// loop's frame rate (Mode X 320x160 fills 480 scanlines at 60Hz if the loop is
+/// vsync-locked) and the divider on the anim counter (`cs:0x2699`). Pin
 /// it with a write-breakpoint on the counter, counting vsyncs between steps.
 const POD_FRAME_DURATION: Duration = Duration::from_millis(70);
 
