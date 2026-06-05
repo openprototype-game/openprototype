@@ -33,4 +33,39 @@ impl Framebuffer {
         );
         self.image.pixels.copy_from_slice(&background.pixels);
     }
+
+    /// Copy `source` onto the frame with its top-left at `(x, y)`, clipped to
+    /// the frame edges.
+    ///
+    /// Every index is copied as-is (opaque); rows and columns that fall outside
+    /// the frame are skipped, so partly- or fully-offscreen placements are
+    /// safe. This is the compositing primitive for the HUD panel and the cells
+    /// blitted onto it.
+    pub fn blit(&mut self, source: &IndexedImage, x: i32, y: i32) {
+        let frame_width = self.image.size.width as i32;
+        let frame_height = self.image.size.height as i32;
+        let source_width = source.size.width as i32;
+
+        for row in 0..source.size.height as i32 {
+            let dest_y = y + row;
+
+            if dest_y < 0 || dest_y >= frame_height {
+                continue;
+            }
+
+            let dest_x0 = x.max(0);
+            let dest_x1 = (x + source_width).min(frame_width);
+
+            if dest_x0 >= dest_x1 {
+                continue;
+            }
+
+            let source_x0 = dest_x0 - x;
+            let len = (dest_x1 - dest_x0) as usize;
+            let dest = (dest_y * frame_width + dest_x0) as usize;
+            let src = (row * source_width + source_x0) as usize;
+
+            self.image.pixels[dest..dest + len].copy_from_slice(&source.pixels[src..src + len]);
+        }
+    }
 }

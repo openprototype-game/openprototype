@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
 use prototype_formats::font::Font;
-use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw};
+use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
@@ -78,6 +78,59 @@ pub fn load_menu_assets(disc: &DiscImage) -> Result<MenuAssets> {
         font,
         palette,
     })
+}
+
+/// Everything the in-game HUD needs to render.
+///
+/// The HUD shares the level's embedded palette (read from the `.WAD`); the
+/// digit sheets are columns of stacked glyphs, sliced per digit at draw time.
+pub struct HudAssets {
+    pub palette: Palette,
+    /// The panel background, 320x32.
+    pub panel: IndexedImage,
+    /// The score readout's ten LCD numerals 0..=9, 16x13 each, stacked.
+    pub score_digits: IndexedImage,
+    /// The count numerals 1..=9 (lives and similar), 12x10 each, stacked.
+    pub number_digits: IndexedImage,
+}
+
+const PANEL_SIZE: Dimensions = Dimensions {
+    width: 320,
+    height: 32,
+};
+const SCORE_DIGITS_SIZE: Dimensions = Dimensions {
+    width: 16,
+    height: 130,
+};
+const NUMBER_DIGITS_SIZE: Dimensions = Dimensions {
+    width: 12,
+    height: 90,
+};
+
+/// Load and decode the in-game HUD assets from the disc image.
+///
+/// The palette is `LEVEL_1.WAD`'s embedded one for now; it stands in until the
+/// level scene picks the palette for the level being played.
+pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
+    let wad_bytes = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
+    let palette = wad::level_palette(&wad_bytes).context("extracting the level palette")?;
+
+    let panel = decode_raw(disc, "PANEL.RAW", PANEL_SIZE)?;
+    let score_digits = decode_raw(disc, "SCORE.RAW", SCORE_DIGITS_SIZE)?;
+    let number_digits = decode_raw(disc, "NUMBERS.RAW", NUMBER_DIGITS_SIZE)?;
+
+    Ok(HudAssets {
+        palette,
+        panel,
+        score_digits,
+        number_digits,
+    })
+}
+
+/// Read and decode a linear `.RAW` graphic of known dimensions from the disc.
+fn decode_raw(disc: &DiscImage, name: &str, size: Dimensions) -> Result<IndexedImage> {
+    let bytes = disc.read(name).with_context(|| format!("reading {name}"))?;
+    raw::decode(&bytes, size).with_context(|| format!("decoding {name}"))
 }
 
 /// Load and decode the intro assets from the disc image.

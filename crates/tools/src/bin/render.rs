@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage, Rgba as ImageRgba, RgbaImage};
+use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::{GameState, Secondary, Weapon, WeaponLevel};
 use openprototype_tools::read_asset;
 use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
@@ -128,6 +130,9 @@ enum Command {
         #[arg(long)]
         unsigned: bool,
     },
+    /// Render the in-game HUD (panel plus a sample game state) to a PNG.
+    /// Requires `--cue`; the HUD assets and palette come from the disc.
+    Hud { output: PathBuf },
 }
 
 fn main() -> Result<()> {
@@ -292,7 +297,37 @@ fn main() -> Result<()> {
 
             write_wav(&samples, rate, &output)
         }
+        Command::Hud { output } => render_hud(source, &output),
     }
+}
+
+/// Compose the HUD over a sample game state and write it to a PNG.
+fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
+    let disc = source.context("the hud command needs --cue to read its assets")?;
+    let assets = openprototype::assets::load_hud_assets(disc).context("loading HUD assets")?;
+
+    let state = GameState {
+        score: 13477,
+        lives: 3,
+        smart_bombs: 2,
+        weapons: [
+            WeaponLevel::new(3),
+            WeaponLevel::new(1),
+            WeaponLevel::new(0),
+            WeaponLevel::new(2),
+        ],
+        current: Weapon::Minigun,
+        selected: Secondary::One,
+    };
+
+    let mut frame = Framebuffer::new(Dimensions::new(320, 200), assets.palette.clone());
+    openprototype::hud::draw_hud(&state, &assets, &mut frame);
+
+    // The level runs a double-scanned 320x200 mode shown with square pixels, so
+    // present it stretched to 4:3 (here 640x480) rather than the squished native.
+    let native = to_png(&frame.image, &frame.palette);
+    let square = image::imageops::resize(&native, 640, 480, image::imageops::FilterType::Nearest);
+    save(&square, output)
 }
 
 /// Write mono 8-bit unsigned PCM as a WAV file (44-byte header + samples).

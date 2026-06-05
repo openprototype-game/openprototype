@@ -12,9 +12,11 @@
 pub mod audio;
 pub mod framebuffer;
 pub mod game;
+pub mod game_state;
 pub mod input;
 
 pub use audio::AudioCommand;
 pub use framebuffer::Framebuffer;
 pub use game::{Game, StepOutput};
+pub use game_state::{GameState, Secondary, Weapon, WeaponLevel};
 pub use input::KeyEvent;
