@@ -8,6 +8,7 @@
 
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
+use prototype_formats::bin::{OUT_BIN_CATALOG, SpriteSheet, decode_banked};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
@@ -107,14 +108,43 @@ pub struct HudAssets {
 }
 
 /// Everything the in-game level scene needs to render: the level's scrolling
-/// canyon background (decoded to one still here) and the HUD.
+/// canyon background (decoded to one still here), the HUD, and the weapon-top
+/// overlay sprites.
 pub struct LevelAssets {
     /// The canyon background, de-interleaved from the four `.SPn` plane files to
     /// one 320x320 still. The level scrolls a window of this; the test scene
     /// shows a fixed window.
     pub background: IndexedImage,
     pub hud: HudAssets,
+    /// The weapon-top overlay that clips over the panel, indexed by `Weapon`
+    /// (`0` minigun ..= `4` secondary 4). Each is the firing weapon's cut-off top.
+    pub overlays: [OverlaySprite; WEAPON_COUNT],
 }
+
+/// A masked sprite: `None` is transparent. Used for the weapon overlay, which
+/// the original draws over the playfield/panel without a colour key.
+pub struct OverlaySprite {
+    pub size: Dimensions,
+    pub pixels: Vec<Option<u8>>,
+}
+
+/// The five firing weapons: the minigun and the four secondaries.
+const WEAPON_COUNT: usize = 5;
+
+/// The weapon-top overlay sprites as `(catalog index, cell count)`, indexed by
+/// `Weapon`. Read from the canyon WAD's descriptor table at `cs:0x31d0`. The
+/// cell counts explain the catalog gaps (`0xEE` spans two cells, so the next is
+/// `0xF0`); the minigun's is a 4x4 stub, effectively blank.
+const OVERLAY_CELLS: [(usize, usize); WEAPON_COUNT] = [
+    (0xEA, 1), // minigun
+    (0xEB, 1), // secondary 1
+    (0xED, 1), // secondary 2
+    (0xEE, 2), // secondary 3
+    (0xF0, 2), // secondary 4
+];
+
+/// Width of one Mode X catalog cell, in pixels.
+const CELL_WIDTH: usize = 32;
 
 /// One Mode X plane: 80 bytes per row, 320 rows. The four `.SPn` files together
 /// make a 320x320 image.
@@ -181,12 +211,81 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
     })
 }
 
-/// Load and decode the level scene's assets: the canyon background and the HUD.
+/// Load and decode the level scene's assets: the canyon background, the HUD, and
+/// the weapon overlays.
 pub fn load_level_assets(disc: &DiscImage) -> Result<LevelAssets> {
     let background = load_canyon_background(disc)?;
     let hud = load_hud_assets(disc)?;
+    let overlays = load_overlays(disc)?;
 
-    Ok(LevelAssets { background, hud })
+    Ok(LevelAssets {
+        background,
+        hud,
+        overlays,
+    })
+}
+
+/// Decode the canyon BIN catalog and assemble the five weapon overlays.
+fn load_overlays(disc: &DiscImage) -> Result<[OverlaySprite; WEAPON_COUNT]> {
+    let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
+    let wad = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
+    let sheet = decode_banked(&out_bin, &wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
+
+    let needed = OVERLAY_CELLS
+        .iter()
+        .map(|(first, cells)| first + cells)
+        .max()
+        .expect("overlay table is not empty");
+
+    if sheet.sprites.len() < needed {
+        anyhow::bail!(
+            "OUT.BIN has {} sprites, the overlays need {needed}",
+            sheet.sprites.len()
+        );
+    }
+
+    Ok(std::array::from_fn(|index| {
+        let (first, cells) = OVERLAY_CELLS[index];
+        assemble_overlay(&sheet, first, cells)
+    }))
+}
+
+/// Stitch a multi-cell overlay into one masked sprite. Cell `k` occupies screen
+/// columns `[k*32, k*32+32)`; within it, the decoded sprite sits at its trimmed
+/// `origin`, so each cell's pixels land at `(k*32 + origin.x, origin.y)`.
+fn assemble_overlay(sheet: &SpriteSheet, first: usize, cells: usize) -> OverlaySprite {
+    let mut width = 0usize;
+    let mut height = 0usize;
+
+    for cell in 0..cells {
+        let sprite = &sheet.sprites[first + cell];
+        let origin_x = cell * CELL_WIDTH + sprite.origin.0.max(0) as usize;
+        let origin_y = sprite.origin.1.max(0) as usize;
+        width = width.max(origin_x + sprite.size.width as usize);
+        height = height.max(origin_y + sprite.size.height as usize);
+    }
+
+    let mut pixels = vec![None; width * height];
+
+    for cell in 0..cells {
+        let sprite = &sheet.sprites[first + cell];
+        let sprite_width = sprite.size.width as usize;
+        let origin_x = cell * CELL_WIDTH + sprite.origin.0.max(0) as usize;
+        let origin_y = sprite.origin.1.max(0) as usize;
+
+        for sy in 0..sprite.size.height as usize {
+            for sx in 0..sprite_width {
+                if let Some(value) = sprite.pixels[sy * sprite_width + sx] {
+                    pixels[(origin_y + sy) * width + origin_x + sx] = Some(value);
+                }
+            }
+        }
+    }
+
+    OverlaySprite {
+        size: Dimensions::new(width as u32, height as u32),
+        pixels,
+    }
 }
 
 /// De-interleave `CANYON.SP1..4` into one 320x320 still.
@@ -388,6 +487,10 @@ pub(crate) fn test_level_assets() -> LevelAssets {
     LevelAssets {
         background: blank_image(BACKGROUND_SIZE),
         hud: test_hud_assets(),
+        overlays: std::array::from_fn(|_| OverlaySprite {
+            size: Dimensions::new(1, 1),
+            pixels: vec![None],
+        }),
     }
 }
 
