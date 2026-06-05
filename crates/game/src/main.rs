@@ -13,11 +13,21 @@ mod desktop {
     use anyhow::{Context, Result};
     use clap::Parser;
     use openprototype::app::App;
-    use openprototype::assets::{load_highscore_assets, load_intro_assets, load_menu_assets};
+    use openprototype::assets::{
+        load_highscore_assets, load_intro_assets, load_level_assets, load_menu_assets,
+    };
     use openprototype::highscores::HighscoreStore;
+    use openprototype::scene::SceneId;
     use openprototype_backend::run;
     use prototype_disc::DiscImage;
     use tracing_subscriber::EnvFilter;
+
+    /// Which scene to boot straight into, bypassing the normal intro flow.
+    #[derive(Clone, Copy, clap::ValueEnum)]
+    enum DevScene {
+        /// The in-game level render (weapon-animation test harness).
+        Level,
+    }
 
     #[derive(Parser)]
     #[command(about = "Prototype (1995) front-end")]
@@ -25,6 +35,10 @@ mod desktop {
         /// Path to the disc image cue sheet (e.g. PROTOTYPE.cue).
         #[arg(long)]
         cue: PathBuf,
+
+        /// Boot straight into a developer scene instead of the intro.
+        #[arg(long)]
+        scene: Option<DevScene>,
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
@@ -51,8 +65,19 @@ mod desktop {
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
+        let level_assets = load_level_assets(&disc)?;
         let highscore_store = HighscoreStore::open(&disc)?;
-        let app = App::new(menu_assets, intro_assets, highscore_assets, highscore_store);
+        let mut app = App::new(
+            menu_assets,
+            intro_assets,
+            highscore_assets,
+            level_assets,
+            highscore_store,
+        );
+
+        if let Some(DevScene::Level) = cli.scene {
+            app.start_on(SceneId::Level);
+        }
 
         run(Box::new(app), disc)
     }

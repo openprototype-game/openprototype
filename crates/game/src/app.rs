@@ -9,9 +9,11 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::assets::{HighscoreAssets, IntroAssets, MenuAssets};
+use crate::assets::{HighscoreAssets, IntroAssets, LevelAssets, MenuAssets};
 use crate::highscores::HighscoreStore;
-use crate::scene::{HighscoreScreen, Intro, Menu, MusicMenu, Scene, SceneId, Transition};
+use crate::scene::{
+    HighscoreScreen, Intro, LevelScene, Menu, MusicMenu, Scene, SceneId, Transition,
+};
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game::{Game, StepOutput};
 use openprototype_core::input::KeyEvent;
@@ -21,6 +23,7 @@ pub struct App {
     menu_assets: Rc<MenuAssets>,
     intro_assets: Rc<IntroAssets>,
     highscore_assets: Rc<HighscoreAssets>,
+    level_assets: Rc<LevelAssets>,
     highscore_store: HighscoreStore,
 }
 
@@ -30,6 +33,7 @@ impl App {
         menu_assets: MenuAssets,
         intro_assets: IntroAssets,
         highscore_assets: HighscoreAssets,
+        level_assets: LevelAssets,
         highscore_store: HighscoreStore,
     ) -> Self {
         let menu_assets = Rc::new(menu_assets);
@@ -40,8 +44,14 @@ impl App {
             menu_assets,
             intro_assets,
             highscore_assets: Rc::new(highscore_assets),
+            level_assets: Rc::new(level_assets),
             highscore_store,
         }
+    }
+
+    /// Replace the current scene, to boot straight into one (the `--scene` flag).
+    pub fn start_on(&mut self, id: SceneId) {
+        self.current = self.build(id);
     }
 
     fn build(&self, id: SceneId) -> Box<dyn Scene> {
@@ -56,6 +66,7 @@ impl App {
                 self.highscore_assets.clone(),
                 self.highscore_store.load(),
             )),
+            SceneId::Level => Box::new(LevelScene::new(self.level_assets.clone())),
         }
     }
 }
@@ -91,7 +102,9 @@ impl Game for App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assets::{test_highscore_assets, test_intro_assets, test_menu_assets};
+    use crate::assets::{
+        test_highscore_assets, test_intro_assets, test_level_assets, test_menu_assets,
+    };
     use crate::highscores::test_store;
     use openprototype_core::audio::AudioCommand;
 
@@ -102,6 +115,7 @@ mod tests {
             test_menu_assets(),
             test_intro_assets(),
             test_highscore_assets(),
+            test_level_assets(),
             test_store(),
         )
     }

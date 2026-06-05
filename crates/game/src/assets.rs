@@ -360,6 +360,37 @@ pub(crate) fn test_intro_assets() -> IntroAssets {
     }
 }
 
+/// A blank (all index 0) image of the given size, for synthetic test assets.
+#[cfg(test)]
+fn blank_image(size: Dimensions) -> IndexedImage {
+    IndexedImage::new(size, vec![0u8; size.pixel_count()]).expect("blank image matches its size")
+}
+
+/// Synthetic, all-zero HUD assets for tests that exercise HUD/scene logic
+/// without the disc. Blank, but the right shapes.
+#[cfg(test)]
+pub(crate) fn test_hud_assets() -> HudAssets {
+    HudAssets {
+        palette: Palette::from_vga_6bit(&[0u8; 768]).expect("synthetic palette decodes"),
+        panel: blank_image(PANEL_SIZE),
+        score_digits: blank_image(SCORE_DIGITS_SIZE),
+        number_digits: blank_image(NUMBER_DIGITS_SIZE),
+        weapon_bars: blank_image(WEAPON_BARS_SIZE),
+        smart_frames: blank_image(SMART_FRAMES_SIZE),
+        selector_lights: blank_image(SELECTOR_LIGHTS_SIZE),
+        weapon_pods: blank_image(WEAPON_PODS_SIZE),
+    }
+}
+
+/// Synthetic level assets (blank canyon, blank HUD) for headless scene tests.
+#[cfg(test)]
+pub(crate) fn test_level_assets() -> LevelAssets {
+    LevelAssets {
+        background: blank_image(BACKGROUND_SIZE),
+        hud: test_hud_assets(),
+    }
+}
+
 /// Synthetic high-score assets (empty FLI, blank font) for headless tests.
 #[cfg(test)]
 pub(crate) fn test_highscore_assets() -> HighscoreAssets {

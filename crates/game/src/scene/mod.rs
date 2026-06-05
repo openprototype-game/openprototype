@@ -11,12 +11,14 @@
 
 pub mod highscores;
 pub mod intro;
+pub mod level;
 pub mod list_menu;
 pub mod menu;
 pub mod music;
 
 pub use highscores::HighscoreScreen;
 pub use intro::Intro;
+pub use level::LevelScene;
 pub use list_menu::ListMenu;
 pub use menu::Menu;
 pub use music::MusicMenu;
@@ -34,6 +36,8 @@ pub enum SceneId {
     MainMenu,
     MusicMenu,
     Highscores,
+    /// The developer level-render scene, reached only via `--scene level`.
+    Level,
 }
 
 /// A scene's request to change the app state, returned from [`Scene::update`].
