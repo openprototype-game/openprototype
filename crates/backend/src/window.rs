@@ -2,12 +2,16 @@
 //!
 //! This is the only module that knows a windowing toolkit exists. It owns the
 //! event loop, translates physical keys into [`KeyEvent`]s, drives the core's
-//! [`step`](Game::step) with the elapsed time, presents the framebuffer through
+//! [`step`](Game::step) on a fixed timestep, presents the framebuffer through
 //! the renderer, and routes audio commands to a [`MusicPlayer`].
 //!
 //! When the game is static (a menu) the loop waits for input and only steps on a
-//! key. When it reports [`is_animating`](Game::is_animating) (the intro) the loop
-//! drives frames on a ~70 Hz timer, the original's VGA retrace rate.
+//! key (with `dt = 0`). When it reports [`is_animating`](Game::is_animating) the
+//! loop drives frames on a timer at the scene's own
+//! [`frame_interval`](Game::frame_interval), the VGA retrace rate of its mode
+//! (~70 Hz front-end, ~60 Hz level). Each timer frame steps once with that exact
+//! `dt`, so logic runs at the same rate on any host, like the vsync-locked
+//! original. Input/resize frames re-render with `dt = 0` and do not advance.
 //!
 //! Alt+Enter toggles borderless fullscreen here (the OpenTyrian binding); it is
 //! handled in this layer and never reaches the core as a key.
@@ -34,13 +38,6 @@ use openprototype_core::input::KeyEvent;
 
 const INITIAL_SCALE: u32 = 4;
 
-/// Frame interval while animating: ~1/70 s, the original's VGA retrace rate.
-const FRAME_INTERVAL: Duration = Duration::from_micros(14_286);
-
-/// Largest `dt` handed to the core, so a stall (or a long idle before an
-/// animation starts) can't make a scene jump far ahead in one frame.
-const MAX_FRAME_DT: Duration = Duration::from_millis(100);
-
 /// Run the given scene until it quits or the window closes. `disc` is handed to
 /// the audio backend so it can stream the CD-DA tracks on demand.
 pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
@@ -51,7 +48,7 @@ pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
         renderer: None,
         pending_input: Vec::new(),
         modifiers: ModifiersState::empty(),
-        last_frame: None,
+        advance: false,
         next_frame: None,
         pending_error: None,
     };
@@ -74,8 +71,9 @@ struct App {
     pending_input: Vec<KeyEvent>,
     /// Held modifiers, tracked for the Alt+Enter fullscreen toggle.
     modifiers: ModifiersState,
-    /// When the previous frame ran, for measuring `dt`.
-    last_frame: Option<Instant>,
+    /// Set when the animation timer fires, so the next frame advances one logic
+    /// tick. Input and resize frames leave it clear and re-render without ticking.
+    advance: bool,
     /// When the next animating frame is due (only meaningful while animating).
     next_frame: Option<Instant>,
     pending_error: Option<anyhow::Error>,
@@ -85,12 +83,14 @@ impl App {
     /// Advance the core by the elapsed time and the queued input, execute its
     /// audio, present, and exit on quit.
     fn frame(&mut self, event_loop: &ActiveEventLoop) {
-        let now = Instant::now();
-        let dt = self
-            .last_frame
-            .map(|prev| now.saturating_duration_since(prev).min(MAX_FRAME_DT))
-            .unwrap_or_default();
-        self.last_frame = Some(now);
+        // Fixed timestep: a timer frame advances one logic period; an input or
+        // resize frame just re-renders the current state.
+        let dt = if self.advance {
+            self.game.frame_interval()
+        } else {
+            Duration::ZERO
+        };
+        self.advance = false;
 
         let input = mem::take(&mut self.pending_input);
         let output = self.game.step(dt, &input);
@@ -196,12 +196,14 @@ impl ApplicationHandler for App {
             return;
         }
 
-        // Animating: drive frames on the retrace-rate timer.
+        // Animating: drive frames on the active scene's own retrace-rate timer.
+        let interval = self.game.frame_interval();
         let now = Instant::now();
         let due = self.next_frame.unwrap_or(now);
 
         if now >= due {
-            self.next_frame = Some(now + FRAME_INTERVAL);
+            self.next_frame = Some(now + interval);
+            self.advance = true;
             self.request_redraw();
         }
 

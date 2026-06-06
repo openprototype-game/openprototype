@@ -41,4 +41,14 @@ pub trait Game {
     fn is_animating(&self) -> bool {
         false
     }
+
+    /// The wall-clock period between logic frames while animating. The original
+    /// is vsync-locked, so this is the active screen's VGA refresh: the front-end
+    /// (mode 13h, 320x200) runs ~70Hz, the level (the 480-line Mode X) ~60Hz. The
+    /// platform drives one [`step`](Game::step) per period with this exact `dt`
+    /// (a fixed timestep), so logic advances at the same rate on every host
+    /// regardless of the monitor's refresh rate.
+    fn frame_interval(&self) -> Duration {
+        Duration::from_micros(14_286)
+    }
 }

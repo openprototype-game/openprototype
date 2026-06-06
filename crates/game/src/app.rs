@@ -97,6 +97,10 @@ impl Game for App {
     fn is_animating(&self) -> bool {
         self.current.is_animating()
     }
+
+    fn frame_interval(&self) -> Duration {
+        self.current.frame_interval()
+    }
 }
 
 #[cfg(test)]

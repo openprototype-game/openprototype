@@ -72,4 +72,11 @@ pub trait Scene {
     fn is_animating(&self) -> bool {
         false
     }
+
+    /// The frame period this scene runs at, its VGA mode's refresh. Defaults to
+    /// the front-end's mode 13h (~70Hz); the level overrides to the 480-line
+    /// Mode X (~60Hz). The platform ticks one frame per period.
+    fn frame_interval(&self) -> Duration {
+        Duration::from_micros(14_286)
+    }
 }

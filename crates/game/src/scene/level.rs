@@ -230,6 +230,13 @@ impl Scene for LevelScene {
         // The canyon scrolls continuously, so the scene always needs redrawing.
         true
     }
+
+    fn frame_interval(&self) -> Duration {
+        // The level runs the 480-line Mode X at ~60Hz, not the front-end's ~70Hz.
+        // Driving frames at this rate makes the platform's fixed `dt` exactly one
+        // [`TICK`], so the scroll advances one tick per frame with no beating.
+        TICK
+    }
 }
 
 #[cfg(test)]
