@@ -19,6 +19,7 @@ use crate::assets::LevelAssets;
 use crate::hud::{self, POD_SETTLED_FRAME};
 use crate::parallax::Parallax;
 use crate::scene::{Scene, SceneOutput, Transition};
+use crate::scenery::SceneryScroll;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 use openprototype_core::{GameState, Lives, Secondary, SmartBombs, WeaponLevel};
@@ -64,6 +65,8 @@ pub struct LevelScene {
     state: GameState,
     frame: Framebuffer,
     parallax: Parallax,
+    /// Per-layer scroll positions for the level's scenery, advanced each tick.
+    scenery_scroll: SceneryScroll,
     /// Vertical camera, `0..=CAMERA_MAX`: which canyon row sits at the top of the
     /// playfield. Nudged with Up/Down.
     camera_y: i32,
@@ -96,11 +99,13 @@ impl LevelScene {
         );
 
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
+        let scenery_scroll = assets.scenery.scroll();
         let mut scene = Self {
             assets,
             state,
             frame,
             parallax: Parallax::default(),
+            scenery_scroll,
             camera_y: 0,
             overlay_x: OVERLAY_X,
             overlay_offset_y: OVERLAY_OFFSET_Y,
@@ -139,6 +144,7 @@ impl LevelScene {
     /// Advance the parallax scroll and the pod animation by `ticks`.
     fn advance(&mut self, ticks: u32) {
         self.parallax.advance(ticks);
+        self.assets.scenery.advance(&mut self.scenery_scroll, ticks);
         self.pod_ticks += ticks;
 
         while self.pod_frame < POD_SETTLED_FRAME && self.pod_ticks >= POD_FRAME_TICKS {
@@ -163,6 +169,10 @@ impl LevelScene {
             self.camera_y,
             hud::PANEL_TOP,
         );
+
+        self.assets
+            .scenery
+            .render(&self.scenery_scroll, &self.assets.catalog, &mut self.frame);
 
         let overlay = &self.assets.overlays[firing as usize];
         let slide = &self.assets.overlay_slide[firing as usize];

@@ -23,4 +23,5 @@ pub mod hud;
 pub mod level;
 pub mod parallax;
 pub mod scene;
+pub mod scenery;
 pub mod screen;

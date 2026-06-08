@@ -12,6 +12,7 @@ use prototype_formats::bin::{OUT_BIN_CATALOG, SpriteSheet, decode_banked};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
+use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
 /// Everything the main menu needs to render.
@@ -123,6 +124,10 @@ pub struct LevelAssets {
     /// settled position, indexed by `Weapon` then animation frame. Each weapon
     /// has its own profile (some snap, some kick sideways).
     pub overlay_slide: [[(i32, i32); OVERLAY_FRAMES]; WEAPON_COUNT],
+    /// The decoded OUT.BIN sprite catalog, which the scenery layers index by cell.
+    pub catalog: SpriteSheet,
+    /// The level's parallax scenery layers, decoded from the level WAD's tilemaps.
+    pub scenery: Scenery,
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -153,6 +158,19 @@ const OVERLAY_CELLS: [(usize, usize); WEAPON_COUNT] = [
 
 /// Width of one Mode X catalog cell, in pixels.
 const CELL_WIDTH: usize = 32;
+
+/// Level 1's three parallax scenery layers as `(WAD cs-offset, top row, speed)`,
+/// back to front. The tilemaps are at `cs:0x3137 / 0x30f2 / 0x3178` (the engine
+/// points `cs:0x31c4` at each in turn); see [`decode_scenery`] for the TODO on
+/// the placeholder rows and speeds.
+const SCENERY_LAYERS: [(usize, i32, u32); 3] = [
+    (0x3137, 38, 6),  // back
+    (0x30f2, 14, 10), // mid
+    (0x3178, 4, 16),  // front
+];
+
+/// A WAD `cs`-relative offset plus this is the file offset (`file = cs + 0x29F0`).
+const WAD_CS_BASE: usize = 0x29F0;
 
 /// File offset of the overlay position table in `LEVEL_1.WAD` (`cs:0x9128`, with
 /// `file = cs + 0x29F0`). Per weapon: a block of [`OVERLAY_BLOCK_FRAMES`] `(x, y)`
@@ -238,38 +256,98 @@ pub fn load_level_assets(disc: &DiscImage) -> Result<LevelAssets> {
 
     let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
     let wad = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
-    let overlays = load_overlays(&out_bin, &wad)?;
+    let catalog = decode_banked(&out_bin, &wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
+    let overlays = load_overlays(&catalog)?;
     let overlay_slide = read_overlay_slide(&wad)?;
+    let scenery = decode_scenery(&wad);
 
     Ok(LevelAssets {
         background,
         hud,
         overlays,
         overlay_slide,
+        catalog,
+        scenery,
     })
 }
 
-/// Decode the canyon BIN catalog and assemble the five weapon overlays.
-fn load_overlays(out_bin: &[u8], wad: &[u8]) -> Result<[OverlaySprite; WEAPON_COUNT]> {
-    let sheet = decode_banked(out_bin, wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
-
+/// Assemble the five weapon overlays from the decoded catalog.
+fn load_overlays(catalog: &SpriteSheet) -> Result<[OverlaySprite; WEAPON_COUNT]> {
     let needed = OVERLAY_CELLS
         .iter()
         .map(|(first, cells)| first + cells)
         .max()
         .expect("overlay table is not empty");
 
-    if sheet.sprites.len() < needed {
+    if catalog.sprites.len() < needed {
         anyhow::bail!(
             "OUT.BIN has {} sprites, the overlays need {needed}",
-            sheet.sprites.len()
+            catalog.sprites.len()
         );
     }
 
     Ok(std::array::from_fn(|index| {
         let (first, cells) = OVERLAY_CELLS[index];
-        assemble_overlay(&sheet, first, cells)
+        assemble_overlay(catalog, first, cells)
     }))
+}
+
+/// Decode the level's parallax scenery layers from its WAD.
+///
+/// Each layer is a tilemap of catalog-cell codes at a fixed WAD offset (the
+/// faithful engine points `cs:0x31c4` at one per layer and walks it by the scroll
+/// column). The three layers are drawn back to front; the front one sits over the
+/// playfield in the original.
+///
+/// TODO: `top` is the layer's Mode X destination offset divided by 80; `speed` is
+/// a placeholder (back slow .. front fast). The faithful per-layer scroll rates
+/// (the `cs:0x25f6/fa/f2` accumulators) and exact rows are not yet traced.
+fn decode_scenery(wad: &[u8]) -> Scenery {
+    let layers = SCENERY_LAYERS
+        .iter()
+        .map(|&(cs_offset, top, speed)| {
+            SceneryLayer::new(decode_scenery_tilemap(wad, cs_offset), top, speed)
+        })
+        .collect();
+
+    Scenery::new(layers)
+}
+
+/// Expand one scenery tilemap into a per-column `Some(catalog cell)` / `None`
+/// strip, exactly one loop long. The stream is bytes: `0` is an empty column,
+/// `0xFF` is a jump to the 16-bit cs-offset that follows, and any other byte `n`
+/// is catalog cell `n - 1`.
+///
+/// Each layer's stream ends in a jump back to its own start, so the strip is a
+/// short repeating pattern (the original loops it under the level forever).
+/// Following the stream until an offset repeats yields one clean loop, which the
+/// layer then wraps at its true period rather than at an arbitrary cut.
+fn decode_scenery_tilemap(wad: &[u8], start: usize) -> Vec<Option<usize>> {
+    let mut tiles = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    let mut cs = start;
+
+    while visited.insert(cs) {
+        let file = cs + WAD_CS_BASE;
+
+        if file + 2 >= wad.len() {
+            break;
+        }
+
+        match wad[file] {
+            0xFF => cs = usize::from(u16::from_le_bytes([wad[file + 1], wad[file + 2]])),
+            0 => {
+                tiles.push(None);
+                cs += 1;
+            }
+            code => {
+                tiles.push(Some(usize::from(code - 1)));
+                cs += 1;
+            }
+        }
+    }
+
+    tiles
 }
 
 /// Read each weapon's overlay slide from the WAD's position table, as `(dx, dy)`
@@ -544,6 +622,10 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             pixels: vec![None],
         }),
         overlay_slide: [[(0, 0); OVERLAY_FRAMES]; WEAPON_COUNT],
+        catalog: SpriteSheet {
+            sprites: Vec::new(),
+        },
+        scenery: Scenery::new(Vec::new()),
     }
 }
 
@@ -556,5 +638,42 @@ pub(crate) fn test_highscore_assets() -> HighscoreAssets {
     HighscoreAssets {
         fli: Vec::new(),
         font,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scenery_tilemap_maps_codes_skips_zero_and_follows_jumps() {
+        // The decoder reads cs-relative (file = cs + 0x29F0). Two short streams
+        // that jump to each other so the strip loops: stream A at cs 0x10 is
+        // [code 3, code 1, empty, jump->0x20]; stream B at cs 0x20 is
+        // [code 2, jump->0x10]. Codes map to cells n-1, 0 is an empty column.
+        let mut wad = vec![0u8; 0x2a20];
+        let put = |wad: &mut [u8], cs: usize, bytes: &[u8]| {
+            let at = cs + WAD_CS_BASE;
+            wad[at..at + bytes.len()].copy_from_slice(bytes);
+        };
+        put(&mut wad, 0x10, &[0x03, 0x01, 0x00, 0xff, 0x20, 0x00]);
+        put(&mut wad, 0x20, &[0x02, 0xff, 0x10, 0x00]);
+
+        let tiles = decode_scenery_tilemap(&wad, 0x10);
+
+        // Exactly one loop: [cell 2, cell 0, gap, cell 1], stopping where the jump
+        // returns to the start rather than wrapping at an arbitrary cut.
+        assert_eq!(tiles, [Some(2), Some(0), None, Some(1)]);
+    }
+
+    #[test]
+    fn scenery_tilemap_stops_at_the_end_of_the_wad() {
+        // A stream with no jump runs out when the WAD does, not past it.
+        let mut wad = vec![0u8; 0x29f0 + 3];
+        wad[0x29f0] = 0x05; // cs 0, then the WAD ends mid-record
+
+        let tiles = decode_scenery_tilemap(&wad, 0);
+
+        assert_eq!(tiles, [Some(4)]);
     }
 }
