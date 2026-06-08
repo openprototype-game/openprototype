@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
-use prototype_formats::bin::{OUT_BIN_CATALOG, SpriteSheet, decode_banked};
+use prototype_formats::bin::{SpriteSheet, decode_banked};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
@@ -259,11 +259,15 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let background = Background::new(load_background(disc, data.background)?, data.background);
     let hud = load_hud_assets(disc, data.wad)?;
 
-    let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
+    let bin_name = format!("{}.BIN", data.catalog.stem());
+    let bin = disc
+        .read(&bin_name)
+        .with_context(|| format!("reading {bin_name}"))?;
     let wad = disc
         .read(data.wad)
         .with_context(|| format!("reading {}", data.wad))?;
-    let catalog = decode_banked(&out_bin, &wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
+    let catalog = decode_banked(&bin, &wad, data.catalog_offset)
+        .with_context(|| format!("decoding {bin_name}"))?;
     let overlays = load_overlays(&catalog)?;
     let overlay_slide = read_overlay_slide(&wad)?;
     let scenery = decode_scenery(&wad);

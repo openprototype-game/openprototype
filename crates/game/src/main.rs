@@ -40,6 +40,10 @@ mod desktop {
         /// Boot straight into a developer scene instead of the intro.
         #[arg(long)]
         scene: Option<DevScene>,
+
+        /// Which level to load for the `--scene level` harness (1..=7).
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=7))]
+        level: u8,
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
@@ -66,7 +70,8 @@ mod desktop {
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
-        let level_assets = load_level_assets(&disc, Level::L1)?;
+        let level = Level::from_number(cli.level).expect("--level is validated to 1..=7");
+        let level_assets = load_level_assets(&disc, level)?;
         let highscore_store = HighscoreStore::open(&disc)?;
         let mut app = App::new(
             menu_assets,
