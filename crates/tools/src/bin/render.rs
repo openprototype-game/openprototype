@@ -17,6 +17,7 @@ use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
 use prototype_formats::{
     Dimensions, Flic, IndexedImage, Palette, Sprite, StartExe, background, bdy, bin, pal, raw, smp,
+    wad,
 };
 
 #[derive(Parser)]
@@ -263,9 +264,14 @@ fn main() -> Result<()> {
             .context("decoding sprites")?
             .sprites;
 
-            let palette = match palette.as_deref() {
-                Some(path) => pal::decode(&read(source, path)?).context("decoding palette")?,
-                None => grayscale_ramp(),
+            // No explicit palette: a scenery BIN carries its colors in the
+            // level WAD, so use that embedded palette rather than grayscale.
+            let palette = match (palette.as_deref(), ship) {
+                (Some(path), _) => pal::decode(&read(source, path)?).context("decoding palette")?,
+                (None, false) => {
+                    wad::level_palette(&wad_bytes).context("extracting the level palette")?
+                }
+                (None, true) => grayscale_ramp(),
             };
 
             if let Some(path) = sheet.as_deref() {
