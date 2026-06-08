@@ -1,14 +1,14 @@
 //! A developer scene for live-testing the in-game level render.
 //!
 //! Not part of the normal front-end flow: the `--scene level` flag boots
-//! straight into it. It scrolls the seven-strip parallax canyon and composites
+//! straight into it. It scrolls the level's parallax background and composites
 //! the HUD panel and the animated weapon pod on top, all into one 320x160 frame,
 //! so the scroll, panel geometry, and the pod's open/settle animation can be
 //! checked against footage.
 //!
 //! All four secondaries start fully charged. Enter cycles the selected weapon
-//! (replaying the pod and overlay animations), Up/Down pan the canyon camera (the
-//! 160-tall canyon over the ~128-row window), WASD nudge the overlay, Esc quits.
+//! (replaying the pod and overlay animations), Up/Down pan the camera (the
+//! 160-tall background over the ~128-row window), WASD nudge the overlay, Esc quits.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -16,8 +16,8 @@ use std::time::Duration;
 use prototype_formats::Dimensions;
 
 use crate::assets::LevelAssets;
+use crate::background::BackgroundScroll;
 use crate::hud::{self, POD_SETTLED_FRAME};
-use crate::parallax::Parallax;
 use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
 use openprototype_core::framebuffer::Framebuffer;
@@ -46,7 +46,7 @@ const TICK: Duration = Duration::from_nanos(1_000_000_000 / 60);
 /// traced.
 const POD_FRAME_TICKS: u32 = 4;
 
-/// How far the camera can pan: the 160-tall canyon minus the ~128-row playfield
+/// How far the camera can pan: the 160-tall background minus the ~128-row playfield
 /// window. Matches the original's vertical-scroll counter `cs:0x266e` (0..0x20).
 const CAMERA_MAX: i32 = 32;
 
@@ -64,10 +64,11 @@ pub struct LevelScene {
     assets: Rc<LevelAssets>,
     state: GameState,
     frame: Framebuffer,
-    parallax: Parallax,
+    /// Per-strip scroll positions for the level's parallax background.
+    background_scroll: BackgroundScroll,
     /// Per-layer scroll positions for the level's scenery, advanced each tick.
     scenery_scroll: SceneryScroll,
-    /// Vertical camera, `0..=CAMERA_MAX`: which canyon row sits at the top of the
+    /// Vertical camera, `0..=CAMERA_MAX`: which background row sits at the top of the
     /// playfield. Nudged with Up/Down.
     camera_y: i32,
     /// The overlay's screen x, nudged with A/D.
@@ -99,12 +100,13 @@ impl LevelScene {
         );
 
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
+        let background_scroll = assets.background.scroll();
         let scenery_scroll = assets.scenery.scroll();
         let mut scene = Self {
             assets,
             state,
             frame,
-            parallax: Parallax::default(),
+            background_scroll,
             scenery_scroll,
             camera_y: 0,
             overlay_x: OVERLAY_X,
@@ -125,7 +127,7 @@ impl LevelScene {
         self.pod_ticks = 0;
     }
 
-    /// Pan the canyon camera by `delta` rows, clamped to `0..=CAMERA_MAX`.
+    /// Pan the camera by `delta` rows, clamped to `0..=CAMERA_MAX`.
     fn nudge_camera(&mut self, delta: i32) {
         self.camera_y = (self.camera_y + delta).clamp(0, CAMERA_MAX);
         eprintln!("camera_y = {}", self.camera_y);
@@ -143,7 +145,9 @@ impl LevelScene {
 
     /// Advance the parallax scroll and the pod animation by `ticks`.
     fn advance(&mut self, ticks: u32) {
-        self.parallax.advance(ticks);
+        self.assets
+            .background
+            .advance(&mut self.background_scroll, ticks);
         self.assets.scenery.advance(&mut self.scenery_scroll, ticks);
         self.pod_ticks += ticks;
 
@@ -153,7 +157,7 @@ impl LevelScene {
         }
     }
 
-    /// Composite the parallax canyon, the weapon overlay, the HUD, and the pod.
+    /// Composite the parallax background, the weapon overlay, the HUD, and the pod.
     ///
     /// The overlay is a playfield sprite, drawn before the panel so the opaque
     /// `PANEL.RAW` masks its lower rows. While the pod opens its slide keeps it
@@ -163,8 +167,8 @@ impl LevelScene {
     fn render(&mut self) {
         let firing = self.state.firing_weapon();
 
-        self.parallax.render(
-            &self.assets.background,
+        self.assets.background.render(
+            &self.background_scroll,
             &mut self.frame,
             self.camera_y,
             hud::PANEL_TOP,
@@ -237,7 +241,7 @@ impl Scene for LevelScene {
     }
 
     fn is_animating(&self) -> bool {
-        // The canyon scrolls continuously, so the scene always needs redrawing.
+        // The background scrolls continuously, so the scene always needs redrawing.
         true
     }
 
@@ -318,8 +322,8 @@ mod tests {
     fn one_tick_of_real_time_advances_the_scroll_by_one() {
         let mut scene = test_scene();
         scene.update(TICK, &[]);
-        // Strip 0 (speed 16 = 1px) moved one whole pixel after one tick.
-        assert_eq!(scene.parallax.pixel_column(0), 1);
+        // Strip 0 (rate 16 = 1px) moved one whole pixel after one tick.
+        assert_eq!(scene.background_scroll.pixel_column(0), 1);
     }
 
     #[test]

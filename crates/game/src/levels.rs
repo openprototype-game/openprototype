@@ -5,6 +5,8 @@
 //! one place those per-level facts live, so loaders key off it instead of
 //! hardcoding `LEVEL_1.WAD`.
 
+use crate::background::Sp;
+
 /// One of the seven levels.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Level {
@@ -23,6 +25,8 @@ pub enum Level {
 pub struct LevelData {
     /// The level's WAD/executable on the disc, e.g. `"LEVEL_2.WAD"`.
     pub wad: &'static str,
+    /// The level's SP parallax background (which carries its own strip layout).
+    pub background: Sp,
 }
 
 impl Level {
@@ -30,13 +34,34 @@ impl Level {
     /// own entry.
     pub fn data(self) -> LevelData {
         match self {
-            Level::L1 => LevelData { wad: "LEVEL_1.WAD" },
-            Level::L2 => LevelData { wad: "LEVEL_2.WAD" },
-            Level::L3 => LevelData { wad: "LEVEL_3.WAD" },
-            Level::L4 => LevelData { wad: "LEVEL_4.WAD" },
-            Level::L5 => LevelData { wad: "LEVEL_5.WAD" },
-            Level::L6 => LevelData { wad: "LEVEL_6.WAD" },
-            Level::L7 => LevelData { wad: "LEVEL_7.WAD" },
+            Level::L1 => LevelData {
+                wad: "LEVEL_1.WAD",
+                background: Sp::Canyon,
+            },
+            Level::L2 => LevelData {
+                wad: "LEVEL_2.WAD",
+                background: Sp::Raceb2,
+            },
+            Level::L3 => LevelData {
+                wad: "LEVEL_3.WAD",
+                background: Sp::Wald,
+            },
+            Level::L4 => LevelData {
+                wad: "LEVEL_4.WAD",
+                background: Sp::Raceb2,
+            },
+            Level::L5 => LevelData {
+                wad: "LEVEL_5.WAD",
+                background: Sp::Alienbg,
+            },
+            Level::L6 => LevelData {
+                wad: "LEVEL_6.WAD",
+                background: Sp::Raceb2,
+            },
+            Level::L7 => LevelData {
+                wad: "LEVEL_7.WAD",
+                background: Sp::Lavah,
+            },
         }
     }
 }

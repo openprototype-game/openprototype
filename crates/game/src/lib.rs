@@ -16,13 +16,13 @@
 
 pub mod app;
 pub mod assets;
+pub mod background;
 pub mod fade;
 pub mod flic_player;
 pub mod highscores;
 pub mod hud;
 pub mod level;
 pub mod levels;
-pub mod parallax;
 pub mod scene;
 pub mod scenery;
 pub mod screen;

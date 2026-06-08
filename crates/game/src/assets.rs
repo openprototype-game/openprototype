@@ -12,6 +12,7 @@ use prototype_formats::bin::{OUT_BIN_CATALOG, SpriteSheet, decode_banked};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
+use crate::background::{Background, Sp};
 use crate::levels::Level;
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
@@ -113,10 +114,10 @@ pub struct HudAssets {
 /// canyon background (decoded to one still here), the HUD, and the weapon-top
 /// overlay sprites.
 pub struct LevelAssets {
-    /// The canyon background, de-interleaved from the four `.SPn` plane files to
-    /// one 640x160 still. The canyon is wider than the screen; the level scrolls
-    /// a 320-wide window across it. The test scene shows a fixed window.
-    pub background: IndexedImage,
+    /// The level's parallax background: the SP image (de-interleaved from the
+    /// four `.SPn` planes to one 640x160 still) plus its strip layout. The image
+    /// is wider than the screen; the level scrolls a window across it.
+    pub background: Background,
     pub hud: HudAssets,
     /// The weapon-top overlay that clips over the panel, indexed by `Weapon`
     /// (`0` minigun ..= `4` secondary 4). Each is the firing weapon's cut-off top.
@@ -255,9 +256,7 @@ pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets>
 pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> {
     let data = level.data();
 
-    // TODO: the background is still canyon-only; it becomes per-level (data's SP)
-    // when the background loader is generalized.
-    let background = load_canyon_background(disc)?;
+    let background = Background::new(load_background(disc, data.background)?, data.background);
     let hud = load_hud_assets(disc, data.wad)?;
 
     let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
@@ -422,15 +421,15 @@ fn assemble_overlay(sheet: &SpriteSheet, first: usize, cells: usize) -> OverlayS
     }
 }
 
-/// De-interleave `CANYON.SP1..4` into one 640x160 still.
+/// De-interleave an SP background's four `.SPn` planes into one 640x160 still.
 ///
 /// Each `.SPn` file is one Mode X plane holding every fourth column, so pixel
 /// `(x, y)` lives in plane `x % 4` at byte `y * 160 + x / 4`.
-fn load_canyon_background(disc: &DiscImage) -> Result<IndexedImage> {
+fn load_background(disc: &DiscImage, sp: Sp) -> Result<IndexedImage> {
     let mut planes = Vec::with_capacity(4);
 
     for index in 1..=4 {
-        let name = format!("CANYON.SP{index}");
+        let name = format!("{}.SP{index}", sp.stem());
         let bytes = disc
             .read(&name)
             .with_context(|| format!("reading {name}"))?;
@@ -619,7 +618,7 @@ pub(crate) fn test_hud_assets() -> HudAssets {
 #[cfg(test)]
 pub(crate) fn test_level_assets() -> LevelAssets {
     LevelAssets {
-        background: blank_image(BACKGROUND_SIZE),
+        background: Background::new(blank_image(BACKGROUND_SIZE), Sp::Canyon),
         hud: test_hud_assets(),
         overlays: std::array::from_fn(|_| OverlaySprite {
             size: Dimensions::new(1, 1),
