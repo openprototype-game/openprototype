@@ -61,7 +61,7 @@ in segment `0x0F7F` (file offset `0xf9f0`). Records are **10 bytes = 5 words**:
 ```
 
 The table is a shared sprite **catalog**: **1028 records** (`0xf9f0 .. 0x12218`),
-referenced by index from the level's object/scenery code. A header-family draw
+referenced by index from the level's object code. A header-family draw
 loop (`@0x8ee2`) reads `field0` into `bp`, then its dispatcher (`@0x87ba`) reads
 the plane words from `gs:[bx+2/4/6/8]`. Each iteration: `bx += 0x0a` (next
 descriptor), `bp += 0x20` (X += 32 — sprites are 32px wide), clipping at X in
@@ -99,7 +99,7 @@ dispatcher families in the engine:
   left-clipped, sharing the trailing `RETF`; `@0x7c64` picks `clipbase` from
   screen-edge proximity.
 - **Direct family** (dispatcher `@0x804a` + variants): for large full-height
-  scenery (e.g. the 32×145 girders). `mov cs:[0x5854], gs:[bx]` — the plane word
+  objects (e.g. the 32×145 girders). `mov cs:[0x5854], gs:[bx]` — the plane word
   *is* the subroutine offset, no header, no clipping. `sub = pk`. This family
   advances `si` by a full plane-screen (`0x4000`) per plane.
 

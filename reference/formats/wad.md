@@ -5,8 +5,8 @@ level's program with its palette and data compiled in. Gameplay assets (sprites,
 audio) are loaded from separate disc files, not packed inside.
 
 This doc covers the container: the MZ image, the embedded palette, and the asset
-filename strings. How a level's scenery objects are placed (the generated scatter and
-the race levels' static table) is in `level-layout.md`.
+filename strings. How a level's enemy/pickup objects are placed (the generated
+scatter and the race levels' static table) is in `level-layout.md`.
 
 ## Container: it is a plain DOS MZ EXE
 

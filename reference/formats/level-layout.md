@@ -1,12 +1,18 @@
 # Level object layout
 
-How each level decides where its scenery and obstacle objects sit. Two
+How each level decides where its enemy and pickup objects spawn. Two
 mechanisms, one record format:
 
 - **Race levels (2, 4, 6)** bake a static placement table into the EXE (`0x1690`).
-- **Generated levels (1, 3, 5, 7)** build the layout at load from a PRNG-driven
-  layout script. All four are fully decoded, ported, and validated byte-for-byte
-  against the running game.
+- **Generated levels (1, 3, 5, 7)** build the placement at load from a PRNG-driven
+  layout script, so the scatter varies every play. All four are fully decoded,
+  ported, and validated byte-for-byte against the running game.
+
+The objects placed here are **enemies and pickups**, confirmed by rendering
+LEVEL_1's 12 distinct sprite types in the level palette. A level's decorative
+scenery (LEVEL_1's girder lattice and columns) is a third, separate mechanism,
+covered under [Scenery layers](#scenery-layers): parallax tilemap layers of
+catalog cells.
 
 Both kinds emit the same 8-byte object record. The WAD container itself (MZ image,
 palette, asset strings) is in `wad.md`; this doc is only the layout system.
@@ -27,40 +33,95 @@ Authoritative from the generator's write trace (`cs:[bp+0..6]`).
   is a sprite-data / OUT.BIN offset. Some descriptors (`0x392e`, `0x3f8e`) point at
   other `0x3308`-style values (nested). Pointer-vs-index resolution is a render-side
   detail to pin when wiring sprites.
-- **word2 (depth)** is a per-sprite-type draw layer: which parallax strip the object
-  rides, and so its scroll speed (see Level architecture). Fixed per sprite type.
+- **word2 (depth)** is a per-sprite-type draw layer (z-order among the objects),
+  fixed per sprite type. It picks the layer the object draws in; it does *not* lock
+  the object to a background strip's scroll speed (a spawned enemy moves under its
+  own AI).
 - **word3 (y)** is the vertical position.
 
 The same 8-byte shape appears in the race levels' static `0x1690` table, so both
 level kinds share one object-record format.
 
-Runtime buffer base: the records start at the C-runtime marker + `0x48` (the earlier
-+`0x46` was one word low, which is what made the fields look reordered). Read there,
+Runtime buffer base: the records start at the C-runtime marker + `0x48`. Read there,
 the runtime records are exactly `{x, sprite, depth, y}`, matching the write trace.
 
 ## Level architecture (parallax strips)
 
-From the original programmer's notes (via the user). It reframes several findings:
+The level's background and parallax architecture:
 
 - `SP1`..`SP4` are the **four Mode X planes of one combined background image**. That
   image is **split into horizontal strips**, each scrolling at a **different speed**
-  for the parallax depth illusion. One strip is the **foreground**, drawn *in front
-  of* the enemies and the player ship.
+  for the parallax depth illusion. The SP planes are all background; the foreground
+  girders that draw in front of the ship are a scenery layer (see
+  [Scenery layers](#scenery-layers)).
 - The combined image is **taller than the screen**: flying up/down scrolls it
   vertically, so the full height is not always visible. The strip **seams** show in
   the Stage 1 combined render (`re/canyon_*`), where it gets cut.
-- Scenery **objects are attached to the strips** and scroll with them. The per-object
-  **depth** (`word2`) is which strip/layer the object belongs to. All of one level's
-  objects live in the single buffer at vaddr `0x34dc`; depth sorts them onto strips
-  at render time.
-- The non-race levels **generate** their object lists at load; the race levels bake an
-  exact table. Rationale (the user's): race levels are obstacle courses needing
-  hand-picked placement; the others' objects are decorative filler a routine scatters.
+- The **background** strips are the SP planes; their scroll is the parallax. The
+  placed **objects** (the generated buffer at vaddr `0x34dc`) are enemies and
+  pickups, not background scenery. They do not ride the strips: `word2` (depth) is a
+  draw layer, and a spawned enemy moves under its own AI. The per-frame display list
+  the blitters read is built at runtime from this buffer as the scroll brings each
+  spawn-x into view.
+- The non-race levels **generate** their spawn placement at load (PRNG scatter,
+  reseeded from the wall clock, so the layout varies every play); the race levels
+  bake an exact table. Randomised placement suits enemy waves; the race obstacle
+  courses need it fixed.
 
 Data-strategy note: decoded design data (layout scripts, depth tables) is the
 recreated game's own content, not the creative assets (sprite pixels, audio,
-palettes) we read from the user's disc. For the generated levels there is nothing to
+palettes) we read from the original disc. For the generated levels there is nothing to
 extract anyway: we port the generator and its small per-layer config.
+
+## Scenery layers
+
+LEVEL_1's girder lattice and energy columns are drawn as parallax tilemap layers, a
+third placement mechanism separate from the enemy/pickup object table and the SP
+background. Each layer is a horizontal map of catalog-cell codes, one 32-pixel
+column per byte, scrolled at its own rate and composited in a fixed pass relative to
+the playfield.
+
+### The tilemap
+
+The renderer (`0x9237`) points `cs:0x31c4` at a layer's tilemap and reads the tile
+byte at `cs:0x31c4 + (scroll >> 5)`, one tile per 32-pixel column. The byte maps to a
+sprite:
+
+- `0` — an empty column.
+- `0xFF` — a jump to the 16-bit cs-offset that follows; the stream continues there.
+- any other `n` — OUT.BIN catalog cell `n - 1` (catalog record offset `(n-1) * 10`),
+  blitted from the catalog segment `0x0F7F`.
+
+Each stream ends in a `0xFF` jump back to its own start, so a layer is a short
+repeating pattern looped under the level for its whole length; the level's end comes
+from a separate timeline, not the scenery.
+
+### The three layers
+
+| Layer | Tilemap `cs` | Loop | LEVEL_1 catalog cells |
+| --- | --- | --- | --- |
+| Back  | `0x3137` | 62 columns | sparse in the opening section |
+| Mid   | `0x30f2` | 66 columns | 6–14, 71–78 (the lattice) |
+| Front | `0x3178` | 49 columns | 1, 2 (the front girders) |
+
+`file = cs + 0x29F0`. The same renderer draws all three from the per-frame compose
+path, in order: back, mid, then (after the ship and enemies) front. A layer's depth
+is its call position; there is no depth field in the tilemap. Each layer scrolls on
+its own accumulator (`cs:0x25f6`, `0x25fa`, `0x25f2`) for the parallax rate.
+
+### Compiled-sprite front pass
+
+LEVEL_1 has a second front pass of compiled sprites, drawn after the ship by routine
+`0x8d2b`. It reads a table at `cs:0x43ea` of 18-byte rows `{count, two pieces × four
+plane addresses}` and far-calls each piece's compiled blit code in segment `EC00`
+(the compiled-sprite format is in `bin.md`). The three tilemap layers cover the
+visible lattice; this pass is not yet in the port.
+
+### Port
+
+`scenery.rs` and `assets.rs` decode one loop per tilemap and composite the three
+layers over the background, each scrolling at a placeholder rate. The layer rows and
+the per-layer scroll rates (`cs:0x25f6/fa/f2`) are placeholders until traced.
 
 ## Race levels: the static `0x1690` table
 
@@ -73,13 +134,15 @@ per-level data: a table at file `0x1690`.
 - Populated count scales with level length: LEVEL_2 ~64, LEVEL_4 ~78, LEVEL_6 ~230.
 - `word0` is a reference into the level's BIN: in LEVEL_2 the offsets point at real,
   reused sprite data in `RACE1.BIN` (`0x3EB2` appears three times in a row, the same
-  scenery sprite placed repeatedly); the bytes there are compiled-sprite code
+  sprite placed repeatedly); the bytes there are compiled-sprite code
   (`c6 84` = `mov byte [si+disp16]`) and clip headers. The recurring high word is
   mostly `0x7D00` (with some `0x00FA` / `0x0014`), the same `0x7d00` descriptor marker
   the generated records use.
 
-So the `0x1690` table is the race levels' static scenery-placement layer. Still open:
-the meaning of the byte and word after the pointer, and a render-validation pass.
+So the `0x1690` table is the race levels' static object-placement layer (object
+class unconfirmed; likely the race obstacle/enemy set, by analogy with the generated
+levels). Still open: the meaning of the byte and word after the pointer, and a
+render-validation pass.
 
 ## Generated levels: the load-time scatter generator
 
@@ -117,8 +180,8 @@ State: DGROUP `0x56f5` (modulus), `0x56f7`/`0x56f9` (saved lag pointers),
 The wrap target byte `0x74` is word index 58, one past the 58 words the seeder
 fills, so the table is effectively 59 words. That 59th slot starts **zero** (it is
 read at the first wrap and written by feedback once `si` reaches `0x74`); a non-zero
-init breaks the byte-exact match. The earlier static-file value at that address is
-not what the runtime sees.
+init breaks the byte-exact match. The static-file value at that address is not what
+the runtime sees.
 
 One quirk to replicate: after both lags first reach 0, the generator saves them as
 `(0, 0)` again every call, so it reseeds on every subsequent call and the tail of a
@@ -405,7 +468,7 @@ Every emitter is the same body: `count = rng() + bx`, then a loop writing
 xstart-added-once trick and the same 4-word `0x7d00` descriptor. The dispatcher is the
 same straight-line script in all four. The PRNG is the same routine at a relinked
 address (the `0x7ab7` multiplier appears exactly once in every WAD). The emitters
-range from baked-constant (LEVEL_1 carries its scenery in the variant) to slot-driven
+range from baked-constant (LEVEL_1 carries its sprite types in the variant) to slot-driven
 (LEVEL_3+ read engine slots the dispatcher writes), but it is one interpreter + one
 `Emitter` enum + per-level data, no per-level code.
 
@@ -425,9 +488,10 @@ they clashed with), so there is no second interpreter.
 - Static landmark records at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
   `{0xfa,0x3f8e,0x1770,0x46}` in `{x,spr,depth,y}` form, then the default template
   `(8,0x7d00,0x3308,10)`.
-- Pixel render: decode the Mode X compiled sprites at each `word2` OUT.BIN offset
-  (see `bin.md`) and draw them over the background, replacing the colour-bar
-  placeholders. The EMS page for `word2` values in higher pages (some hit zero at the
-  flat OUT.BIN offset).
+- Sprite resolution is solved: `word1` is a cs-offset to an 8-byte descriptor
+  `{cell_count, width, height, catalog_index}`; `catalog_index` indexes the OUT.BIN
+  catalog `decode_banked` produces, and the sprite spans `cell_count` consecutive
+  cells (see `bin.md`). Open: wire resolve-and-blit into the parallax render (place
+  at `canyon_x - scroll`, `canyon_y - camera`).
 - Race `0x1690`: render-validate (needs `RACE1.BIN`'s catalog offset; the render tool
   hardcodes `OUT_BIN_CATALOG`) and confirm the byte+word fields after the pointer.
