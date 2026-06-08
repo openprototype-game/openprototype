@@ -46,7 +46,7 @@ impl Renderer {
         .context("requesting the GPU device")?;
 
         let caps = surface.get_capabilities(&adapter);
-        // A non-sRGB format so the 8-bit palette colours reach the screen
+        // A non-sRGB format so the 8-bit palette colors reach the screen
         // unchanged, the way the VGA DAC drove them (no gamma re-encode).
         let format = caps
             .formats

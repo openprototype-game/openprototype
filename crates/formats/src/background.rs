@@ -1,6 +1,6 @@
 //! Level backgrounds (`.SP1`..`.SP4`).
 //!
-//! A level background is a 640x160 256-colour image (two screens wide) stored
+//! A level background is a 640x160 256-color image (two screens wide) stored
 //! across four files as VGA "Mode X" byte planes: plane `p` holds the pixels
 //! where `x % 4 == p`, so SP1..SP4 are planes 0..3. Each plane file is
 //! `(640 / 4) * 160` = 25600 bytes.

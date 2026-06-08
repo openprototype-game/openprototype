@@ -4,7 +4,7 @@ Status: verified by rendering the original main menu.
 
 ## Layout
 
-A font is an uncompressed 256-colour glyph sheet, fixed 320 px wide. Height
+A font is an uncompressed 256-color glyph sheet, fixed 320 px wide. Height
 comes from the byte count (`FONT.RAW` and `FONT2.RAW` are both 19840 bytes =
 320 x 62).
 
@@ -36,7 +36,7 @@ cursor. Glyph `0x3e` (drawn for `'>'`) is that triangle, not an ASCII `>`.
 The menu palette is not a `.PAL` file. It lives inside START.EXE at image offset
 `0x5130` (file offset **21296**; 768 bytes, 6-bit VGA: index 0 black, index 1
 white, then a gray ramp). The `start_exe` decoder reads it via `StartExe`.
-`entry0` copies it from segment `0x513:0` into a buffer and uploads 256 colours
+`entry0` copies it from segment `0x513:0` into a buffer and uploads 256 colors
 through `fcn.00000230` (DAC ports 0x3c8/0x3c9) just before the menu loop; see
 `reference/start-exe.md`. Getting the offset wrong by a few bytes rotates the
 RGB channels and tints everything green, which is how the right alignment was
@@ -45,4 +45,4 @@ found.
 ## Open
 
 - `FONT2.RAW` has the same dimensions; its distinct glyph set (different size or
-  colour for the HUD) is not yet rendered.
+  color for the HUD) is not yet rendered.

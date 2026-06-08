@@ -400,7 +400,7 @@ impl Credits {
 
 /// The dev-team credit pages, transcribed verbatim from `START.EXE`'s credits
 /// routine (`0x460b`, pages at data offsets `0x6e5`..`0xb05`). The original's
-/// blank padding rows are dropped; the meaningful lines are centred.
+/// blank padding rows are dropped; the meaningful lines are centered.
 const CREDIT_PAGES: &[&[&str]] = &[
     &[
         "PROGRAM:",
@@ -454,7 +454,7 @@ const CREDIT_PAGES: &[&[&str]] = &[
 /// One glyph cell of the menu font.
 const GLYPH: i32 = 16;
 
-/// Draw a block of lines centred on the screen.
+/// Draw a block of lines centered on the screen.
 fn draw_centered(framebuffer: &mut Framebuffer, font: &Font, lines: &[&str]) {
     let height = lines.len() as i32 * GLYPH;
     let mut y = (SCREEN_HEIGHT as i32 - height) / 2;
@@ -521,7 +521,7 @@ mod tests {
     fn opens_on_a_black_hold_then_fades_the_neo_still_in() {
         let mut intro = test_intro();
         // The intro opens on the black hold where the music starts, then fades
-        // neo in, then holds. Check the machinery, not colour (the synthetic
+        // neo in, then holds. Check the machinery, not color (the synthetic
         // still has an all-zero palette).
         assert!(
             matches!(intro.active, Active::Hold(_)),

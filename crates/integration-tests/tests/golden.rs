@@ -5,8 +5,8 @@
 //! manifest. A mismatch means a decoder's output changed. Confirm the change
 //! is intended, then regenerate with `UPDATE_GOLDEN=1`.
 //!
-//! These hashes are a snapshot of current behaviour, not proof of correctness:
-//! pixel/colour fidelity is still unverified, so a hash only says "output is
+//! These hashes are a snapshot of current behavior, not proof of correctness:
+//! pixel/color fidelity is still unverified, so a hash only says "output is
 //! unchanged", which is all a snapshot can honestly claim.
 
 use std::collections::BTreeMap;
@@ -228,7 +228,7 @@ fn read_manifest(path: &Path) -> BTreeMap<String, String> {
 fn write_manifest(path: &Path, entries: &[(String, String)]) {
     let mut text = String::new();
     text.push_str("# Golden SHA-256 of DECODED output (not the source files).\n");
-    text.push_str("# A snapshot of current decoder behaviour, not proof of correctness.\n");
+    text.push_str("# A snapshot of current decoder behavior, not proof of correctness.\n");
     text.push_str("# A mismatch means decoded output changed; regenerate with UPDATE_GOLDEN=1.\n");
 
     for (key, hash) in entries {

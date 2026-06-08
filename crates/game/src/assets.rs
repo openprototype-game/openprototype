@@ -131,7 +131,7 @@ pub struct LevelAssets {
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
-/// the original draws over the playfield/panel without a colour key.
+/// the original draws over the playfield/panel without a color key.
 pub struct OverlaySprite {
     pub size: Dimensions,
     pub pixels: Vec<Option<u8>>,

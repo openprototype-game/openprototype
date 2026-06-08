@@ -150,7 +150,7 @@ around the ship is drawn while `cs:0x266a != 0` (checked at `0xb8d3`).
   weapon 4 = the gs-segment special; the per-weapon projectile dispatch in
   `0x981d` is only partly decoded).
 - New-game starting values for lives and weapon levels (not set in a level WAD's
-  own paths; likely initialised by `START.EXE` and carried across level WADs).
+  own paths; likely initialized by `START.EXE` and carried across level WADs).
 - The bullet-graze list (buffer B) vs body-contact list (buffer C) is proven from
   the spawn side (see [entity-buffers.md](entity-buffers.md)); whether *every*
   enemy class body-contacts for the full zero (vs some special types at `0xdc9c`

@@ -1,6 +1,6 @@
 //! Linear palette fades over time.
 //!
-//! Drives a fade from one 256-colour palette to another over a fixed duration,
+//! Drives a fade from one 256-color palette to another over a fixed duration,
 //! interpolating each channel. The intro fades the title and logo screens in
 //! and out (to and from a black palette) the way `START.EXE`'s fade primitive
 //! (`0x2ec4`) does.

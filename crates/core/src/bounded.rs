@@ -5,7 +5,7 @@
 /// The ceiling is enforced at construction and on [`saturating_add`], so a value
 /// can never exceed `BOUND`; the floor is `0`. Domain counters are type aliases
 /// over this (a weapon level, lives, smart bombs), distinguished by their bound.
-/// When one needs behaviour of its own, promote its alias to a real newtype
+/// When one needs behavior of its own, promote its alias to a real newtype
 /// wrapping this type, keeping the same `new` / `get` surface.
 ///
 /// [`saturating_add`]: BoundedU8::saturating_add

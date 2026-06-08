@@ -176,7 +176,7 @@ impl<'a> Flic<'a> {
 }
 
 /// `COLOR64`: `u16` packet count, then `(skip, count)` packets of 6-bit RGB.
-/// `count == 0` means 256. Indices advance by `skip` then by each colour written.
+/// `count == 0` means 256. Indices advance by `skip` then by each color written.
 fn apply_color64(palette: &mut Palette, data: &[u8]) -> Result<()> {
     let packet_count = read_u16(data, 0)?;
     let mut at = 2;
@@ -344,7 +344,7 @@ mod tests {
         let mut palette = Palette {
             colors: [Rgb::default(); 256],
         };
-        // 1 packet: skip 2, change 1 colour, 6-bit pure red.
+        // 1 packet: skip 2, change 1 color, 6-bit pure red.
         let data = [0x01, 0x00, 0x02, 0x01, 63, 0, 0];
 
         apply_color64(&mut palette, &data).unwrap();

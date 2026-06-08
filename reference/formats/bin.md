@@ -67,7 +67,7 @@ the plane words from `gs:[bx+2/4/6/8]`. Each iteration: `bx += 0x0a` (next
 descriptor), `bp += 0x20` (X += 32 — sprites are 32px wide), clipping at X in
 `[-32, 288]`.
 
-The WAD tail after the catalog: 8 zero bytes (`0x12218`), then **three 16-colour
+The WAD tail after the catalog: 8 zero bytes (`0x12218`), then **three 16-color
 VGA-6bit ramps** (`0x12220 .. 0x122b0`, lighting/fade LUTs, 48 bytes each, the
 2nd and 3rd identical), then zero padding to the WAD end (`0x126d0`).
 
@@ -143,7 +143,7 @@ exhausts), covering 228 of the 232 subroutines.
   opcodes, Mode X convention, EMS-page banking, and both draw families come from
   the disassembly, and the per-entry header/direct rule is a self-describing
   property of the data, not a guess.
-- **Open**: pixel/colour fidelity is eyeballed, not diffed against real captures.
+- **Open**: pixel/color fidelity is eyeballed, not diffed against real captures.
 - **Open**: the runtime placement layer — *which* catalog entry is drawn *where*
   and *when* (scroll `cs:0x6404`, the per-object tables) — is needed for a
   faithful live renderer but not for extracting the sprites. Not traced.

@@ -28,7 +28,7 @@ Decoded sizes (via the ByteRun1 unpack), all 320 pixels wide:
 | COVER3.BDY    |     70,494 | 152,960 | 320 x 478  |
 
 NEO and SURPLOGO render as the studio logos; COVER3 (320 x 478, a tall portrait)
-is the "PROTOTYPE" title cover art. All render with correct colours and no
+is the "PROTOTYPE" title cover art. All render with correct colors and no
 horizontal skew, which confirms both the 320 width and the chunky layout.
 
 ## Open

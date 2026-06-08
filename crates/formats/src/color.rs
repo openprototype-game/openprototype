@@ -1,8 +1,8 @@
-//! Colours and palettes.
+//! Colors and palettes.
 
 use crate::error::{DecodeError, Result};
 
-/// An 8-bit-per-channel RGB colour, ready for display.
+/// An 8-bit-per-channel RGB color, ready for display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Rgb {
     pub r: u8,
@@ -78,8 +78,8 @@ mod tests {
     #[test]
     fn maps_entries_in_file_order() {
         let mut bytes = vec![0u8; 768];
-        bytes[3] = 63; // colour 1, red
-        bytes[5] = 32; // colour 1, blue
+        bytes[3] = 63; // color 1, red
+        bytes[5] = 32; // color 1, blue
         let palette = Palette::from_vga_6bit(&bytes).unwrap();
 
         assert_eq!(palette.colors[0], Rgb { r: 0, g: 0, b: 0 });

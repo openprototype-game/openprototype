@@ -69,7 +69,7 @@ the rest are named from the call site.
    `cs:[0x2760]`. *(gating traced)*
 6. `0x4512` — EMS check and alloc of the ~2.5 MB "Grafik Data" buffer (`0x2d38`
    probes EMS; on failure prints "2.5 MB of free EMS" and exits). *(traced)*
-7. `0x3158` — build the 256-colour palette (256 RGB triples from segment
+7. `0x3158` — build the 256-color palette (256 RGB triples from segment
    `0x513`). *(traced)*
 8. `0x3a74` — create the `message` file (`AH=3C`), the level-handoff file.
    *(traced)*
@@ -241,7 +241,7 @@ transcribe (the menu palette) are read at runtime, via the `start_exe` decoder.
 
 | Routine | Address | Role |
 |---------|---------|------|
-| DAC palette upload | `0x230` | 256 colours to ports `0x3C8`/`0x3C9` |
+| DAC palette upload | `0x230` | 256 colors to ports `0x3C8`/`0x3C9` |
 | Palette fade | `0x2ec4` | interpolate two palettes over N steps (`0x2ea2`/`0x3024`/`0x230`); N from `cs:[0x3022]` |
 | Delay / wait | `0x1068` / `0x3024` | set a frame countdown, wait (vblank-paced, key-skippable) |
 | Image blit | `0x2f04` | copy a 64000-byte image to `0xA000` |

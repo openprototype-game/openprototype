@@ -24,7 +24,7 @@ prior attempt hit).
 Only three appear across every file:
 
 - **COLOR64** (11): `u16` packet count, then `(skip, count)` packets. `skip`
-  advances the colour index, `count` colours follow as 6-bit RGB triples
+  advances the color index, `count` colors follow as 6-bit RGB triples
   (`count == 0` means 256). Same 6-bit-to-8-bit expansion as `.PAL`.
 - **BRUN** (15): the keyframe. Per line, a leading packet count (ignored; fill to
   width) then packets. Signed count byte: **positive → run** of the next byte,

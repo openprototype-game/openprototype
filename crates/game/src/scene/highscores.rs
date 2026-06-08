@@ -42,7 +42,7 @@ const FLY_STEPS: usize = 25;
 /// Per-step duration. Steps advance at a uniform rate; a recording of the
 /// original runs the eight-entry fly-in over ~25s, so `8 * 25` steps ≈ 125ms each.
 const STEP_DURATION: Duration = Duration::from_millis(125);
-/// Where the entry's centre starts before it shrinks up to its row.
+/// Where the entry's center starts before it shrinks up to its row.
 const START_CENTER_Y: f32 = 188.0;
 
 enum Phase {
@@ -283,8 +283,8 @@ fn step_scale(step: usize) -> f32 {
     FLY_STEPS as f32 / (step + 1) as f32
 }
 
-/// Composite `strip` onto `target`, scaled by `scale` and centred at
-/// (`center_x`, `center_y`). Nearest-neighbour, inverse-mapped so large scales
+/// Composite `strip` onto `target`, scaled by `scale` and centered at
+/// (`center_x`, `center_y`). Nearest-neighbor, inverse-mapped so large scales
 /// clip to the screen. Source index 0 is transparent.
 fn blit_scaled(
     target: &mut IndexedImage,

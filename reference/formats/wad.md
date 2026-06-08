@@ -32,7 +32,7 @@ base; the others are each their own build.
 
 ## Palette: locate by signature, not by offset
 
-Each WAD embeds the 256-colour palette as a raw 768-byte block of 6-bit VGA values
+Each WAD embeds the 256-color palette as a raw 768-byte block of 6-bit VGA values
 (the same layout as a `.PAL`). The offset differs per WAD (see the table) and follows
 no fixed rule, so it cannot be hardcoded or computed.
 
@@ -52,8 +52,8 @@ The seven palettes are not seven different ones:
   greens).
 - LEVEL_7 (LAVAH) is a more divergent variant (lava oranges and reds).
 
-So the game authored most backgrounds against one shared 256-colour palette and
-swapped in tweaked variants only where a level needed colours the master lacked.
+So the game authored most backgrounds against one shared 256-color palette and
+swapped in tweaked variants only where a level needed colors the master lacked.
 
 Verified by rendering each background with the palette found in its WAD:
 
@@ -62,7 +62,7 @@ Verified by rendering each background with the palette found in its WAD:
 - LAVAH (own variant): correct. Glowing orange and red lava.
 - WALD (own variant): renders mostly dark with a green-speckled band at the top. This
   is correct: the palette is right (master plus the green bottom row), and the dark
-  background is by design. The level's vivid colour comes from the foreground trees,
+  background is by design. The level's vivid color comes from the foreground trees,
   which are BIN sprites composited on top, not from the background.
 
 ## Asset references

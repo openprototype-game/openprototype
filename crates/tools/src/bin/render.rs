@@ -37,7 +37,7 @@ enum Command {
     Palette {
         input: PathBuf,
         output: PathBuf,
-        /// Side length of each colour cell, in pixels.
+        /// Side length of each color cell, in pixels.
         #[arg(long, default_value_t = 16)]
         cell: u32,
     },

@@ -20,7 +20,7 @@ use crate::error::DecodeError;
 /// Size of the MZ header; the loaded image starts here.
 const HEADER_SIZE: usize = 0x200;
 
-/// Image offset of the 256-colour menu palette (768 bytes, 6-bit VGA).
+/// Image offset of the 256-color menu palette (768 bytes, 6-bit VGA).
 const MENU_PALETTE_OFFSET: usize = 0x5130;
 const PALETTE_LEN: usize = 768;
 
@@ -67,7 +67,7 @@ impl<'a> StartExe<'a> {
         Ok(Self { image })
     }
 
-    /// Decode the menu palette: 256 colours uploaded to the DAC before the
+    /// Decode the menu palette: 256 colors uploaded to the DAC before the
     /// menu loop. Index 0 is black, index 1 white, then a gray-to-rust ramp.
     pub fn menu_palette(&self) -> Result<Palette> {
         let bytes = self

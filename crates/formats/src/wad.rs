@@ -9,15 +9,15 @@ use crate::error::{DecodeError, Result};
 /// A VGA DAC channel is 6-bit, so every palette byte is at most `0x3f`.
 const MAX_DAC: u8 = 0x3f;
 
-/// Bytes in a 256-colour VGA palette (`256 * 3`).
+/// Bytes in a 256-color VGA palette (`256 * 3`).
 const PALETTE_LEN: usize = 768;
 
-/// The bytes a palette block opens with: colour 0 is black, colour 1 is white.
+/// The bytes a palette block opens with: color 0 is black, color 1 is white.
 /// A 30-step gray ramp follows, but black-then-white already pins the block in
 /// exactly one place per WAD.
 const SIGNATURE: [u8; 6] = [0x00, 0x00, 0x00, MAX_DAC, MAX_DAC, MAX_DAC];
 
-/// Extracts the level's embedded 256-colour palette from a `.WAD`.
+/// Extracts the level's embedded 256-color palette from a `.WAD`.
 ///
 /// The palette is a raw 768-byte block of 6-bit VGA DAC values (see
 /// [`Palette::from_vga_6bit`]) compiled in at a per-level offset that follows no

@@ -4,7 +4,7 @@
 //!
 //! 1. **Expand** the palette indices into an offscreen RGBA texture the size of
 //!    the source frame. The index frame uploads as an `R8Uint` texture and the
-//!    256-colour palette as a `256x1` RGBA texture; the shader does
+//!    256-color palette as a `256x1` RGBA texture; the shader does
 //!    `rgba = palette[index]`. This is the GPU equivalent of the VGA DAC, and it
 //!    means a palette-only change (a fade, FLIC cycling) is a 1 KB re-upload with
 //!    the index texture untouched.
@@ -28,7 +28,7 @@ use prototype_formats::Dimensions;
 const TARGET_ASPECT: f32 = 4.0 / 3.0;
 
 /// The offscreen (expand-pass output) format. Linear unorm so the 8-bit palette
-/// colours blend and present unchanged, the way the VGA DAC drove them.
+/// colors blend and present unchanged, the way the VGA DAC drove them.
 const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// The `Fit` uniform, matching the `blit.wgsl` layout. Padded to 32 bytes so the
@@ -522,9 +522,9 @@ mod tests {
     }
 
     /// An 8x6 frame split into four solid quadrants (TL=1, TR=2, BL=3, BR=4),
-    /// each a distinct palette colour. The quadrant layout pins both axes'
+    /// each a distinct palette color. The quadrant layout pins both axes'
     /// orientation; the solid blocks make interior pixels survive filtering
-    /// byte-exact (every bilinear tap is the same colour).
+    /// byte-exact (every bilinear tap is the same color).
     fn quadrant_frame() -> (Framebuffer, [[u8; 3]; 4]) {
         let colors = [[200, 0, 0], [0, 200, 0], [0, 0, 200], [200, 200, 0]];
 
@@ -652,7 +652,7 @@ mod tests {
         let bytes = render_to_bytes(device, queue, &frame, width, height);
 
         // Deep inside each output quadrant, where filtering taps stay within one
-        // solid block, the colour is byte-exact. The quadrant positions also
+        // solid block, the color is byte-exact. The quadrant positions also
         // prove both axes are oriented right (TL is red, not flipped).
         let samples = [
             ((4, 3), colors[0]),  // top-left
@@ -673,7 +673,7 @@ mod tests {
         };
 
         let (frame, _) = quadrant_frame();
-        // 24x12 is wider than 4:3, so the 16-wide content centres with 4px bars.
+        // 24x12 is wider than 4:3, so the 16-wide content centers with 4px bars.
         let (width, height) = (24u32, 12u32);
         let bytes = render_to_bytes(device, queue, &frame, width, height);
 
@@ -682,7 +682,7 @@ mod tests {
         assert_ne!(
             pixel(&bytes, width, 12, 6),
             [0, 0, 0],
-            "centre content is not black"
+            "center content is not black"
         );
     }
 }

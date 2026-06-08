@@ -1,14 +1,14 @@
 //! The indexed framebuffer the core draws into.
 //!
 //! The original game runs in VGA modes whose frames are palette indices with a
-//! 256-colour DAC (the front-end is mode 13h, 320x200). The core mirrors that:
+//! 256-color DAC (the front-end is mode 13h, 320x200). The core mirrors that:
 //! a frame is indices plus the active palette, at whatever size the scene works
 //! in. It never touches RGB or a window; the backend resolves indices through
 //! the palette and presents the result scaled.
 
 use prototype_formats::{Dimensions, IndexedImage, Palette};
 
-/// A frame of palette indices plus the active 256-colour palette.
+/// A frame of palette indices plus the active 256-color palette.
 pub struct Framebuffer {
     pub image: IndexedImage,
     pub palette: Palette,
@@ -75,7 +75,7 @@ impl Framebuffer {
     /// `pixels` is `size.width * size.height` entries in row-major order; `None`
     /// is transparent and leaves the frame untouched, `Some(index)` overwrites.
     /// This is how the level overlay (a `bin` sprite with trimmed margins) draws
-    /// over the playfield and HUD without a colour key.
+    /// over the playfield and HUD without a color key.
     pub fn blit_transparent(&mut self, pixels: &[Option<u8>], size: Dimensions, x: i32, y: i32) {
         let frame_width = self.image.size.width as i32;
         let frame_height = self.image.size.height as i32;

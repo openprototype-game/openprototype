@@ -4,7 +4,7 @@ Status: verified against four level sets.
 
 ## Layout
 
-A level's background is one 640x160 256-colour image (two screens wide),
+A level's background is one 640x160 256-color image (two screens wide),
 stored across four files as VGA "Mode X" byte planes:
 
 - Plane `p` holds the pixels where `x % 4 == p`.
@@ -30,5 +30,5 @@ This corrects the 2013 developer mail, which guessed SP1-4 were "4-layer"
 ## Open
 
 - Width 640 and height 160 are constant across every set seen so far.
-- Colours are unverified until a level `.WAD` palette is decoded; rendered so
+- Colors are unverified until a level `.WAD` palette is decoded; rendered so
   far only against a grayscale ramp and unrelated palettes.
