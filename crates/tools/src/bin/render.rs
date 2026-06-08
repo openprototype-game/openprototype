@@ -313,7 +313,8 @@ fn main() -> Result<()> {
 /// panel crop scales to 640x96 to match the real proportions.
 fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
     let disc = source.context("the hud command needs --cue to read its assets")?;
-    let assets = openprototype::assets::load_hud_assets(disc).context("loading HUD assets")?;
+    let assets =
+        openprototype::assets::load_hud_assets(disc, "LEVEL_1.WAD").context("loading HUD assets")?;
 
     // (selected, level) per row; firing_weapon() resolves to the minigun when the
     // selected slot is empty, else that secondary, so this walks all five.

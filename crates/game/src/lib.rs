@@ -21,6 +21,7 @@ pub mod flic_player;
 pub mod highscores;
 pub mod hud;
 pub mod level;
+pub mod levels;
 pub mod parallax;
 pub mod scene;
 pub mod scenery;

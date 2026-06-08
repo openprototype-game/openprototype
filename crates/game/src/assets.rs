@@ -12,6 +12,7 @@ use prototype_formats::bin::{OUT_BIN_CATALOG, SpriteSheet, decode_banked};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
+use crate::levels::Level;
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
@@ -159,10 +160,11 @@ const OVERLAY_CELLS: [(usize, usize); WEAPON_COUNT] = [
 /// Width of one Mode X catalog cell, in pixels.
 const CELL_WIDTH: usize = 32;
 
-/// Level 1's three parallax scenery layers as `(WAD cs-offset, top row, speed)`,
+/// Level 1's three scenery tilemap layers as `(WAD cs-offset, top row, speed)`,
 /// back to front. The tilemaps are at `cs:0x3137 / 0x30f2 / 0x3178` (the engine
-/// points `cs:0x31c4` at each in turn); see [`decode_scenery`] for the TODO on
-/// the placeholder rows and speeds.
+/// points `cs:0x31c4` at each in turn). `top` is the layer's Mode X destination
+/// offset over 80; `speed` is its parallax strip rate (the `cs:0x25f6/fa/f2`
+/// scroll accumulators).
 const SCENERY_LAYERS: [(usize, i32, u32); 3] = [
     (0x3137, 38, 6),  // back
     (0x30f2, 14, 10), // mid
@@ -220,12 +222,12 @@ const WEAPON_PODS_SIZE: Dimensions = Dimensions {
     height: 192,
 };
 
-/// Load and decode the in-game HUD assets from the disc image.
-///
-/// The palette is `LEVEL_1.WAD`'s embedded one for now; it stands in until the
-/// level scene picks the palette for the level being played.
-pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
-    let wad_bytes = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
+/// Load and decode the in-game HUD assets from the disc image. The HUD palette
+/// is the playing level's, read from `palette_wad`.
+pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets> {
+    let wad_bytes = disc
+        .read(palette_wad)
+        .with_context(|| format!("reading {palette_wad}"))?;
     let palette = wad::level_palette(&wad_bytes).context("extracting the level palette")?;
 
     let panel = decode_raw(disc, "PANEL.RAW", PANEL_SIZE)?;
@@ -248,14 +250,20 @@ pub fn load_hud_assets(disc: &DiscImage) -> Result<HudAssets> {
     })
 }
 
-/// Load and decode the level scene's assets: the canyon background, the HUD, and
-/// the weapon overlays with their per-weapon slide tables.
-pub fn load_level_assets(disc: &DiscImage) -> Result<LevelAssets> {
+/// Load and decode the level scene's assets: the parallax background, the HUD,
+/// and the weapon overlays with their per-weapon slide tables.
+pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> {
+    let data = level.data();
+
+    // TODO: the background is still canyon-only; it becomes per-level (data's SP)
+    // when the background loader is generalized.
     let background = load_canyon_background(disc)?;
-    let hud = load_hud_assets(disc)?;
+    let hud = load_hud_assets(disc, data.wad)?;
 
     let out_bin = disc.read("OUT.BIN").context("reading OUT.BIN")?;
-    let wad = disc.read("LEVEL_1.WAD").context("reading LEVEL_1.WAD")?;
+    let wad = disc
+        .read(data.wad)
+        .with_context(|| format!("reading {}", data.wad))?;
     let catalog = decode_banked(&out_bin, &wad, OUT_BIN_CATALOG).context("decoding OUT.BIN")?;
     let overlays = load_overlays(&catalog)?;
     let overlay_slide = read_overlay_slide(&wad)?;
@@ -297,11 +305,7 @@ fn load_overlays(catalog: &SpriteSheet) -> Result<[OverlaySprite; WEAPON_COUNT]>
 /// Each layer is a tilemap of catalog-cell codes at a fixed WAD offset (the
 /// faithful engine points `cs:0x31c4` at one per layer and walks it by the scroll
 /// column). The three layers are drawn back to front; the front one sits over the
-/// playfield in the original.
-///
-/// TODO: `top` is the layer's Mode X destination offset divided by 80; `speed` is
-/// a placeholder (back slow .. front fast). The faithful per-layer scroll rates
-/// (the `cs:0x25f6/fa/f2` accumulators) and exact rows are not yet traced.
+/// playfield in the original, so it draws after the ship.
 fn decode_scenery(wad: &[u8]) -> Scenery {
     let layers = SCENERY_LAYERS
         .iter()

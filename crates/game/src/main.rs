@@ -17,6 +17,7 @@ mod desktop {
         load_highscore_assets, load_intro_assets, load_level_assets, load_menu_assets,
     };
     use openprototype::highscores::HighscoreStore;
+    use openprototype::levels::Level;
     use openprototype::scene::SceneId;
     use openprototype_backend::run;
     use prototype_disc::DiscImage;
@@ -65,7 +66,7 @@ mod desktop {
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
-        let level_assets = load_level_assets(&disc)?;
+        let level_assets = load_level_assets(&disc, Level::L1)?;
         let highscore_store = HighscoreStore::open(&disc)?;
         let mut app = App::new(
             menu_assets,
