@@ -48,8 +48,7 @@ impl DiscImage {
         let text = std::fs::read_to_string(cue_path)?;
         let cue = Cue::parse(&text)?;
 
-        let dir = cue_path.parent().unwrap_or_else(|| Path::new("."));
-        let bin_path = resolve_bin(dir, &cue.bin_filename)?;
+        let bin_path = resolve_bin(cue_dir(cue_path), &cue.bin_filename)?;
         let reader = SectorReader::open(&bin_path)?;
 
         let files: Vec<FileEntry> = iso9660::list_files(&reader)?
@@ -102,6 +101,17 @@ impl DiscImage {
 /// Resolve the bin file next to the cue. Cue sheets often record the filename in
 /// a different case than the file on disk (e.g. `PROTOTYPE.BIN` vs
 /// `PROTOTYPE.bin`), so fall back to a case-insensitive scan of the directory.
+/// The directory the cue's bin path is resolved against: the cue's parent, or
+/// the current directory when the cue is a bare filename. A bare relative path
+/// like `PROTOTYPE.cue` has `parent()` `Some("")`, an empty path that is not a
+/// usable directory (`read_dir` on it fails), so it falls back to `.`.
+fn cue_dir(cue_path: &Path) -> &Path {
+    match cue_path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
+
 fn resolve_bin(dir: &Path, filename: &str) -> Result<PathBuf> {
     let direct = dir.join(filename);
     if direct.exists() {
@@ -225,5 +235,14 @@ mod tests {
     fn normalize_strips_version_and_uppercases() {
         assert_eq!(normalize("fli/intro.fli"), "FLI/INTRO.FLI");
         assert_eq!(normalize("COVER3.PAL;1"), "COVER3.PAL");
+    }
+
+    #[test]
+    fn cue_dir_falls_back_to_cwd_for_a_bare_filename() {
+        // The case that broke `--cue PROTOTYPE.cue`: parent() is Some(""), which
+        // read_dir rejects, so it must resolve to the current directory.
+        assert_eq!(cue_dir(Path::new("PROTOTYPE.cue")), Path::new("."));
+        assert_eq!(cue_dir(Path::new("sub/PROTOTYPE.cue")), Path::new("sub"));
+        assert_eq!(cue_dir(Path::new("/abs/PROTOTYPE.cue")), Path::new("/abs"));
     }
 }
