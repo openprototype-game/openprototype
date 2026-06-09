@@ -2,7 +2,8 @@
 //!
 //! Opens the original disc image, loads the menu assets, and runs the menu in a
 //! window. The game data is never bundled: point `--cue` at your own copy of
-//! `PROTOTYPE.cue`. Built without the `desktop` feature there is no window
+//! `PROTOTYPE.cue`, or drop it in the working directory (or set `$PROTOTYPE_DISC`)
+//! and omit the flag. Built without the `desktop` feature there is no window
 //! backend, so the binary just explains how to rebuild.
 
 #[cfg(feature = "desktop")]
@@ -33,9 +34,10 @@ mod desktop {
     #[derive(Parser)]
     #[command(about = "Prototype (1995) front-end")]
     struct Cli {
-        /// Path to the disc image cue sheet (e.g. PROTOTYPE.cue).
+        /// Path to the disc image cue sheet. Defaults to `$PROTOTYPE_DISC`, or
+        /// `./PROTOTYPE.cue` in the current directory if that is unset.
         #[arg(long)]
-        cue: PathBuf,
+        cue: Option<PathBuf>,
 
         /// Boot straight into a developer scene instead of the intro.
         #[arg(long)]
@@ -63,10 +65,12 @@ mod desktop {
 
         let cli = Cli::parse();
 
-        let disc = Arc::new(
-            DiscImage::open(&cli.cue)
-                .with_context(|| format!("opening disc image {}", cli.cue.display()))?,
-        );
+        let disc = Arc::new(match &cli.cue {
+            Some(cue) => DiscImage::open(cue)
+                .with_context(|| format!("opening disc image {}", cue.display()))?,
+            None => DiscImage::open_default()
+                .context("opening the default disc image (set --cue or $PROTOTYPE_DISC)")?,
+        });
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
