@@ -6,6 +6,15 @@
 //! hardcoding `LEVEL_1.WAD`.
 
 use crate::background::Sp;
+use openprototype_core::PerWeapon;
+
+/// Which catalog cells make up a weapon's overlay sprite: the run of `count`
+/// consecutive cells starting at `first`.
+#[derive(Clone, Copy)]
+pub struct Overlay {
+    pub first: usize,
+    pub count: usize,
+}
 
 /// One of the seven levels.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -55,6 +64,10 @@ pub struct LevelData {
     pub catalog: Bin,
     /// File offset of the catalog descriptor table in the level's WAD.
     pub catalog_offset: usize,
+    /// Each weapon's overlay cells in [`LevelData::catalog`]. Found by
+    /// content-matching L1's overlay sprites in each level's catalog. The
+    /// chaingun has no overlay, so it has no entry.
+    pub overlays: PerWeapon<Overlay>,
 }
 
 impl Level {
@@ -81,42 +94,168 @@ impl Level {
                 background: Sp::Canyon,
                 catalog: Bin::Out,
                 catalog_offset: 0xf9f0,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0xEB,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0xED,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0xEE,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0xF0,
+                        count: 2,
+                    },
+                },
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbf5a,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0x358,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0x357,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0x359,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0x35b,
+                        count: 2,
+                    },
+                },
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
                 background: Sp::Wald,
                 catalog: Bin::Wald,
                 catalog_offset: 0x134c0,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0xa1,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0xa0,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0xa2,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0xa4,
+                        count: 2,
+                    },
+                },
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbfd6,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0x362,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0x361,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0x363,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0x365,
+                        count: 2,
+                    },
+                },
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
                 background: Sp::Alienbg,
                 catalog: Bin::Techno,
                 catalog_offset: 0x10e10,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0xa1,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0xa0,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0xa2,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0xa4,
+                        count: 2,
+                    },
+                },
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xc4d6,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0x3e2,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0x3e1,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0x3e3,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0x3e5,
+                        count: 2,
+                    },
+                },
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
                 background: Sp::Lavah,
                 catalog: Bin::Lava,
                 catalog_offset: 0x13240,
+                overlays: PerWeapon {
+                    multishot: Overlay {
+                        first: 0xa1,
+                        count: 1,
+                    },
+                    burning: Overlay {
+                        first: 0xa0,
+                        count: 1,
+                    },
+                    plasma: Overlay {
+                        first: 0xa2,
+                        count: 2,
+                    },
+                    missile: Overlay {
+                        first: 0xa4,
+                        count: 2,
+                    },
+                },
             },
         }
     }

@@ -14,7 +14,7 @@
 //! [`PANEL_TOP`]).
 
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::{GameState, Secondary, Weapon};
+use openprototype_core::{ActiveWeapon, GameState, Weapon};
 use prototype_formats::{Dimensions, IndexedImage};
 
 use crate::assets::HudAssets;
@@ -107,7 +107,7 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &m
     draw_smart_bombs(state.smart_bombs.get(), assets, panel_top, frame);
     draw_selector(state.selected, assets, panel_top, frame);
     draw_weapon_pod(
-        state.firing_weapon(),
+        state.active_weapon(),
         POD_SETTLED_FRAME,
         assets,
         panel_top,
@@ -115,21 +115,32 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &m
     );
 }
 
-/// Draw the `firing` weapon's pod at animation frame `pod_frame` into the
+/// Draw the `active` weapon's pod at animation frame `pod_frame` into the
 /// panel's right recess. Frame `0` is empty (hidden), [`POD_SETTLED_FRAME`] is
 /// the settled state; switching weapons plays `0` up to settled.
 pub fn draw_weapon_pod(
-    firing: Weapon,
+    active: ActiveWeapon,
     pod_frame: usize,
     assets: &HudAssets,
     panel_top: i32,
     frame: &mut Framebuffer,
 ) {
-    let column = firing as usize;
-    let pod = pod_cell(&assets.weapon_pods, column, pod_frame);
+    let pod = pod_cell(&assets.weapon_pods, pod_column(active), pod_frame);
     let (x, y) = di_to_screen(POD_DI, panel_top);
 
     frame.blit(&pod, x, y);
+}
+
+/// The EXTRAS sheet column for a firing weapon: the chaingun is column `0`, then
+/// the four real weapons in selector order.
+fn pod_column(active: ActiveWeapon) -> usize {
+    match active {
+        ActiveWeapon::Chaingun => 0,
+        ActiveWeapon::Selected(Weapon::Multishot) => 1,
+        ActiveWeapon::Selected(Weapon::Burning) => 2,
+        ActiveWeapon::Selected(Weapon::Plasma) => 3,
+        ActiveWeapon::Selected(Weapon::Missile) => 4,
+    }
 }
 
 /// Slice one 56x32 pod cell (weapon `column`, animation `row`) from the EXTRAS
@@ -149,12 +160,10 @@ fn pod_cell(sheet: &IndexedImage, column: usize, row: usize) -> IndexedImage {
     IndexedImage::new(POD_SIZE, pixels).expect("pod cell matches its dimensions")
 }
 
-/// Draw the four selector lights, highlighting the active secondary's slot.
-fn draw_selector(selected: Secondary, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
-    let active = selected as usize;
-
-    for slot in 0..MARKER_COUNT {
-        let index = if slot == active {
+/// Draw the four selector lights, highlighting the selected weapon's slot.
+fn draw_selector(selected: Weapon, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
+    for (slot, &weapon) in Weapon::ALL.iter().enumerate() {
+        let index = if weapon == selected {
             MARKER_COUNT + slot
         } else {
             slot
@@ -185,8 +194,8 @@ fn draw_weapon_bars(
     panel_top: i32,
     frame: &mut Framebuffer,
 ) {
-    for (index, &secondary) in Secondary::ALL.iter().enumerate() {
-        let level = state.level(secondary).get() as usize;
+    for (index, &weapon) in Weapon::ALL.iter().enumerate() {
+        let level = state.level(weapon).get() as usize;
         let offset = (level * BAR_LEVEL_STEP).min(BAR_MAX_OFFSET);
         let bar = bar_window(&assets.weapon_bars, index, offset);
         let (x, y) = di_to_screen(BAR_BASE_DI + index as i32 * BAR_PITCH_DI, panel_top);

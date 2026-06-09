@@ -13,9 +13,10 @@ use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
 use crate::background::{Background, Sp};
-use crate::levels::Level;
+use crate::levels::{Level, Overlay};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::PerWeapon;
 
 /// Everything the main menu needs to render.
 pub struct MenuAssets {
@@ -119,13 +120,13 @@ pub struct LevelAssets {
     /// is wider than the screen; the level scrolls a window across it.
     pub background: Background,
     pub hud: HudAssets,
-    /// The weapon-top overlay that clips over the panel, indexed by `Weapon`
-    /// (`0` minigun ..= `4` secondary 4). Each is the firing weapon's cut-off top.
-    pub overlays: [OverlaySprite; WEAPON_COUNT],
-    /// The overlay's per-frame slide as it settles, `(dx, dy)` relative to its
-    /// settled position, indexed by `Weapon` then animation frame. Each weapon
-    /// has its own profile (some snap, some kick sideways).
-    pub overlay_slide: [[(i32, i32); OVERLAY_FRAMES]; WEAPON_COUNT],
+    /// Each weapon's weapon-top overlay that clips over the panel: the firing
+    /// weapon's cut-off top. The chaingun has none.
+    pub overlays: PerWeapon<OverlaySprite>,
+    /// Each weapon's per-frame overlay slide as it settles, `(dx, dy)` relative
+    /// to its settled position, indexed by animation frame. Each weapon has its
+    /// own profile (some snap, some kick sideways).
+    pub overlay_slide: PerWeapon<[(i32, i32); OVERLAY_FRAMES]>,
     /// The decoded OUT.BIN sprite catalog, which the scenery layers index by cell.
     pub catalog: SpriteSheet,
     /// The level's parallax scenery layers, decoded from the level WAD's tilemaps.
@@ -139,24 +140,9 @@ pub struct OverlaySprite {
     pub pixels: Vec<Option<u8>>,
 }
 
-/// The five firing weapons: the minigun and the four secondaries.
-const WEAPON_COUNT: usize = 5;
-
 /// Frames in a weapon's pod/overlay open-and-settle animation (`0` hidden ..=
 /// `5` settled).
 pub const OVERLAY_FRAMES: usize = 6;
-
-/// The weapon-top overlay sprites as `(catalog index, cell count)`, indexed by
-/// `Weapon`. Read from the canyon WAD's descriptor table at `cs:0x31d0`. The
-/// cell counts explain the catalog gaps (`0xEE` spans two cells, so the next is
-/// `0xF0`); the minigun's is a 4x4 stub, effectively blank.
-const OVERLAY_CELLS: [(usize, usize); WEAPON_COUNT] = [
-    (0xEA, 1), // minigun
-    (0xEB, 1), // secondary 1
-    (0xED, 1), // secondary 2
-    (0xEE, 2), // secondary 3
-    (0xF0, 2), // secondary 4
-];
 
 /// Width of one Mode X catalog cell, in pixels.
 const CELL_WIDTH: usize = 32;
@@ -268,7 +254,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         .with_context(|| format!("reading {}", data.wad))?;
     let catalog = decode_banked(&bin, &wad, data.catalog_offset)
         .with_context(|| format!("decoding {bin_name}"))?;
-    let overlays = load_overlays(&catalog)?;
+    let overlays = load_overlays(&catalog, data.overlays)?;
     let overlay_slide = read_overlay_slide(&wad)?;
     let scenery = decode_scenery(&wad);
 
@@ -282,25 +268,30 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     })
 }
 
-/// Assemble the five weapon overlays from the decoded catalog.
-fn load_overlays(catalog: &SpriteSheet) -> Result<[OverlaySprite; WEAPON_COUNT]> {
-    let needed = OVERLAY_CELLS
-        .iter()
-        .map(|(first, cells)| first + cells)
-        .max()
-        .expect("overlay table is not empty");
+/// Assemble each weapon's overlay from the decoded catalog.
+fn load_overlays(
+    catalog: &SpriteSheet,
+    overlays: PerWeapon<Overlay>,
+) -> Result<PerWeapon<OverlaySprite>> {
+    let needed = [
+        overlays.multishot,
+        overlays.burning,
+        overlays.plasma,
+        overlays.missile,
+    ]
+    .iter()
+    .map(|overlay| overlay.first + overlay.count)
+    .max()
+    .unwrap_or(0);
 
     if catalog.sprites.len() < needed {
         anyhow::bail!(
-            "OUT.BIN has {} sprites, the overlays need {needed}",
+            "catalog has {} sprites, the overlays need {needed}",
             catalog.sprites.len()
         );
     }
 
-    Ok(std::array::from_fn(|index| {
-        let (first, cells) = OVERLAY_CELLS[index];
-        assemble_overlay(catalog, first, cells)
-    }))
+    Ok(overlays.map(|overlay| assemble_overlay(catalog, overlay.first, overlay.count)))
 }
 
 /// Decode the level's parallax scenery layers from its WAD.
@@ -360,12 +351,15 @@ fn decode_scenery_tilemap(wad: &[u8], start: usize) -> Vec<Option<usize>> {
 /// Read each weapon's overlay slide from the WAD's position table, as `(dx, dy)`
 /// per frame relative to the settled frame. Each weapon's profile differs, so
 /// this is read rather than assumed.
-fn read_overlay_slide(wad: &[u8]) -> Result<[[(i32, i32); OVERLAY_FRAMES]; WEAPON_COUNT]> {
-    let table_end = OVERLAY_POSITION_TABLE + WEAPON_COUNT * OVERLAY_BLOCK_FRAMES * 4;
+fn read_overlay_slide(wad: &[u8]) -> Result<PerWeapon<[(i32, i32); OVERLAY_FRAMES]>> {
+    // The WAD table holds one block per firing weapon: block 0 is the chaingun
+    // (which has no overlay), then the four real weapons in selector order.
+    const TABLE_BLOCKS: usize = 5;
+    let table_end = OVERLAY_POSITION_TABLE + TABLE_BLOCKS * OVERLAY_BLOCK_FRAMES * 4;
 
     if wad.len() < table_end {
         anyhow::bail!(
-            "LEVEL_1.WAD is {} bytes, the overlay position table needs {table_end}",
+            "WAD is {} bytes, the overlay position table needs {table_end}",
             wad.len()
         );
     }
@@ -376,15 +370,22 @@ fn read_overlay_slide(wad: &[u8]) -> Result<[[(i32, i32); OVERLAY_FRAMES]; WEAPO
         (i32::from(x), i32::from(y))
     };
 
-    Ok(std::array::from_fn(|weapon| {
-        let block = OVERLAY_POSITION_TABLE + weapon * OVERLAY_BLOCK_FRAMES * 4;
+    let slide_block = |table_index: usize| -> [(i32, i32); OVERLAY_FRAMES] {
+        let block = OVERLAY_POSITION_TABLE + table_index * OVERLAY_BLOCK_FRAMES * 4;
         let (settled_x, settled_y) = read_xy(block + OVERLAY_SETTLED_FRAME * 4);
 
         std::array::from_fn(|frame| {
             let (x, y) = read_xy(block + frame * 4);
             (x - settled_x, y - settled_y)
         })
-    }))
+    };
+
+    Ok(PerWeapon {
+        multishot: slide_block(1),
+        burning: slide_block(2),
+        plasma: slide_block(3),
+        missile: slide_block(4),
+    })
 }
 
 /// Stitch a multi-cell overlay into one masked sprite. Cell `k` occupies screen
@@ -624,11 +625,11 @@ pub(crate) fn test_level_assets() -> LevelAssets {
     LevelAssets {
         background: Background::new(blank_image(BACKGROUND_SIZE), Sp::Canyon),
         hud: test_hud_assets(),
-        overlays: std::array::from_fn(|_| OverlaySprite {
+        overlays: PerWeapon::default().map(|()| OverlaySprite {
             size: Dimensions::new(1, 1),
             pixels: vec![None],
         }),
-        overlay_slide: [[(0, 0); OVERLAY_FRAMES]; WEAPON_COUNT],
+        overlay_slide: PerWeapon::splat([(0, 0); OVERLAY_FRAMES]),
         catalog: SpriteSheet {
             sprites: Vec::new(),
         },

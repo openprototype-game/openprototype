@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use image::{ImageBuffer, Rgb as ImageRgb, RgbImage, Rgba as ImageRgba, RgbaImage};
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::{GameState, Lives, Secondary, SmartBombs, WeaponLevel};
+use openprototype_core::{GameState, Lives, PerWeapon, SmartBombs, Weapon, WeaponLevel};
 use openprototype_tools::read_asset;
 use prototype_disc::DiscImage;
 use prototype_formats::font::Font;
@@ -313,17 +313,17 @@ fn main() -> Result<()> {
 /// panel crop scales to 640x96 to match the real proportions.
 fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
     let disc = source.context("the hud command needs --cue to read its assets")?;
-    let assets =
-        openprototype::assets::load_hud_assets(disc, "LEVEL_1.WAD").context("loading HUD assets")?;
+    let assets = openprototype::assets::load_hud_assets(disc, "LEVEL_1.WAD")
+        .context("loading HUD assets")?;
 
-    // (selected, level) per row; firing_weapon() resolves to the minigun when the
-    // selected slot is empty, else that secondary, so this walks all five.
-    let firings: [(Secondary, u8); 5] = [
-        (Secondary::One, 0),
-        (Secondary::One, 4),
-        (Secondary::Two, 4),
-        (Secondary::Three, 4),
-        (Secondary::Four, 4),
+    // (selected, level) per row; active_weapon() resolves to the chaingun when the
+    // selected slot is empty, else that weapon, so this walks all five pods.
+    let firings: [(Weapon, u8); 5] = [
+        (Weapon::Multishot, 0),
+        (Weapon::Multishot, 4),
+        (Weapon::Burning, 4),
+        (Weapon::Plasma, 4),
+        (Weapon::Missile, 4),
     ];
 
     const CROP_TOP: u32 = openprototype::hud::PANEL_TOP as u32;
@@ -334,8 +334,8 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
 
     let mut rows = Vec::with_capacity(firings.len());
     for (selected, level) in firings {
-        let mut weapons = [WeaponLevel::new(0); 4];
-        weapons[selected.index()] = WeaponLevel::new(level);
+        let mut weapons = PerWeapon::default();
+        *weapons.get_mut(selected) = WeaponLevel::new(level);
         let state = GameState {
             score: 13477,
             lives: Lives::new(3),

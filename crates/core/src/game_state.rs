@@ -21,7 +21,7 @@ const EXTRA_LIFE_INTERVAL: u32 = 10_000;
 /// Invincibility granted on respawn, in game ticks (the original's `300`, ~3 s).
 const RESPAWN_INVINCIBILITY_TICKS: u16 = 300;
 
-/// A secondary weapon's charge level: `0..=4`, one filled bar segment per level.
+/// A weapon's charge level: `0..=4`, one filled bar segment per level.
 ///
 /// A power-up orb raises it by one (the original stores it as pixel fill
 /// `0,8,16,24,32`; this is the logical level), clamped to `4`.
@@ -35,64 +35,107 @@ pub type SmartBombs = BoundedU8<3>;
 
 /// The weapon currently firing and shown in the HUD's right-hand display.
 ///
-/// `Minigun` is the always-available default (the original's effective-weapon
-/// value `0`); the four secondaries are the leveled weapons drawn as the BALKEN
-/// bars. Variant names are placeholders until the weapon sprites are decoded.
+/// One of the four real weapons the player picks up, charges, and selects (drawn
+/// as the BALKEN charge bars). The always-available chaingun fallback is not one
+/// of these (see [`ActiveWeapon`]). Names are from the in-game weapon pods and
+/// fire sounds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Weapon {
-    /// The default gun; always available, no charge level.
     #[default]
-    Minigun,
-    Secondary1,
-    Secondary2,
-    Secondary3,
-    Secondary4,
+    Multishot,
+    Burning,
+    Plasma,
+    Missile,
 }
 
-/// One of the four selectable secondary weapons, indexing [`GameState::weapons`].
-///
-/// This is what the HUD's selector marker points at; the original cycles it
-/// `1→2→3→4→1`. Names are placeholders pending the sprite decode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Secondary {
-    #[default]
-    One,
-    Two,
-    Three,
-    Four,
-}
-
-impl Secondary {
-    /// The four secondaries in selector order, for indexing and iteration.
-    pub const ALL: [Secondary; 4] = [
-        Secondary::One,
-        Secondary::Two,
-        Secondary::Three,
-        Secondary::Four,
+impl Weapon {
+    /// The four weapons in selector order, for iteration and the HUD bar layout.
+    pub const ALL: [Weapon; 4] = [
+        Weapon::Multishot,
+        Weapon::Burning,
+        Weapon::Plasma,
+        Weapon::Missile,
     ];
 
-    /// The array index this secondary occupies in [`GameState::weapons`].
-    pub fn index(self) -> usize {
-        self as usize
-    }
-
-    /// The next secondary in selector order, wrapping `Four → One`.
+    /// The next weapon in selector order, wrapping `Missile → Multishot`.
     pub fn next(self) -> Self {
         match self {
-            Secondary::One => Secondary::Two,
-            Secondary::Two => Secondary::Three,
-            Secondary::Three => Secondary::Four,
-            Secondary::Four => Secondary::One,
+            Weapon::Multishot => Weapon::Burning,
+            Weapon::Burning => Weapon::Plasma,
+            Weapon::Plasma => Weapon::Missile,
+            Weapon::Missile => Weapon::Multishot,
+        }
+    }
+}
+
+/// The weapon currently firing: the always-available chaingun fallback, or the
+/// selected real weapon once it holds charge. The original derives this each
+/// frame (value `0` = chaingun) and freezes it while fire is held.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActiveWeapon {
+    /// The default gun (no charge), fired when the selected weapon is empty.
+    #[default]
+    Chaingun,
+    /// The selected real weapon, firing.
+    Selected(Weapon),
+}
+
+impl From<Weapon> for ActiveWeapon {
+    fn from(weapon: Weapon) -> Self {
+        ActiveWeapon::Selected(weapon)
+    }
+}
+
+/// One `T` per real [`Weapon`], addressed by weapon rather than a positional
+/// index. A total mapping: every weapon always holds a value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PerWeapon<T> {
+    pub multishot: T,
+    pub burning: T,
+    pub plasma: T,
+    pub missile: T,
+}
+
+impl<T> PerWeapon<T> {
+    /// The value held for one weapon.
+    pub fn get(&self, weapon: Weapon) -> &T {
+        match weapon {
+            Weapon::Multishot => &self.multishot,
+            Weapon::Burning => &self.burning,
+            Weapon::Plasma => &self.plasma,
+            Weapon::Missile => &self.missile,
         }
     }
 
-    /// The [`Weapon`] this secondary fires as.
-    pub fn as_weapon(self) -> Weapon {
-        match self {
-            Secondary::One => Weapon::Secondary1,
-            Secondary::Two => Weapon::Secondary2,
-            Secondary::Three => Weapon::Secondary3,
-            Secondary::Four => Weapon::Secondary4,
+    /// A mutable reference to the value held for one weapon.
+    pub fn get_mut(&mut self, weapon: Weapon) -> &mut T {
+        match weapon {
+            Weapon::Multishot => &mut self.multishot,
+            Weapon::Burning => &mut self.burning,
+            Weapon::Plasma => &mut self.plasma,
+            Weapon::Missile => &mut self.missile,
+        }
+    }
+
+    /// Maps each value through `f`, preserving the per-weapon shape.
+    pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> PerWeapon<U> {
+        PerWeapon {
+            multishot: f(self.multishot),
+            burning: f(self.burning),
+            plasma: f(self.plasma),
+            missile: f(self.missile),
+        }
+    }
+}
+
+impl<T: Copy> PerWeapon<T> {
+    /// The same value for every weapon.
+    pub fn splat(value: T) -> Self {
+        Self {
+            multishot: value,
+            burning: value,
+            plasma: value,
+            missile: value,
         }
     }
 }
@@ -100,7 +143,7 @@ impl Secondary {
 /// Which collision dealt a hit: ramming a body vs. clipping a projectile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
-    /// Body contact with an enemy ship: zeroes the firing weapon's charge.
+    /// Body contact with an enemy ship: zeroes the selected weapon's charge.
     Collision,
     /// Clipped by an enemy projectile: drains one charge level.
     Bullet,
@@ -111,7 +154,7 @@ pub enum Severity {
 pub enum HitOutcome {
     /// Invincible: the hit was ignored.
     Shielded,
-    /// A charged secondary absorbed the hit; no life lost.
+    /// A charged weapon absorbed the hit; no life lost.
     Absorbed,
     /// The hit cost a life; the ship respawns (invincibility armed).
     Died,
@@ -135,32 +178,32 @@ pub struct GameState {
     /// Smart bombs held, shown by the smart-bomb indicator.
     pub smart_bombs: SmartBombs,
 
-    /// The four secondary charge bars, indexed by [`Secondary::index`].
-    pub weapons: [WeaponLevel; 4],
+    /// The four weapons' charge levels.
+    pub weapons: PerWeapon<WeaponLevel>,
 
-    /// Which secondary the selector marker highlights.
-    pub selected: Secondary,
+    /// Which weapon the selector marker highlights.
+    pub selected: Weapon,
 
     /// Remaining post-respawn invincibility, in game ticks (`0` = vulnerable).
     pub invincible_ticks: u16,
 }
 
 impl GameState {
-    /// Returns the charge level of one secondary.
-    pub fn level(&self, secondary: Secondary) -> WeaponLevel {
-        self.weapons[secondary.index()]
+    /// Returns the charge level of one weapon.
+    pub fn level(&self, weapon: Weapon) -> WeaponLevel {
+        *self.weapons.get(weapon)
     }
 
-    /// The weapon that actually fires: the selected secondary while it holds
-    /// charge, otherwise the always-available minigun.
+    /// The weapon that actually fires: the selected weapon while it holds charge,
+    /// otherwise the always-available chaingun.
     ///
     /// The original derives this each frame (and freezes it while fire is held);
     /// here it is a pure getter, leaving the freeze to the input layer.
-    pub fn firing_weapon(&self) -> Weapon {
+    pub fn active_weapon(&self) -> ActiveWeapon {
         if self.level(self.selected).get() >= 1 {
-            self.selected.as_weapon()
+            self.selected.into()
         } else {
-            Weapon::Minigun
+            ActiveWeapon::Chaingun
         }
     }
 
@@ -177,14 +220,14 @@ impl GameState {
         }
     }
 
-    /// Raises the selected secondary's charge by one (an orb pickup), capped at
+    /// Raises the selected weapon's charge by one (an orb pickup), capped at
     /// [`WeaponLevel::MAX`].
     pub fn level_up(&mut self) {
-        let slot = self.selected.index();
-        self.weapons[slot] = self.weapons[slot].saturating_add(1);
+        let level = self.weapons.get_mut(self.selected);
+        *level = level.saturating_add(1);
     }
 
-    /// Cycles the selector to the next secondary, wrapping `Four → One`.
+    /// Cycles the selector to the next weapon, wrapping `Missile → Multishot`.
     pub fn cycle_weapon(&mut self) {
         self.selected = self.selected.next();
     }
@@ -210,23 +253,23 @@ impl GameState {
     }
 
     /// Applies a hit. While invincible nothing happens; otherwise a charged
-    /// secondary absorbs it (zeroed by a [`Collision`](Severity::Collision),
+    /// weapon absorbs it (zeroed by a [`Collision`](Severity::Collision),
     /// drained one level by a [`Bullet`](Severity::Bullet)) and the ship
-    /// survives, while a hit on the bare minigun costs a life. See
+    /// survives, while a hit on the bare chaingun costs a life. See
     /// `reference/combat.md`.
     pub fn take_hit(&mut self, severity: Severity) -> HitOutcome {
         if self.is_invincible() {
             return HitOutcome::Shielded;
         }
 
-        if self.firing_weapon() == Weapon::Minigun {
+        if self.active_weapon() == ActiveWeapon::Chaingun {
             return self.lose_life();
         }
 
-        let slot = self.selected.index();
-        self.weapons[slot] = match severity {
+        let level = self.weapons.get_mut(self.selected);
+        *level = match severity {
             Severity::Collision => WeaponLevel::new(0),
-            Severity::Bullet => self.weapons[slot].saturating_sub(1),
+            Severity::Bullet => level.saturating_sub(1),
         };
 
         HitOutcome::Absorbed
@@ -255,35 +298,38 @@ mod tests {
             score: 0,
             lives: Lives::new(3),
             smart_bombs: SmartBombs::new(0),
-            weapons: [WeaponLevel::new(0); 4],
-            selected: Secondary::One,
+            weapons: PerWeapon::default(),
+            selected: Weapon::Multishot,
             invincible_ticks: 0,
         }
     }
 
-    fn with_selected_level(selected: Secondary, level: u8) -> GameState {
+    fn with_selected_level(selected: Weapon, level: u8) -> GameState {
         let mut state = fresh();
         state.selected = selected;
-        state.weapons[selected.index()] = WeaponLevel::new(level);
+        *state.weapons.get_mut(selected) = WeaponLevel::new(level);
         state
     }
 
     #[test]
-    fn firing_weapon_is_minigun_when_the_selected_slot_is_empty() {
-        assert_eq!(fresh().firing_weapon(), Weapon::Minigun);
+    fn active_weapon_is_chaingun_when_the_selected_slot_is_empty() {
+        assert_eq!(fresh().active_weapon(), ActiveWeapon::Chaingun);
     }
 
     #[test]
-    fn firing_weapon_is_the_selected_secondary_once_charged() {
-        let state = with_selected_level(Secondary::Three, 1);
-        assert_eq!(state.firing_weapon(), Weapon::Secondary3);
+    fn active_weapon_is_the_selected_weapon_once_charged() {
+        let state = with_selected_level(Weapon::Plasma, 1);
+        assert_eq!(
+            state.active_weapon(),
+            ActiveWeapon::Selected(Weapon::Plasma)
+        );
     }
 
     #[test]
-    fn firing_weapon_ignores_charge_in_an_unselected_slot() {
+    fn active_weapon_ignores_charge_in_an_unselected_slot() {
         let mut state = fresh();
-        state.weapons[Secondary::Two.index()] = WeaponLevel::new(4);
-        assert_eq!(state.firing_weapon(), Weapon::Minigun);
+        *state.weapons.get_mut(Weapon::Burning) = WeaponLevel::new(4);
+        assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
     }
 
     #[test]
@@ -320,27 +366,27 @@ mod tests {
     fn level_up_charges_the_selected_slot_and_caps_at_four() {
         let mut state = fresh();
         state.level_up();
-        assert_eq!(state.level(Secondary::One).get(), 1);
+        assert_eq!(state.level(Weapon::Multishot).get(), 1);
 
         for _ in 0..10 {
             state.level_up();
         }
 
-        assert_eq!(state.level(Secondary::One).get(), 4);
-        assert_eq!(state.level(Secondary::Two).get(), 0);
+        assert_eq!(state.level(Weapon::Multishot).get(), 4);
+        assert_eq!(state.level(Weapon::Burning).get(), 0);
     }
 
     #[test]
     fn cycle_weapon_advances_and_wraps() {
         let mut state = fresh();
-        assert_eq!(state.selected, Secondary::One);
+        assert_eq!(state.selected, Weapon::Multishot);
         state.cycle_weapon();
-        assert_eq!(state.selected, Secondary::Two);
+        assert_eq!(state.selected, Weapon::Burning);
         state.cycle_weapon();
         state.cycle_weapon();
-        assert_eq!(state.selected, Secondary::Four);
+        assert_eq!(state.selected, Weapon::Missile);
         state.cycle_weapon();
-        assert_eq!(state.selected, Secondary::One);
+        assert_eq!(state.selected, Weapon::Multishot);
     }
 
     #[test]
@@ -373,40 +419,40 @@ mod tests {
 
     #[test]
     fn take_hit_is_ignored_while_invincible() {
-        let mut state = with_selected_level(Secondary::One, 3);
+        let mut state = with_selected_level(Weapon::Multishot, 3);
         state.invincible_ticks = 10;
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Shielded);
-        assert_eq!(state.level(Secondary::One).get(), 3);
+        assert_eq!(state.level(Weapon::Multishot).get(), 3);
         assert_eq!(state.lives.get(), 3);
         assert_eq!(state.invincible_ticks, 10);
     }
 
     #[test]
-    fn collision_zeroes_a_charged_secondary_without_costing_a_life() {
-        let mut state = with_selected_level(Secondary::One, 3);
+    fn collision_zeroes_a_charged_weapon_without_costing_a_life() {
+        let mut state = with_selected_level(Weapon::Multishot, 3);
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Absorbed);
-        assert_eq!(state.level(Secondary::One).get(), 0);
-        assert_eq!(state.firing_weapon(), Weapon::Minigun);
+        assert_eq!(state.level(Weapon::Multishot).get(), 0);
+        assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(state.lives.get(), 3);
     }
 
     #[test]
-    fn bullet_drains_one_level_of_a_charged_secondary() {
-        let mut state = with_selected_level(Secondary::One, 3);
+    fn bullet_drains_one_level_of_a_charged_weapon() {
+        let mut state = with_selected_level(Weapon::Multishot, 3);
         assert_eq!(state.take_hit(Severity::Bullet), HitOutcome::Absorbed);
-        assert_eq!(state.level(Secondary::One).get(), 2);
+        assert_eq!(state.level(Weapon::Multishot).get(), 2);
     }
 
     #[test]
-    fn bullet_emptying_the_last_level_reverts_to_the_minigun() {
-        let mut state = with_selected_level(Secondary::One, 1);
+    fn bullet_emptying_the_last_level_reverts_to_the_chaingun() {
+        let mut state = with_selected_level(Weapon::Multishot, 1);
         assert_eq!(state.take_hit(Severity::Bullet), HitOutcome::Absorbed);
-        assert_eq!(state.level(Secondary::One).get(), 0);
-        assert_eq!(state.firing_weapon(), Weapon::Minigun);
+        assert_eq!(state.level(Weapon::Multishot).get(), 0);
+        assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
     }
 
     #[test]
-    fn a_hit_on_the_minigun_costs_a_life_and_arms_the_shield() {
+    fn a_hit_on_the_chaingun_costs_a_life_and_arms_the_shield() {
         let mut state = fresh();
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Died);
         assert_eq!(state.lives.get(), 2);
@@ -437,9 +483,9 @@ mod tests {
 
     #[test]
     fn two_hits_in_a_row_zero_the_bar_then_take_the_life() {
-        let mut state = with_selected_level(Secondary::Two, 4);
+        let mut state = with_selected_level(Weapon::Burning, 4);
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Absorbed);
-        assert_eq!(state.firing_weapon(), Weapon::Minigun);
+        assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(state.lives.get(), 3);
 
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Died);

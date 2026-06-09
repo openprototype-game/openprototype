@@ -6,7 +6,7 @@
 //! so the scroll, panel geometry, and the pod's open/settle animation can be
 //! checked against footage.
 //!
-//! All four secondaries start fully charged. Enter cycles the selected weapon
+//! All four weapons start fully charged. Enter cycles the selected weapon
 //! (replaying the pod and overlay animations), Up/Down pan the camera (the
 //! 160-tall background over the ~128-row window), WASD nudge the overlay, Esc quits.
 
@@ -22,7 +22,9 @@ use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
-use openprototype_core::{GameState, Lives, Secondary, SmartBombs, WeaponLevel};
+use openprototype_core::{
+    ActiveWeapon, GameState, Lives, PerWeapon, SmartBombs, Weapon, WeaponLevel,
+};
 
 /// The level's frame: hand-programmed Mode X 320x160 (480 scanlines, each row
 /// tripled to give 160 logical rows), shown on a 4:3 CRT so pixels are 1.5x
@@ -89,8 +91,8 @@ impl LevelScene {
             score: 0,
             lives: Lives::new(3),
             smart_bombs: SmartBombs::new(3),
-            weapons: [WeaponLevel::new(WeaponLevel::MAX); 4],
-            selected: Secondary::One,
+            weapons: PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX)),
+            selected: Weapon::Multishot,
             invincible_ticks: 0,
         };
 
@@ -120,7 +122,7 @@ impl LevelScene {
         scene
     }
 
-    /// Cycle to the next secondary and replay the pod's open/settle animation.
+    /// Cycle to the next weapon and replay the pod's open/settle animation.
     fn cycle_weapon(&mut self) {
         self.state.cycle_weapon();
         self.pod_frame = 0;
@@ -165,7 +167,7 @@ impl LevelScene {
     /// panel once it snaps up to its settled row. The original gates the
     /// playfield sprite blitter against the HUD band for the same effect.
     fn render(&mut self) {
-        let firing = self.state.firing_weapon();
+        let active = self.state.active_weapon();
 
         self.assets.background.render(
             &self.background_scroll,
@@ -178,15 +180,18 @@ impl LevelScene {
             .scenery
             .render(&self.scenery_scroll, &self.assets.catalog, &mut self.frame);
 
-        let overlay = &self.assets.overlays[firing as usize];
-        let slide = &self.assets.overlay_slide[firing as usize];
-        let (slide_x, slide_y) = slide[self.pod_frame.min(slide.len() - 1)];
-        self.frame.blit_transparent(
-            &overlay.pixels,
-            overlay.size,
-            self.overlay_x + slide_x,
-            hud::PANEL_TOP + self.overlay_offset_y + slide_y,
-        );
+        // The chaingun has no weapon-top overlay; only a selected weapon draws one.
+        if let ActiveWeapon::Selected(weapon) = active {
+            let overlay = self.assets.overlays.get(weapon);
+            let slide = self.assets.overlay_slide.get(weapon);
+            let (slide_x, slide_y) = slide[self.pod_frame.min(slide.len() - 1)];
+            self.frame.blit_transparent(
+                &overlay.pixels,
+                overlay.size,
+                self.overlay_x + slide_x,
+                hud::PANEL_TOP + self.overlay_offset_y + slide_y,
+            );
+        }
 
         hud::draw_hud(
             &self.state,
@@ -195,7 +200,7 @@ impl LevelScene {
             &mut self.frame,
         );
         hud::draw_weapon_pod(
-            firing,
+            active,
             self.pod_frame,
             &self.assets.hud,
             hud::PANEL_TOP,
@@ -257,18 +262,17 @@ impl Scene for LevelScene {
 mod tests {
     use super::*;
     use crate::assets::test_level_assets;
-    use openprototype_core::Weapon;
 
     fn test_scene() -> LevelScene {
         LevelScene::new(Rc::new(test_level_assets()))
     }
 
     #[test]
-    fn starts_with_all_secondaries_charged_and_the_pod_settled() {
+    fn starts_with_all_weapons_charged_and_the_pod_settled() {
         let scene = test_scene();
 
-        for secondary in Secondary::ALL {
-            assert_eq!(scene.state.level(secondary).get(), WeaponLevel::MAX);
+        for weapon in Weapon::ALL {
+            assert_eq!(scene.state.level(weapon).get(), WeaponLevel::MAX);
         }
 
         assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
@@ -278,11 +282,17 @@ mod tests {
     #[test]
     fn enter_cycles_the_weapon_and_restarts_the_pod_animation() {
         let mut scene = test_scene();
-        assert_eq!(scene.state.firing_weapon(), Weapon::Secondary1);
+        assert_eq!(
+            scene.state.active_weapon(),
+            ActiveWeapon::Selected(Weapon::Multishot)
+        );
 
         scene.update(Duration::ZERO, &[KeyEvent::Enter]);
 
-        assert_eq!(scene.state.firing_weapon(), Weapon::Secondary2);
+        assert_eq!(
+            scene.state.active_weapon(),
+            ActiveWeapon::Selected(Weapon::Burning)
+        );
         assert_eq!(scene.pod_frame, 0);
     }
 
