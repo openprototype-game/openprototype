@@ -176,9 +176,12 @@ impl LevelScene {
             hud::PANEL_TOP,
         );
 
-        self.assets
-            .scenery
-            .render(&self.scenery_scroll, &self.assets.catalog, &mut self.frame);
+        self.assets.scenery.render(
+            &self.scenery_scroll,
+            &self.assets.catalog,
+            &mut self.frame,
+            self.camera_y,
+        );
 
         // The chaingun has no weapon-top overlay; only a selected weapon draws one.
         if let ActiveWeapon::Selected(weapon) = active {

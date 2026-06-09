@@ -83,9 +83,18 @@ impl Scenery {
 
     /// Composite the visible columns of every layer into `frame`, in draw order,
     /// looking each column's cell up in `catalog`. Off-screen blits clip.
-    pub fn render(&self, scroll: &SceneryScroll, catalog: &SpriteSheet, frame: &mut Framebuffer) {
+    /// `camera_y` is the playfield's vertical scroll, applied to every layer so
+    /// the scenery pans with the background as the ship moves up and down (the
+    /// original scrolls the whole playfield buffer, scenery included).
+    pub fn render(
+        &self,
+        scroll: &SceneryScroll,
+        catalog: &SpriteSheet,
+        frame: &mut Framebuffer,
+        camera_y: i32,
+    ) {
         for (layer, &offset) in self.layers.iter().zip(&scroll.offsets) {
-            render_layer(layer, offset, catalog, frame);
+            render_layer(layer, offset, catalog, frame, camera_y);
         }
     }
 }
@@ -97,7 +106,13 @@ pub struct SceneryScroll {
 }
 
 /// Blit one layer's visible columns at scroll `offset` (1/16-pixel).
-fn render_layer(layer: &SceneryLayer, offset: u32, catalog: &SpriteSheet, frame: &mut Framebuffer) {
+fn render_layer(
+    layer: &SceneryLayer,
+    offset: u32,
+    catalog: &SpriteSheet,
+    frame: &mut Framebuffer,
+    camera_y: i32,
+) {
     if layer.tiles.is_empty() {
         return;
     }
@@ -120,7 +135,7 @@ fn render_layer(layer: &SceneryLayer, offset: u32, catalog: &SpriteSheet, frame:
         };
 
         let x = column * TILE_WIDTH - sub + sprite.origin.0;
-        let y = layer.top + sprite.origin.1;
+        let y = layer.top - camera_y + sprite.origin.1;
         frame.blit_transparent(&sprite.pixels, sprite.size, x, y);
     }
 }
