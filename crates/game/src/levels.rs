@@ -16,6 +16,25 @@ pub struct Overlay {
     pub count: usize,
 }
 
+/// One scenery layer's source: where its tilemap stream starts in the WAD
+/// (`cs`-relative), the screen row it draws from, and its scroll speed in
+/// 1/16-pixel units per tick.
+#[derive(Clone, Copy)]
+pub struct SceneryLayerData {
+    pub cs_offset: usize,
+    pub top: i32,
+    pub speed: u32,
+}
+
+/// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
+/// cs_base`) and its layers, back to front. The asset loader decodes this into
+/// renderable layers.
+#[derive(Clone, Copy)]
+pub struct SceneryData {
+    pub cs_base: usize,
+    pub layers: &'static [SceneryLayerData],
+}
+
 /// One of the seven levels.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Level {
@@ -68,6 +87,10 @@ pub struct LevelData {
     /// content-matching L1's overlay sprites in each level's catalog. The
     /// chaingun has no overlay, so it has no entry.
     pub overlays: PerWeapon<Overlay>,
+    /// The level's parallax scenery. Only L1 is reverse-engineered so far; 2-7
+    /// use the same engine but are still stubbed (`cs_base: 0`, no layers) until
+    /// their layer composition is mapped.
+    pub scenery: SceneryData,
 }
 
 impl Level {
@@ -112,6 +135,28 @@ impl Level {
                         count: 2,
                     },
                 },
+                scenery: SceneryData {
+                    cs_base: 0x29F0,
+                    // Tilemaps cs:0x3137/0x30f2/0x3178 (back/mid/front); top is
+                    // the Mode X dest offset over 80, speed the parallax rate.
+                    layers: &[
+                        SceneryLayerData {
+                            cs_offset: 0x3137,
+                            top: 38,
+                            speed: 6,
+                        },
+                        SceneryLayerData {
+                            cs_offset: 0x30f2,
+                            top: 14,
+                            speed: 10,
+                        },
+                        SceneryLayerData {
+                            cs_offset: 0x3178,
+                            top: 4,
+                            speed: 16,
+                        },
+                    ],
+                },
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
@@ -135,6 +180,11 @@ impl Level {
                         first: 0x35b,
                         count: 2,
                     },
+                },
+                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                scenery: SceneryData {
+                    cs_base: 0,
+                    layers: &[],
                 },
             },
             Level::L3 => LevelData {
@@ -160,6 +210,11 @@ impl Level {
                         count: 2,
                     },
                 },
+                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                scenery: SceneryData {
+                    cs_base: 0,
+                    layers: &[],
+                },
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
@@ -183,6 +238,11 @@ impl Level {
                         first: 0x365,
                         count: 2,
                     },
+                },
+                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                scenery: SceneryData {
+                    cs_base: 0,
+                    layers: &[],
                 },
             },
             Level::L5 => LevelData {
@@ -208,6 +268,11 @@ impl Level {
                         count: 2,
                     },
                 },
+                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                scenery: SceneryData {
+                    cs_base: 0,
+                    layers: &[],
+                },
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
@@ -232,6 +297,11 @@ impl Level {
                         count: 2,
                     },
                 },
+                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                scenery: SceneryData {
+                    cs_base: 0,
+                    layers: &[],
+                },
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
@@ -255,6 +325,11 @@ impl Level {
                         first: 0xa4,
                         count: 2,
                     },
+                },
+                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                scenery: SceneryData {
+                    cs_base: 0,
+                    layers: &[],
                 },
             },
         }

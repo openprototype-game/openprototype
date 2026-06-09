@@ -13,7 +13,7 @@ use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
 use crate::background::{Background, Sp};
-use crate::levels::{Level, Overlay};
+use crate::levels::{Level, Overlay, SceneryData};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use openprototype_core::PerWeapon;
@@ -147,20 +147,6 @@ pub const OVERLAY_FRAMES: usize = 6;
 /// Width of one Mode X catalog cell, in pixels.
 const CELL_WIDTH: usize = 32;
 
-/// Level 1's three scenery tilemap layers as `(WAD cs-offset, top row, speed)`,
-/// back to front. The tilemaps are at `cs:0x3137 / 0x30f2 / 0x3178` (the engine
-/// points `cs:0x31c4` at each in turn). `top` is the layer's Mode X destination
-/// offset over 80; `speed` is its parallax strip rate (the `cs:0x25f6/fa/f2`
-/// scroll accumulators).
-const SCENERY_LAYERS: [(usize, i32, u32); 3] = [
-    (0x3137, 38, 6),  // back
-    (0x30f2, 14, 10), // mid
-    (0x3178, 4, 16),  // front
-];
-
-/// A WAD `cs`-relative offset plus this is the file offset (`file = cs + 0x29F0`).
-const WAD_CS_BASE: usize = 0x29F0;
-
 /// File offset of the overlay position table in `LEVEL_1.WAD` (`cs:0x9128`, with
 /// `file = cs + 0x29F0`). Per weapon: a block of [`OVERLAY_BLOCK_FRAMES`] `(x, y)`
 /// `u16` positions; the animation only uses the first [`OVERLAY_FRAMES`].
@@ -256,7 +242,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         .with_context(|| format!("decoding {bin_name}"))?;
     let overlays = load_overlays(&catalog, data.overlays)?;
     let overlay_slide = read_overlay_slide(&wad)?;
-    let scenery = decode_scenery(&wad);
+    let scenery = decode_scenery(&wad, data.scenery);
 
     Ok(LevelAssets {
         background,
@@ -294,17 +280,23 @@ fn load_overlays(
     Ok(overlays.map(|overlay| assemble_overlay(catalog, overlay.first, overlay.count)))
 }
 
-/// Decode the level's parallax scenery layers from its WAD.
+/// Decode a level's parallax scenery layers from its WAD.
 ///
 /// Each layer is a tilemap of catalog-cell codes at a fixed WAD offset (the
 /// faithful engine points `cs:0x31c4` at one per layer and walks it by the scroll
-/// column). The three layers are drawn back to front; the front one sits over the
-/// playfield in the original, so it draws after the ship.
-fn decode_scenery(wad: &[u8]) -> Scenery {
-    let layers = SCENERY_LAYERS
+/// column). Layers are drawn back to front; the front one sits over the playfield
+/// in the original, so it draws after the ship. A level whose scenery is not yet
+/// reverse-engineered has no layers and yields an empty [`Scenery`].
+fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
+    let layers = scenery
+        .layers
         .iter()
-        .map(|&(cs_offset, top, speed)| {
-            SceneryLayer::new(decode_scenery_tilemap(wad, cs_offset), top, speed)
+        .map(|layer| {
+            SceneryLayer::new(
+                decode_scenery_tilemap(wad, scenery.cs_base, layer.cs_offset),
+                layer.top,
+                layer.speed,
+            )
         })
         .collect();
 
@@ -320,13 +312,13 @@ fn decode_scenery(wad: &[u8]) -> Scenery {
 /// short repeating pattern (the original loops it under the level forever).
 /// Following the stream until an offset repeats yields one clean loop, which the
 /// layer then wraps at its true period rather than at an arbitrary cut.
-fn decode_scenery_tilemap(wad: &[u8], start: usize) -> Vec<Option<usize>> {
+fn decode_scenery_tilemap(wad: &[u8], cs_base: usize, start: usize) -> Vec<Option<usize>> {
     let mut tiles = Vec::new();
     let mut visited = std::collections::HashSet::new();
     let mut cs = start;
 
     while visited.insert(cs) {
-        let file = cs + WAD_CS_BASE;
+        let file = cs + cs_base;
 
         if file + 2 >= wad.len() {
             break;
@@ -653,21 +645,24 @@ pub(crate) fn test_highscore_assets() -> HighscoreAssets {
 mod tests {
     use super::*;
 
+    /// L1's segment-to-file base, used to lay out the test fixtures cs-relative.
+    const TEST_CS_BASE: usize = 0x29F0;
+
     #[test]
     fn scenery_tilemap_maps_codes_skips_zero_and_follows_jumps() {
-        // The decoder reads cs-relative (file = cs + 0x29F0). Two short streams
+        // The decoder reads cs-relative (file = cs + cs_base). Two short streams
         // that jump to each other so the strip loops: stream A at cs 0x10 is
         // [code 3, code 1, empty, jump->0x20]; stream B at cs 0x20 is
         // [code 2, jump->0x10]. Codes map to cells n-1, 0 is an empty column.
         let mut wad = vec![0u8; 0x2a20];
         let put = |wad: &mut [u8], cs: usize, bytes: &[u8]| {
-            let at = cs + WAD_CS_BASE;
+            let at = cs + TEST_CS_BASE;
             wad[at..at + bytes.len()].copy_from_slice(bytes);
         };
         put(&mut wad, 0x10, &[0x03, 0x01, 0x00, 0xff, 0x20, 0x00]);
         put(&mut wad, 0x20, &[0x02, 0xff, 0x10, 0x00]);
 
-        let tiles = decode_scenery_tilemap(&wad, 0x10);
+        let tiles = decode_scenery_tilemap(&wad, TEST_CS_BASE, 0x10);
 
         // Exactly one loop: [cell 2, cell 0, gap, cell 1], stopping where the jump
         // returns to the start rather than wrapping at an arbitrary cut.
@@ -680,7 +675,7 @@ mod tests {
         let mut wad = vec![0u8; 0x29f0 + 3];
         wad[0x29f0] = 0x05; // cs 0, then the WAD ends mid-record
 
-        let tiles = decode_scenery_tilemap(&wad, 0);
+        let tiles = decode_scenery_tilemap(&wad, TEST_CS_BASE, 0);
 
         assert_eq!(tiles, [Some(4)]);
     }
