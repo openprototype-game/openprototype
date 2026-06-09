@@ -293,7 +293,7 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
         .iter()
         .map(|layer| {
             SceneryLayer::new(
-                decode_scenery_tilemap(wad, scenery.cs_base, layer.cs_offset),
+                decode_scenery_tilemap(wad, scenery.cs_base, scenery.cell_base, layer.cs_offset),
                 layer.top,
                 layer.speed,
             )
@@ -306,13 +306,19 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
 /// Expand one scenery tilemap into a per-column `Some(catalog cell)` / `None`
 /// strip, exactly one loop long. The stream is bytes: `0` is an empty column,
 /// `0xFF` is a jump to the 16-bit cs-offset that follows, and any other byte `n`
-/// is catalog cell `n - 1`.
+/// is catalog cell `n + cell_base` (the per-level offset the render routine bakes
+/// in; L1 `-1`, L2 `0x111`).
 ///
 /// Each layer's stream ends in a jump back to its own start, so the strip is a
 /// short repeating pattern (the original loops it under the level forever).
 /// Following the stream until an offset repeats yields one clean loop, which the
 /// layer then wraps at its true period rather than at an arbitrary cut.
-fn decode_scenery_tilemap(wad: &[u8], cs_base: usize, start: usize) -> Vec<Option<usize>> {
+fn decode_scenery_tilemap(
+    wad: &[u8],
+    cs_base: usize,
+    cell_base: i32,
+    start: usize,
+) -> Vec<Option<usize>> {
     let mut tiles = Vec::new();
     let mut visited = std::collections::HashSet::new();
     let mut cs = start;
@@ -331,7 +337,8 @@ fn decode_scenery_tilemap(wad: &[u8], cs_base: usize, start: usize) -> Vec<Optio
                 cs += 1;
             }
             code => {
-                tiles.push(Some(usize::from(code - 1)));
+                let cell = i32::from(code) + cell_base;
+                tiles.push(usize::try_from(cell).ok());
                 cs += 1;
             }
         }
@@ -662,7 +669,7 @@ mod tests {
         put(&mut wad, 0x10, &[0x03, 0x01, 0x00, 0xff, 0x20, 0x00]);
         put(&mut wad, 0x20, &[0x02, 0xff, 0x10, 0x00]);
 
-        let tiles = decode_scenery_tilemap(&wad, TEST_CS_BASE, 0x10);
+        let tiles = decode_scenery_tilemap(&wad, TEST_CS_BASE, -1, 0x10);
 
         // Exactly one loop: [cell 2, cell 0, gap, cell 1], stopping where the jump
         // returns to the start rather than wrapping at an arbitrary cut.
@@ -675,7 +682,7 @@ mod tests {
         let mut wad = vec![0u8; 0x29f0 + 3];
         wad[0x29f0] = 0x05; // cs 0, then the WAD ends mid-record
 
-        let tiles = decode_scenery_tilemap(&wad, TEST_CS_BASE, 0);
+        let tiles = decode_scenery_tilemap(&wad, TEST_CS_BASE, -1, 0);
 
         assert_eq!(tiles, [Some(4)]);
     }

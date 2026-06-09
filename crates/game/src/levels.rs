@@ -27,11 +27,15 @@ pub struct SceneryLayerData {
 }
 
 /// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
-/// cs_base`) and its layers, back to front. The asset loader decodes this into
-/// renderable layers.
+/// cs_base`), the cell-base offset, and its layers, back to front. The asset
+/// loader decodes this into renderable layers.
 #[derive(Clone, Copy)]
 pub struct SceneryData {
     pub cs_base: usize,
+    /// Added to each stream byte to get its catalog cell index, so the
+    /// per-level render routine's cell base maps onto our `decode_banked` sprite
+    /// indices (L1 `-1`; stubbed levels `0`).
+    pub cell_base: i32,
     pub layers: &'static [SceneryLayerData],
 }
 
@@ -137,6 +141,7 @@ impl Level {
                 },
                 scenery: SceneryData {
                     cs_base: 0x29F0,
+                    cell_base: -1,
                     // Tilemaps cs:0x3137/0x30f2/0x3178 (back/mid/front); top is
                     // the Mode X dest offset over 80, speed the parallax rate.
                     layers: &[
@@ -182,8 +187,11 @@ impl Level {
                     },
                 },
                 // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                // Streams/cell_base are mapped (see `scenery-layers-faithful`),
+                // but object 1's page-0x0c cells decode wrong, so held back.
                 scenery: SceneryData {
                     cs_base: 0,
+                    cell_base: 0,
                     layers: &[],
                 },
             },
@@ -213,6 +221,7 @@ impl Level {
                 // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
                     cs_base: 0,
+                    cell_base: 0,
                     layers: &[],
                 },
             },
@@ -242,6 +251,7 @@ impl Level {
                 // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
                     cs_base: 0,
+                    cell_base: 0,
                     layers: &[],
                 },
             },
@@ -271,6 +281,7 @@ impl Level {
                 // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
                     cs_base: 0,
+                    cell_base: 0,
                     layers: &[],
                 },
             },
@@ -300,6 +311,7 @@ impl Level {
                 // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
                     cs_base: 0,
+                    cell_base: 0,
                     layers: &[],
                 },
             },
@@ -329,6 +341,7 @@ impl Level {
                 // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
                     cs_base: 0,
+                    cell_base: 0,
                     layers: &[],
                 },
             },
