@@ -213,7 +213,10 @@ impl Intro {
                 }
                 Beat::Credits => {
                     match FlicPlayer::decode_at(&self.assets.credz_fli, CREDITS_FLI_DELAY) {
-                        Ok(player) => {
+                        Ok(mut player) => {
+                            // The credits play through the original's variant
+                            // player, which runs one frame short of the count.
+                            player.clip_last_frame();
                             self.active = Active::Credits(Credits::new(player));
                             return;
                         }
@@ -366,9 +369,10 @@ impl Scene for Intro {
 
 /// The credits: `credz.fli` loops throughout, one full play per "page".
 /// Mirrors `START.EXE`'s credits routine (`0x460b`): it plays the FLI once with
-/// no text (the lead-in), then plays it again under each text page in turn, and
-/// the original's trailing blank page is one more text-free play (the linger)
-/// before the menu. So the page on screen is keyed to the loop count.
+/// no text (the lead-in), then plays it again under each text page in turn. The
+/// fifth authored page is 12 blank rows; rendering it equals a text-free play,
+/// so it is the trailing linger rotation here. The page on screen is keyed to
+/// the loop count.
 struct Credits {
     player: FlicPlayer,
     rotation: usize,
@@ -418,77 +422,92 @@ impl Credits {
         // Pages run during loops 1..=N; the lead-in and the trailing linger
         // show the animation with no text.
         if (1..=CREDIT_PAGES.len()).contains(&self.rotation) {
-            draw_centered(framebuffer, font, CREDIT_PAGES[self.rotation - 1]);
+            draw_page(framebuffer, font, &CREDIT_PAGES[self.rotation - 1]);
         }
     }
 }
 
-/// The dev-team credit pages, transcribed verbatim from `START.EXE`'s credits
-/// routine (`0x460b`, pages at data offsets `0x6e5`..`0xb05`). The original's
-/// blank padding rows are dropped; the meaningful lines are centered.
-const CREDIT_PAGES: &[&[&str]] = &[
-    &[
-        "PROGRAM:",
-        "",
-        "ERIK POJAR",
-        "",
-        "GRAPHICS:",
-        "",
-        "MICHAEL SORMANN",
-        "PETER BAUSTAEDTER",
+/// The dev-team credit pages, transcribed byte-exact from `START.EXE`. Each
+/// page is the 20-character payload of 12 consecutive 22-byte records
+/// (`'X'` marker + 20 chars + `'$'`); the page pointers are cs:`0x6e5`,
+/// `0x7ed`, `0x8f5`, `0x9fd`. The layout is authored into the padding: headers
+/// sit one cell in, names are right-aligned to column 19. The fifth page
+/// (cs:`0xb05`) is 12 blank rows, rendered here as the text-free linger
+/// rotation.
+const CREDIT_PAGES: [[&str; 12]; 4] = [
+    [
+        "                    ",
+        " PROGRAM:           ",
+        "                    ",
+        "         ERIK POJAR ",
+        "                    ",
+        "                    ",
+        " GRAPHICS:          ",
+        "                    ",
+        "    MICHAEL SORMANN ",
+        "  PETER BAUSTAEDTER ",
+        "                    ",
+        "                    ",
     ],
-    &[
-        "MUSIC:",
-        "",
-        "NEO PROJECT",
-        "HANNES SEIFERT",
-        "PETER MELCHART",
-        "",
-        "DESIGN:",
-        "",
-        "MICHAEL SORMANN",
-        "NIKI LABER",
+    [
+        "                    ",
+        " MUSIC:             ",
+        "                    ",
+        "        NEO PROJECT ",
+        "     HANNES SEIFERT ",
+        "     PETER MELCHART ",
+        "                    ",
+        " DESIGN:            ",
+        "                    ",
+        "    MICHAEL SORMANN ",
+        "         NIKI LABER ",
+        "                    ",
     ],
-    &[
-        "ADDITIONAL CODING:",
-        "",
-        "CHRISTOPH SOUKUP",
-        "PETER MELCHART",
-        "",
-        "GAME TESTING:",
-        "",
-        "MICHAELA STEURER",
-        "VICTOR METYKO",
-        "NIKI GHALUSTIAN",
-        "KAWEH KAZEMI",
+    [
+        "                    ",
+        " ADDITIONAL CODING: ",
+        "                    ",
+        "   CHRISTOPH SOUKUP ",
+        "     PETER MELCHART ",
+        "                    ",
+        " GAME TESTING:      ",
+        "                    ",
+        "   MICHAELA STEURER ",
+        "      VICTOR METYKO ",
+        "    NIKI GHALUSTIAN ",
+        "       KAWEH KAZEMI ",
     ],
-    &[
-        "SPECIAL THANKS TO:",
-        "",
-        "OLIVER LEEDS",
-        "CHRISTOPH BRUNMAYR",
-        "KLAUS KRALL",
-        "ALEXANDER CECH",
-        "WOLFGANG TENGLER",
-        "TOBIAS SICHERITZ",
-        "MARCUS ERBER",
-        "FA. NIEDERMEYER",
+    [
+        "                    ",
+        "SPECIAL THANKS TO:  ",
+        "                    ",
+        "       OLIVER LEEDS ",
+        " CHRISTOPH BRUNMAYR ",
+        "        KLAUS KRALL ",
+        "     ALEXANDER CECH ",
+        "   WOLFGANG TENGLER ",
+        "   TOBIAS SICHERITZ ",
+        "       MARCUS ERBER ",
+        "    FA. NIEDERMEYER ",
+        "                    ",
     ],
 ];
 
 /// One glyph cell of the menu font.
 const GLYPH: i32 = 16;
 
-/// Draw a block of lines centered on the screen.
-fn draw_centered(framebuffer: &mut Framebuffer, font: &Font, lines: &[&str]) {
-    let height = lines.len() as i32 * GLYPH;
-    let mut y = (SCREEN_HEIGHT as i32 - height) / 2;
+/// Where a credits page starts on screen: the original's page drawer
+/// (`0x45f5`) begins at screen offset `0x500` (x 0, y 4) and steps `0x1400`
+/// (16 scanlines) per row.
+const CREDITS_PAGE_Y: i32 = 4;
 
-    for line in lines {
-        let width = line.len() as i32 * GLYPH;
-        let x = (SCREEN_WIDTH as i32 - width) / 2;
-        font.draw_into(&mut framebuffer.image, x, y, line);
-        y += GLYPH;
+/// Draw one credits page: 12 rows of 20 characters from the screen's left
+/// edge, one row every 16 scanlines. Spaces blit the (empty) first glyph, so
+/// the authored padding positions the text exactly as the original.
+fn draw_page(framebuffer: &mut Framebuffer, font: &Font, lines: &[&str; 12]) {
+    for (row, line) in lines.iter().enumerate() {
+        let y = CREDITS_PAGE_Y + row as i32 * GLYPH;
+        font.draw_into(&mut framebuffer.image, 0, y, line);
     }
 }
 
@@ -561,6 +580,19 @@ mod tests {
 
         intro.update(ticks(230), &[]); // past the 220-tick fade
         assert!(matches!(intro.active, Active::Hold(_)), "then holds");
+    }
+
+    #[test]
+    fn every_credits_line_is_a_full_record_payload() {
+        // The pages are byte-exact transcriptions of the original's 22-byte
+        // records, so every line must carry the full 20-character payload;
+        // a trimmed line would shift nothing visibly (spaces are transparent)
+        // but would no longer be the verbatim data.
+        for page in &CREDIT_PAGES {
+            for line in page {
+                assert_eq!(line.len(), 20, "line {line:?}");
+            }
+        }
     }
 
     #[test]

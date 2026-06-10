@@ -103,6 +103,15 @@ impl FlicPlayer {
         self.elapsed = Duration::ZERO;
     }
 
+    /// Drop the final frame. The original's credits player (`START.EXE`
+    /// `0x3293`) runs one frame short of the header count (`dec cx` before its
+    /// frame loop), unlike the intro player (`0x31fd`) which plays them all.
+    pub fn clip_last_frame(&mut self) {
+        if self.frames.len() > 1 {
+            self.frames.pop();
+        }
+    }
+
     /// The frame to show now.
     pub fn current(&self) -> &FlicFrame {
         &self.frames[self.index]
@@ -160,6 +169,17 @@ mod tests {
 
         assert_eq!(player.index, 0);
         assert!(player.finished());
+    }
+
+    #[test]
+    fn clipping_drops_the_last_frame_but_never_the_only_one() {
+        let mut clipped = player(&[100, 100, 100]);
+        clipped.clip_last_frame();
+        assert_eq!(clipped.frames.len(), 2);
+
+        let mut single = player(&[100]);
+        single.clip_last_frame();
+        assert_eq!(single.frames.len(), 1);
     }
 
     #[test]
