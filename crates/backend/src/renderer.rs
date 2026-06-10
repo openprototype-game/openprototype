@@ -11,6 +11,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::Dimensions;
+use tracing::debug;
 use winit::window::Window;
 
 use crate::compositor::Compositor;
@@ -55,13 +56,26 @@ impl Renderer {
             .find(|format| !format.is_srgb())
             .unwrap_or(caps.formats[0]);
 
+        // Mailbox never blocks presentation, so the window loop's frame timer
+        // can run the scene's true rate (70Hz front-end, 60Hz level) on any
+        // panel and the compositor picks the freshest frame each vblank. Where
+        // it is unavailable (some Wayland compositors, macOS) vsync-capped
+        // Fifo is fine too: the loop's catch-up keeps logic on the wall clock,
+        // it just coalesces steps when the panel is slower than the scene.
+        let present_mode = if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+            wgpu::PresentMode::Mailbox
+        } else {
+            wgpu::PresentMode::AutoVsync
+        };
+        debug!("presenting with {present_mode:?}");
+
         let physical = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             width: physical.width.max(1),
             height: physical.height.max(1),
-            present_mode: wgpu::PresentMode::AutoVsync,
+            present_mode,
             desired_maximum_frame_latency: 2,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
