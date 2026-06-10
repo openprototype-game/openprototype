@@ -119,6 +119,26 @@ impl EngineRng {
     }
 }
 
+/// The engine's wall-clock seed: `(sec << 8 | centi) + (hour << 8 | min)`, the
+/// DOS get-time formula the original feeds [`EngineRng::new`] at level start.
+///
+/// The components come from the system clock in UTC (std has no local-time
+/// access); a fixed hour/minute offset against DOS's local clock shifts the
+/// seed but not its randomness. Centiseconds keep the modern clock's full
+/// precision instead of re-quantizing to the 18.2 Hz timer.
+pub fn clock_seed() -> u16 {
+    let since_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = since_epoch.as_secs();
+    let hour = (secs / 3600) % 24;
+    let minute = (secs / 60) % 60;
+    let sec = secs % 60;
+    let centi = u64::from(since_epoch.subsec_millis() / 10);
+
+    (((sec << 8) | centi) as u16).wrapping_add(((hour << 8) | minute) as u16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

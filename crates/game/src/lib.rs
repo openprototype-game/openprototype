@@ -26,3 +26,4 @@ pub mod levels;
 pub mod scene;
 pub mod scenery;
 pub mod screen;
+pub mod stars;

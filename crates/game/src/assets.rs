@@ -13,7 +13,7 @@ use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
 use crate::background::{Background, Sp};
-use crate::levels::{Level, Overlay, SceneryData};
+use crate::levels::{Level, Overlay, SceneryData, StarPlaneData};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use openprototype_core::PerWeapon;
@@ -131,6 +131,9 @@ pub struct LevelAssets {
     pub catalog: SpriteSheet,
     /// The level's parallax scenery layers, decoded from the level WAD's tilemaps.
     pub scenery: Scenery,
+    /// The level's star-field planes, straight from the registry (the positions
+    /// are generated per scene, not loaded).
+    pub stars: &'static [StarPlaneData],
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -251,6 +254,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         overlay_slide,
         catalog,
         scenery,
+        stars: data.stars,
     })
 }
 
@@ -633,6 +637,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             sprites: Vec::new(),
         },
         scenery: Scenery::new(Vec::new()),
+        stars: &[],
     }
 }
 

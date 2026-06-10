@@ -26,6 +26,21 @@ pub struct SceneryLayerData {
     pub speed: u32,
 }
 
+/// One plane of a level's star field: 30 single-pixel stars sweeping left at
+/// `speed` (1/16-pixel per tick), plotted in palette index `color`.
+#[derive(Clone, Copy)]
+pub struct StarPlaneData {
+    pub speed: u32,
+    pub color: u8,
+    /// The plane plots only onto still-black pixels, so it never overwrites the
+    /// background art (the original's depth cue for its dimmest plane).
+    pub only_on_black: bool,
+    /// Whether the level init scatters this plane. The original's initializer
+    /// skips one of L2's four tables, leaving its 30 stars stacked at the
+    /// origin as a single drifting pixel; that quirk is kept faithfully.
+    pub seeded: bool,
+}
+
 /// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
 /// cs_base`), the cell-base offset, and its layers, back to front. The asset
 /// loader decodes this into renderable layers.
@@ -95,6 +110,10 @@ pub struct LevelData {
     /// the same engine but are still stubbed (`cs_base: 0`, no layers) until
     /// their layer composition is mapped.
     pub scenery: SceneryData,
+    /// The level's star-field planes, drawn between the parallax background
+    /// and the scenery, back to front. Empty for levels without one (or not
+    /// yet reverse-engineered).
+    pub stars: &'static [StarPlaneData],
 }
 
 impl Level {
@@ -162,6 +181,7 @@ impl Level {
                         },
                     ],
                 },
+                stars: &[],
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
@@ -200,6 +220,36 @@ impl Level {
                         speed: 48,
                     }],
                 },
+                // Four blue star planes over the nebula; brightness tracks
+                // speed (the nebula itself scrolls at 32, so one plane drifts
+                // behind it and two ahead). The second table is the one the
+                // original never seeds.
+                stars: &[
+                    StarPlaneData {
+                        speed: 0x1c,
+                        color: 0x8d,
+                        only_on_black: true,
+                        seeded: true,
+                    },
+                    StarPlaneData {
+                        speed: 0x24,
+                        color: 0x8b,
+                        only_on_black: false,
+                        seeded: false,
+                    },
+                    StarPlaneData {
+                        speed: 0x28,
+                        color: 0x89,
+                        only_on_black: false,
+                        seeded: true,
+                    },
+                    StarPlaneData {
+                        speed: 0x2c,
+                        color: 0x87,
+                        only_on_black: false,
+                        seeded: true,
+                    },
+                ],
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
@@ -230,6 +280,7 @@ impl Level {
                     cell_base: 0,
                     layers: &[],
                 },
+                stars: &[],
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
@@ -260,6 +311,7 @@ impl Level {
                     cell_base: 0,
                     layers: &[],
                 },
+                stars: &[],
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
@@ -290,6 +342,7 @@ impl Level {
                     cell_base: 0,
                     layers: &[],
                 },
+                stars: &[],
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
@@ -320,6 +373,7 @@ impl Level {
                     cell_base: 0,
                     layers: &[],
                 },
+                stars: &[],
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
@@ -350,6 +404,7 @@ impl Level {
                     cell_base: 0,
                     layers: &[],
                 },
+                stars: &[],
             },
         }
     }

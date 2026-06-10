@@ -18,8 +18,10 @@ use prototype_formats::Dimensions;
 use crate::assets::LevelAssets;
 use crate::background::BackgroundScroll;
 use crate::hud::{self, POD_SETTLED_FRAME};
+use crate::level::prng::{EngineRng, clock_seed};
 use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
+use crate::stars::StarField;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 use openprototype_core::{
@@ -70,6 +72,8 @@ pub struct LevelScene {
     background_scroll: BackgroundScroll,
     /// Per-layer scroll positions for the level's scenery, advanced each tick.
     scenery_scroll: SceneryScroll,
+    /// The level's star field, seeded from the wall clock like the original.
+    stars: StarField,
     /// Vertical camera, `0..=CAMERA_MAX`: which background row sits at the top of the
     /// playfield. Nudged with Up/Down.
     camera_y: i32,
@@ -104,12 +108,14 @@ impl LevelScene {
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
         let background_scroll = assets.background.scroll();
         let scenery_scroll = assets.scenery.scroll();
+        let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
         let mut scene = Self {
             assets,
             state,
             frame,
             background_scroll,
             scenery_scroll,
+            stars,
             camera_y: 0,
             overlay_x: OVERLAY_X,
             overlay_offset_y: OVERLAY_OFFSET_Y,
@@ -151,6 +157,7 @@ impl LevelScene {
             .background
             .advance(&mut self.background_scroll, ticks);
         self.assets.scenery.advance(&mut self.scenery_scroll, ticks);
+        self.stars.advance(ticks);
         self.pod_ticks += ticks;
 
         while self.pod_frame < POD_SETTLED_FRAME && self.pod_ticks >= POD_FRAME_TICKS {
@@ -175,6 +182,9 @@ impl LevelScene {
             self.camera_y,
             hud::PANEL_TOP,
         );
+
+        self.stars
+            .render(&mut self.frame, self.camera_y, hud::PANEL_TOP);
 
         self.assets.scenery.render(
             &self.scenery_scroll,
