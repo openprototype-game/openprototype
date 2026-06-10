@@ -34,7 +34,7 @@ pub struct SceneryData {
     pub cs_base: usize,
     /// Added to each stream byte to get its catalog cell index, so the
     /// per-level render routine's cell base maps onto our `decode_banked` sprite
-    /// indices (L1 `-1`; stubbed levels `0`).
+    /// indices (L1 `-1`, L2 `968`; stubbed levels `0`).
     pub cell_base: i32,
     pub layers: &'static [SceneryLayerData],
 }
@@ -91,8 +91,8 @@ pub struct LevelData {
     /// content-matching L1's overlay sprites in each level's catalog. The
     /// chaingun has no overlay, so it has no entry.
     pub overlays: PerWeapon<Overlay>,
-    /// The level's parallax scenery. Only L1 is reverse-engineered so far; 2-7
-    /// use the same engine but are still stubbed (`cs_base: 0`, no layers) until
+    /// The level's parallax scenery. L1 and L2 are reverse-engineered; 3-7 use
+    /// the same engine but are still stubbed (`cs_base: 0`, no layers) until
     /// their layer composition is mapped.
     pub scenery: SceneryData,
 }
@@ -186,13 +186,19 @@ impl Level {
                         count: 2,
                     },
                 },
-                // TODO: reverse-engineer this level's scenery (cs_base + layers).
-                // Streams/cell_base are mapped (see `scenery-layers-faithful`),
-                // but object 1's page-0x0c cells decode wrong, so held back.
                 scenery: SceneryData {
-                    cs_base: 0,
-                    cell_base: 0,
-                    layers: &[],
+                    cs_base: 0x09B0,
+                    cell_base: 968,
+                    // L2 keeps only the first of the engine's three layer slots
+                    // live: the frame renderer sets up the row-14 and row-4
+                    // streams too, but never calls the walker for them (dead
+                    // code), so the race structures at row 38 are the level's
+                    // whole scenery.
+                    layers: &[SceneryLayerData {
+                        cs_offset: 0x34e9,
+                        top: 38,
+                        speed: 48,
+                    }],
                 },
             },
             Level::L3 => LevelData {
