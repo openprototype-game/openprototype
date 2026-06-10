@@ -74,6 +74,32 @@ pub struct ShipData {
     pub spawn_shield_ticks: i32,
 }
 
+/// Where a level's WAD keeps the player-fire data: the shot sprites' directory
+/// records (`{ncells, width, height, cell}`, like the shield's), the chaingun
+/// muzzle-flash directory, and the per-roll-frame barrel offsets. All file
+/// offsets, located per WAD by spawner-code byte scans
+/// (`re/find_shot_dirs.py`, `re/find_weapon_tables.py`); the spawn offsets,
+/// velocities, damages and fire rates are identical in all seven WADs and
+/// live in [`crate::shots`].
+#[derive(Clone, Copy)]
+pub struct FireData {
+    /// The chaingun shot's directory record.
+    pub chaingun: usize,
+    /// The multishot projectile's record per charge level 1..=4.
+    pub multishot: [usize; 4],
+    /// The burning beam's record per charge level 1..=4.
+    pub burning: [usize; 4],
+    /// The plasma orbs' bolt record.
+    pub plasma_bolt: usize,
+    /// The missile's record.
+    pub missile: usize,
+    /// The chaingun muzzle flash: 6 records (3 cells, 2 frames each).
+    pub muzzle_flash: usize,
+    /// 27 `(i16, i16)` pairs: the two barrel y offsets per roll frame, used
+    /// by the chaingun/multishot shot spawns and the muzzle flash.
+    pub barrel_table: usize,
+}
+
 /// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
 /// cs_base`), the cell-base offset, and its layers, back to front. The asset
 /// loader decodes this into renderable layers.
@@ -188,6 +214,8 @@ pub struct LevelData {
     /// `cell` indexes [`LevelData::catalog`]. The shield animation cycles the
     /// first [`SHIELD_FRAMES`](crate::ship::SHIELD_FRAMES) records.
     pub shield_directory: usize,
+    /// The level's player-fire data (see [`FireData`]).
+    pub fire: FireData,
     /// The level's parallax scenery layers, back to front, all reverse-
     /// engineered from each level's WAD.
     pub scenery: SceneryData,
@@ -254,6 +282,15 @@ impl Level {
                     flicker_frame: 27,
                 },
                 shield_directory: 0x6d7a,
+                fire: FireData {
+                    chaingun: 0x5be8,
+                    multishot: [0x5bf0, 0x5bf8, 0x5c00, 0x5c08],
+                    burning: [0x5c10, 0x5c18, 0x5c20, 0x5c28],
+                    plasma_bolt: 0x5cb0,
+                    missile: 0x5cb8,
+                    muzzle_flash: 0x6266,
+                    barrel_table: 0xb8dc,
+                },
                 scenery: SceneryData {
                     cs_base: 0x29F0,
                     cell_base: -1,
@@ -314,6 +351,15 @@ impl Level {
                     flicker_frame: 27,
                 },
                 shield_directory: 0x438a,
+                fire: FireData {
+                    chaingun: 0x3fb8,
+                    multishot: [0x3fc0, 0x3fca, 0x3fd4, 0x3fde],
+                    burning: [0x3fe8, 0x3ff0, 0x3ff8, 0x4000],
+                    plasma_bolt: 0x3f90,
+                    missile: 0x4088,
+                    muzzle_flash: 0x4188,
+                    barrel_table: 0x9447,
+                },
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 968,
@@ -365,6 +411,15 @@ impl Level {
                     flicker_frame: 28,
                 },
                 shield_directory: 0x995e,
+                fire: FireData {
+                    chaingun: 0x958c,
+                    multishot: [0x9594, 0x959e, 0x95a8, 0x95b2],
+                    burning: [0x95bc, 0x95c4, 0x95cc, 0x95d4],
+                    plasma_bolt: 0x9564,
+                    missile: 0x965c,
+                    muzzle_flash: 0x975c,
+                    barrel_table: 0xf2c4,
+                },
                 scenery: SceneryData {
                     cs_base: 0x4710,
                     cell_base: 273,
@@ -423,6 +478,15 @@ impl Level {
                     flicker_frame: 27,
                 },
                 shield_directory: 0x4402,
+                fire: FireData {
+                    chaingun: 0x4030,
+                    multishot: [0x4038, 0x4042, 0x404c, 0x4056],
+                    burning: [0x4060, 0x4068, 0x4070, 0x4078],
+                    plasma_bolt: 0x4008,
+                    missile: 0x4100,
+                    muzzle_flash: 0x4200,
+                    barrel_table: 0x94bf,
+                },
                 // The race levels' tilemap streams are byte-identical; the look
                 // differs through cell_base, which points the shared codes at a
                 // different window of RACE1.BIN per level.
@@ -472,6 +536,15 @@ impl Level {
                     flicker_frame: 28,
                 },
                 shield_directory: 0x775a,
+                fire: FireData {
+                    chaingun: 0x7388,
+                    multishot: [0x7390, 0x739a, 0x73a4, 0x73ae],
+                    burning: [0x73b8, 0x73c0, 0x73c8, 0x73d0],
+                    plasma_bolt: 0x7360,
+                    missile: 0x7458,
+                    muzzle_flash: 0x7558,
+                    barrel_table: 0xcfa0,
+                },
                 scenery: SceneryData {
                     cs_base: 0x3f90,
                     cell_base: 273,
@@ -525,6 +598,15 @@ impl Level {
                     flicker_frame: 27,
                 },
                 shield_directory: 0x4902,
+                fire: FireData {
+                    chaingun: 0x4530,
+                    multishot: [0x4538, 0x4542, 0x454c, 0x4556],
+                    burning: [0x4560, 0x4568, 0x4570, 0x4578],
+                    plasma_bolt: 0x4508,
+                    missile: 0x4600,
+                    muzzle_flash: 0x4700,
+                    barrel_table: 0x99bf,
+                },
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 1106,
@@ -571,6 +653,15 @@ impl Level {
                     flicker_frame: 27,
                 },
                 shield_directory: 0x94d7,
+                fire: FireData {
+                    chaingun: 0x9105,
+                    multishot: [0x910d, 0x9117, 0x9121, 0x912b],
+                    burning: [0x9135, 0x913d, 0x9145, 0x914d],
+                    plasma_bolt: 0x90dd,
+                    missile: 0x91d5,
+                    muzzle_flash: 0x92d5,
+                    barrel_table: 0xf521,
+                },
                 // Both layers share row 1 and rate 16 on separate
                 // accumulators; the split is back-vs-front art, not depth.
                 scenery: SceneryData {

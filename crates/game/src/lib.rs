@@ -28,4 +28,5 @@ pub mod scene;
 pub mod scenery;
 pub mod screen;
 pub mod ship;
+pub mod shots;
 pub mod stars;

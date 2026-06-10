@@ -25,6 +25,7 @@ use crate::playfield;
 use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
 use crate::ship::{HeldKeys, Ship};
+use crate::shots::Weapons;
 use crate::stars::StarField;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::{Key, KeyEvent};
@@ -76,8 +77,12 @@ pub struct LevelScene {
     stars: StarField,
     /// The player ship, flown with the arrow keys.
     ship: Ship,
+    /// The player's fire state: cooldown, live shots, muzzle flash.
+    weapons: Weapons,
     /// Flight keys currently held, maintained from the key transitions.
     held: HeldKeys,
+    /// Whether the fire key (Ctrl) is held.
+    fire_held: bool,
     /// Vertical camera, `camera_min..=32`: which background row sits at the
     /// top of the playfield. The ship's flight drags it (see [`Ship::update`]).
     camera_y: i32,
@@ -127,7 +132,9 @@ impl LevelScene {
             scenery_scroll,
             stars,
             ship,
+            weapons: Weapons::new(),
             held: HeldKeys::default(),
+            fire_held: false,
             camera_y,
             overlay_x: OVERLAY_X,
             overlay_offset_y: OVERLAY_OFFSET_Y,
@@ -172,6 +179,13 @@ impl LevelScene {
         for _ in 0..ticks {
             self.ship
                 .update(self.held, &mut self.camera_y, self.assets.camera_min);
+            self.weapons.update(
+                self.fire_held,
+                &self.state,
+                self.ship.position(),
+                self.ship.roll_frame(),
+                &self.assets.barrel_offsets,
+            );
         }
 
         self.assets
@@ -214,10 +228,22 @@ impl LevelScene {
             self.camera_y,
         );
 
+        self.weapons
+            .render(&self.assets.fire_sprites, &mut self.frame, self.camera_y);
+
         self.ship.render(
             &self.assets.ship_frames,
             &self.assets.shield_frames,
             &mut self.frame,
+            self.camera_y,
+        );
+
+        self.weapons.render_flash(
+            &self.assets.fire_sprites,
+            &mut self.frame,
+            self.ship.position(),
+            self.ship.roll_frame(),
+            &self.assets.barrel_offsets,
             self.camera_y,
         );
 
@@ -288,7 +314,8 @@ impl Scene for LevelScene {
                     Key::Left => self.held.left = true,
                     Key::Right => self.held.right = true,
                     Key::Esc => output.transition = Some(Transition::Quit),
-                    Key::Enter | Key::Ctrl => {}
+                    Key::Ctrl => self.fire_held = true,
+                    Key::Enter => {}
                     Key::Char(c) => match c.to_ascii_lowercase() {
                         'a' => self.nudge_overlay(-1, 0),
                         'd' => self.nudge_overlay(1, 0),
@@ -317,6 +344,7 @@ impl Scene for LevelScene {
                     Key::Down => self.held.down = false,
                     Key::Left => self.held.left = false,
                     Key::Right => self.held.right = false,
+                    Key::Ctrl => self.fire_held = false,
                     _ => {}
                 },
             }

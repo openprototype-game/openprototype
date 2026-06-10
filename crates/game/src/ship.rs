@@ -143,6 +143,12 @@ impl Ship {
         (self.x, self.y)
     }
 
+    /// The current barrel-roll frame, which the fire system uses to index the
+    /// barrel-offset table.
+    pub fn roll_frame(&self) -> usize {
+        self.roll as usize
+    }
+
     /// Advance one logic tick: animations, movement, and the camera coupling.
     pub fn update(&mut self, held: HeldKeys, camera: &mut i32, camera_min: i32) {
         self.idle_phase = (self.idle_phase + 1) % IDLE_PHASES;

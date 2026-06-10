@@ -143,6 +143,11 @@ pub struct LevelAssets {
     /// The shield's animation frames, assembled from the WAD's sprite
     /// directory over the clip-header catalog.
     pub shield_frames: Vec<OverlaySprite>,
+    /// The player-fire sprites (shots and muzzle flash).
+    pub fire_sprites: FireSprites,
+    /// Per roll frame, the ship's two barrel y offsets (shot spawns and the
+    /// muzzle flash both anchor on them).
+    pub barrel_offsets: Vec<(i32, i32)>,
     /// The level's star-field planes, straight from the registry (the positions
     /// are generated per scene, not loaded).
     pub stars: &'static [StarPlaneData],
@@ -155,6 +160,19 @@ pub struct LevelAssets {
 pub struct OverlaySprite {
     pub size: Dimensions,
     pub pixels: Vec<Option<u8>>,
+}
+
+/// The player-fire sprites, assembled from the WAD's directory records over
+/// the clip-header catalog (see [`crate::shots`]).
+pub struct FireSprites {
+    pub chaingun: OverlaySprite,
+    /// Per charge level 1..=4.
+    pub multishot: [OverlaySprite; 4],
+    pub burning: [OverlaySprite; 4],
+    pub plasma_bolt: OverlaySprite,
+    pub missile: OverlaySprite,
+    /// The chaingun muzzle flash's 6 animation frames.
+    pub muzzle_flash: Vec<OverlaySprite>,
 }
 
 /// Frames in a weapon's pod/overlay open-and-settle animation (`0` hidden ..=
@@ -265,6 +283,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let pturn1 = disc.read("PTURN1.BN1").context("reading PTURN1.BN1")?;
     let ship_frames = decode_ship(&pturn1, &wad, data.ship.catalog).context("decoding PTURN1")?;
     let shield_frames = load_shield_frames(&wad, data.shield_directory, &overlay_catalog)?;
+    let (fire_sprites, barrel_offsets) = load_fire(&wad, &overlay_catalog, data.fire)?;
 
     Ok(LevelAssets {
         background,
@@ -276,10 +295,95 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         ship_frames,
         ship: data.ship,
         shield_frames,
+        fire_sprites,
+        barrel_offsets,
         stars: data.stars,
         camera_min: data.camera_min,
     })
 }
+
+/// Assemble one sprite from a directory record at `record` in the WAD:
+/// `{ncells, width, height, cell}` (all `u16`), `cell` indexing the level's
+/// clip-header catalog.
+fn directory_sprite(wad: &[u8], catalog: &SpriteSheet, record: usize) -> Result<OverlaySprite> {
+    if wad.len() < record + 8 {
+        anyhow::bail!(
+            "WAD is {} bytes, directory record at {record} overruns",
+            wad.len()
+        );
+    }
+
+    let read = |at: usize| usize::from(u16::from_le_bytes([wad[at], wad[at + 1]]));
+    let ncells = read(record);
+    let cell = read(record + 6);
+
+    if catalog.sprites.len() < cell + ncells {
+        anyhow::bail!(
+            "catalog has {} sprites, directory record at {record} needs {}",
+            catalog.sprites.len(),
+            cell + ncells
+        );
+    }
+
+    Ok(assemble_overlay(catalog, cell, ncells))
+}
+
+/// Load the player-fire sprites and the barrel-offset table.
+fn load_fire(
+    wad: &[u8],
+    catalog: &SpriteSheet,
+    fire: crate::levels::FireData,
+) -> Result<(FireSprites, Vec<(i32, i32)>)> {
+    let sprite = |record: usize| directory_sprite(wad, catalog, record);
+    let leveled = |records: [usize; 4]| -> Result<[OverlaySprite; 4]> {
+        Ok([
+            sprite(records[0])?,
+            sprite(records[1])?,
+            sprite(records[2])?,
+            sprite(records[3])?,
+        ])
+    };
+
+    let muzzle_flash = (0..6)
+        .map(|frame| sprite(fire.muzzle_flash + frame * 8))
+        .collect::<Result<Vec<_>>>()?;
+
+    let table_end = fire.barrel_table + ROLL_FRAMES * 4;
+
+    if wad.len() < table_end {
+        anyhow::bail!(
+            "WAD is {} bytes, the barrel table needs {table_end}",
+            wad.len()
+        );
+    }
+
+    let barrels = (0..ROLL_FRAMES)
+        .map(|frame| {
+            let at = fire.barrel_table + frame * 4;
+            let pair = |offset: usize| {
+                i32::from(i16::from_le_bytes([wad[at + offset], wad[at + offset + 1]]))
+            };
+
+            (pair(0), pair(2))
+        })
+        .collect();
+
+    Ok((
+        FireSprites {
+            chaingun: sprite(fire.chaingun)?,
+            multishot: leveled(fire.multishot)?,
+            burning: leveled(fire.burning)?,
+            plasma_bolt: sprite(fire.plasma_bolt)?,
+            missile: sprite(fire.missile)?,
+            muzzle_flash,
+        },
+        barrels,
+    ))
+}
+
+/// Frames in the ship's barrel-roll cycle (the barrel table has one pair per
+/// frame).
+const ROLL_FRAMES: usize = 27;
 
 /// Assemble the shield's animation frames from the WAD's sprite directory.
 ///
@@ -687,6 +791,15 @@ pub(crate) fn test_hud_assets() -> HudAssets {
     }
 }
 
+/// A 1x1 transparent sprite for synthetic test assets.
+#[cfg(test)]
+fn blank_overlay() -> OverlaySprite {
+    OverlaySprite {
+        size: Dimensions::new(1, 1),
+        pixels: vec![None],
+    }
+}
+
 /// Synthetic level assets (blank canyon, blank HUD) for headless scene tests.
 #[cfg(test)]
 pub(crate) fn test_level_assets() -> LevelAssets {
@@ -714,6 +827,25 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             spawn_shield_ticks: 300,
         },
         shield_frames: Vec::new(),
+        fire_sprites: FireSprites {
+            chaingun: blank_overlay(),
+            multishot: [
+                blank_overlay(),
+                blank_overlay(),
+                blank_overlay(),
+                blank_overlay(),
+            ],
+            burning: [
+                blank_overlay(),
+                blank_overlay(),
+                blank_overlay(),
+                blank_overlay(),
+            ],
+            plasma_bolt: blank_overlay(),
+            missile: blank_overlay(),
+            muzzle_flash: Vec::new(),
+        },
+        barrel_offsets: vec![(0, 0); ROLL_FRAMES],
         stars: &[],
         camera_min: 0,
     }
