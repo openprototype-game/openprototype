@@ -27,8 +27,13 @@ impl PaletteFade {
         }
     }
 
-    pub fn advance(&mut self, dt: Duration) {
+    /// Advance by `dt`, clamping at the end. Returns the part of `dt` past the
+    /// fade's end, so the caller can roll it into whatever follows and beat
+    /// boundaries lose no time.
+    pub fn advance(&mut self, dt: Duration) -> Duration {
+        let remaining = self.duration.saturating_sub(self.elapsed);
         self.elapsed = (self.elapsed + dt).min(self.duration);
+        dt.saturating_sub(remaining)
     }
 
     pub fn finished(&self) -> bool {
@@ -102,5 +107,21 @@ mod tests {
 
         assert!(fade.finished());
         assert_eq!(fade.current().colors[0].r, 255);
+    }
+
+    #[test]
+    fn returns_the_time_past_its_end() {
+        let mut fade = PaletteFade::new(solid(0), solid(255), Duration::from_secs(1));
+
+        assert_eq!(fade.advance(Duration::from_millis(600)), Duration::ZERO);
+        assert_eq!(
+            fade.advance(Duration::from_millis(600)),
+            Duration::from_millis(200)
+        );
+        // Once finished, further time passes straight through.
+        assert_eq!(
+            fade.advance(Duration::from_millis(300)),
+            Duration::from_millis(300)
+        );
     }
 }

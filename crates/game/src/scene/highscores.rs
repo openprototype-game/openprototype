@@ -181,10 +181,11 @@ impl Scene for HighscoreScreen {
 
         match &mut self.phase {
             Phase::Playing(player) => {
-                player.advance(dt);
+                let excess = player.advance(dt);
 
                 if player.finished() {
                     self.start_fly_in();
+                    self.advance_fly_in(excess);
                 } else {
                     self.render_fli_frame();
                 }

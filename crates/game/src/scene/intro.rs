@@ -259,38 +259,51 @@ impl Intro {
     }
 
     /// Advance the running primitive; move to the next beat when it finishes.
-    fn advance(&mut self, dt: Duration) {
-        match &mut self.active {
-            Active::Done => {}
-            Active::Hold(remaining) => {
-                *remaining = remaining.saturating_sub(dt);
+    /// Time left past a primitive's end rolls into the next one, so beat
+    /// boundaries never lose time and the script's total length stays exact
+    /// (the original's tick counter runs continuously across beats).
+    fn advance(&mut self, mut dt: Duration) {
+        loop {
+            match &mut self.active {
+                Active::Done => return,
+                Active::Hold(remaining) => {
+                    if dt < *remaining {
+                        *remaining -= dt;
+                        return;
+                    }
 
-                if remaining.is_zero() {
+                    dt -= *remaining;
                     self.start_from(self.index + 1);
                 }
-            }
-            Active::Fade(fade) => {
-                fade.advance(dt);
-                self.displayed = fade.current();
+                Active::Fade(fade) => {
+                    dt = fade.advance(dt);
+                    self.displayed = fade.current();
 
-                if fade.finished() {
+                    if !fade.finished() {
+                        return;
+                    }
+
                     self.start_from(self.index + 1);
                 }
-            }
-            Active::Flic(player) => {
-                player.advance(dt);
+                Active::Flic(player) => {
+                    dt = player.advance(dt);
 
-                if player.finished() {
+                    if !player.finished() {
+                        return;
+                    }
+
                     let frame = player.current();
                     self.image = frame.image.clone();
                     self.displayed = frame.palette.clone();
                     self.start_from(self.index + 1);
                 }
-            }
-            Active::Credits(credits) => {
-                credits.advance(dt);
+                Active::Credits(credits) => {
+                    dt = credits.advance(dt);
 
-                if credits.finished() {
+                    if !credits.finished() {
+                        return;
+                    }
+
                     self.start_from(self.index + 1);
                 }
             }
@@ -372,12 +385,24 @@ impl Credits {
         }
     }
 
-    fn advance(&mut self, dt: Duration) {
-        self.player.advance(dt);
+    /// Advance the looping playback. Time past the end of a rotation carries
+    /// into the next one; once the last rotation ends, the rest is returned for
+    /// the intro to roll into the following beat.
+    fn advance(&mut self, mut dt: Duration) -> Duration {
+        loop {
+            dt = self.player.advance(dt);
 
-        if self.player.finished() {
-            self.player.restart();
+            if !self.player.finished() {
+                return Duration::ZERO;
+            }
+
             self.rotation += 1;
+
+            if self.finished() {
+                return dt;
+            }
+
+            self.player.restart();
         }
     }
 
@@ -536,6 +561,34 @@ mod tests {
 
         intro.update(ticks(230), &[]); // past the 220-tick fade
         assert!(matches!(intro.active, Active::Hold(_)), "then holds");
+    }
+
+    #[test]
+    fn beat_boundaries_lose_no_time() {
+        // With synthetic assets the FLI and credits beats skip at decode, so
+        // the script is the timed beats only: 220+220+350+230+220+110+200+110
+        // +180+90 = 1930 ticks. Stepping by an awkward 7 ticks, the intro must
+        // end on exactly the first update that reaches the total; a beat
+        // boundary swallowing a remainder would push it later.
+        let mut intro = test_intro();
+        let total_ticks: u64 = 1930;
+        let step_ticks: u64 = 7;
+        let expected_updates = total_ticks.div_ceil(step_ticks);
+
+        let mut updates = 0;
+
+        let transition = loop {
+            updates += 1;
+
+            if let Some(transition) = intro.update(ticks(step_ticks), &[]).transition {
+                break transition;
+            }
+
+            assert!(updates < 1000, "the intro never finished");
+        };
+
+        assert_eq!(transition, Transition::To(SceneId::MainMenu));
+        assert_eq!(updates, expected_updates);
     }
 
     #[test]

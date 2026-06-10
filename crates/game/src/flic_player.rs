@@ -60,14 +60,26 @@ impl FlicPlayer {
     }
 
     /// Advance by `dt`, moving to later frames as their delays elapse. Holds on
-    /// the last frame.
-    pub fn advance(&mut self, dt: Duration) {
+    /// the last frame. Returns the part of `dt` past the last frame's full
+    /// delay, so the caller can roll it into whatever follows and the playback
+    /// end loses no time.
+    pub fn advance(&mut self, dt: Duration) -> Duration {
         self.elapsed += dt;
 
         while self.index + 1 < self.frames.len() && self.elapsed >= self.frames[self.index].delay {
             self.elapsed -= self.frames[self.index].delay;
             self.index += 1;
         }
+
+        let last_delay = self.frames[self.index].delay;
+
+        if self.index + 1 >= self.frames.len() && self.elapsed > last_delay {
+            let excess = self.elapsed - last_delay;
+            self.elapsed = last_delay;
+            return excess;
+        }
+
+        Duration::ZERO
     }
 
     /// Decode every frame, but play at a fixed `frame_delay` instead of the
@@ -148,6 +160,24 @@ mod tests {
 
         assert_eq!(player.index, 0);
         assert!(player.finished());
+    }
+
+    #[test]
+    fn returns_the_time_past_the_last_frames_delay() {
+        let mut player = player(&[100, 100]);
+
+        assert_eq!(player.advance(Duration::from_millis(150)), Duration::ZERO);
+        assert_eq!(
+            player.advance(Duration::from_millis(80)),
+            Duration::from_millis(30)
+        );
+        assert!(player.finished());
+
+        // Once finished, further time passes straight through.
+        assert_eq!(
+            player.advance(Duration::from_millis(40)),
+            Duration::from_millis(40)
+        );
     }
 
     #[test]
