@@ -196,7 +196,7 @@ impl LevelScene {
         self.stars
             .render(&mut self.frame, self.camera_y, playfield::PANEL_TOP);
 
-        self.assets.scenery.render(
+        self.assets.scenery.render_behind(
             &self.scenery_scroll,
             &self.assets.catalog,
             &mut self.frame,
@@ -206,6 +206,13 @@ impl LevelScene {
         self.ship.render(
             &self.assets.ship_frames,
             &self.assets.shield_frames,
+            &mut self.frame,
+            self.camera_y,
+        );
+
+        self.assets.scenery.render_front(
+            &self.scenery_scroll,
+            &self.assets.catalog,
             &mut self.frame,
             self.camera_y,
         );

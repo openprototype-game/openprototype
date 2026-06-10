@@ -366,7 +366,7 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
         })
         .collect();
 
-    Scenery::new(layers)
+    Scenery::new(layers, scenery.front_layers)
 }
 
 /// Expand one scenery tilemap into a per-column `Some(catalog cell)` / `None`
@@ -701,7 +701,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         catalog: SpriteSheet {
             sprites: Vec::new(),
         },
-        scenery: Scenery::new(Vec::new()),
+        scenery: Scenery::new(Vec::new(), 0),
         ship_frames: SpriteSheet {
             sprites: Vec::new(),
         },

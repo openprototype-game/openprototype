@@ -86,6 +86,11 @@ pub struct SceneryData {
     /// `968`/`978`/`1106`).
     pub cell_base: i32,
     pub layers: &'static [SceneryLayerData],
+    /// How many trailing entries of `layers` draw in front of the playfield
+    /// sprites (the frame functions call those walkers after the ship/entity
+    /// pass): L1's row-4 girders and L3's fast canopy; every other level
+    /// draws all scenery behind the ship.
+    pub front_layers: usize,
 }
 
 /// The race levels' shared star field: four blue planes over the nebula,
@@ -271,6 +276,7 @@ impl Level {
                             speed: 16,
                         },
                     ],
+                    front_layers: 1,
                 },
                 stars: &[],
                 camera_min: 0,
@@ -321,6 +327,7 @@ impl Level {
                         top: 38,
                         speed: 48,
                     }],
+                    front_layers: 0,
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
@@ -378,6 +385,7 @@ impl Level {
                             speed: 32,
                         },
                     ],
+                    front_layers: 1,
                 },
                 stars: &[],
                 camera_min: 4,
@@ -426,6 +434,7 @@ impl Level {
                         top: 38,
                         speed: 48,
                     }],
+                    front_layers: 0,
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
@@ -478,6 +487,7 @@ impl Level {
                             speed: 16,
                         },
                     ],
+                    front_layers: 0,
                 },
                 stars: &[],
                 camera_min: 0,
@@ -523,6 +533,7 @@ impl Level {
                         top: 38,
                         speed: 48,
                     }],
+                    front_layers: 0,
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
@@ -577,6 +588,7 @@ impl Level {
                             speed: 16,
                         },
                     ],
+                    front_layers: 0,
                 },
                 stars: &[],
                 camera_min: 0,

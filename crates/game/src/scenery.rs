@@ -50,17 +50,25 @@ impl SceneryLayer {
 
 /// A level's stack of scenery layers, in back-to-front draw order.
 ///
-/// The faithful engine splits this around the playfield (back layers before the
-/// ship and enemies, the front layer after), so foreground scenery overlaps the
-/// ship. The level scene has no playfield sprites yet, so for now every layer
-/// composites over the background in order.
+/// The faithful engine splits this around the playfield sprites: the frame
+/// functions call the back layers' walkers before the ship/entity pass and the
+/// front layers' after, so foreground scenery overlaps the ship (L1's row-4
+/// girders, L3's fast canopy). `front_layers` counts the trailing layers on
+/// the front side; the scene composites [`render_behind`](Scenery::render_behind),
+/// the ship, then [`render_front`](Scenery::render_front).
 pub struct Scenery {
     layers: Vec<SceneryLayer>,
+    front_layers: usize,
 }
 
 impl Scenery {
-    pub fn new(layers: Vec<SceneryLayer>) -> Self {
-        Self { layers }
+    pub fn new(layers: Vec<SceneryLayer>, front_layers: usize) -> Self {
+        debug_assert!(front_layers <= layers.len());
+
+        Self {
+            layers,
+            front_layers,
+        }
     }
 
     /// A fresh scroll state for these layers, all at zero.
@@ -82,19 +90,52 @@ impl Scenery {
         }
     }
 
-    /// Composite the visible columns of every layer into `frame`, in draw order,
+    /// Composite the layers behind the playfield sprites, in draw order,
     /// looking each column's cell up in `catalog`. Off-screen blits clip.
     /// `camera_y` is the playfield's vertical scroll, applied to every layer so
     /// the scenery pans with the background as the ship moves up and down (the
     /// original scrolls the whole playfield buffer, scenery included).
-    pub fn render(
+    pub fn render_behind(
         &self,
         scroll: &SceneryScroll,
         catalog: &SpriteSheet,
         frame: &mut Framebuffer,
         camera_y: i32,
     ) {
-        for (layer, &offset) in self.layers.iter().zip(&scroll.offsets) {
+        self.render_range(scroll, catalog, frame, camera_y, false);
+    }
+
+    /// Composite the layers in front of the playfield sprites (see
+    /// [`Scenery::render_behind`]).
+    pub fn render_front(
+        &self,
+        scroll: &SceneryScroll,
+        catalog: &SpriteSheet,
+        frame: &mut Framebuffer,
+        camera_y: i32,
+    ) {
+        self.render_range(scroll, catalog, frame, camera_y, true);
+    }
+
+    fn render_range(
+        &self,
+        scroll: &SceneryScroll,
+        catalog: &SpriteSheet,
+        frame: &mut Framebuffer,
+        camera_y: i32,
+        front: bool,
+    ) {
+        let split = self.layers.len() - self.front_layers;
+        let range = if front {
+            split..self.layers.len()
+        } else {
+            0..split
+        };
+
+        for (layer, &offset) in self.layers[range.clone()]
+            .iter()
+            .zip(&scroll.offsets[range])
+        {
             render_layer(layer, offset, catalog, frame, camera_y);
         }
     }
