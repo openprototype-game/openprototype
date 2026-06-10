@@ -15,7 +15,7 @@ use crate::assets::MenuAssets;
 use crate::scene::list_menu::ListMenu;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::input::KeyEvent;
+use openprototype_core::input::{Key, KeyEvent};
 
 #[derive(Clone, Copy, PartialEq, Eq, EnumIter, Display)]
 enum MenuItem {
@@ -70,17 +70,17 @@ impl Scene for Menu {
     fn update(&mut self, _dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
 
-        for event in input {
-            match event {
-                KeyEvent::Up => self.list.move_up(),
-                KeyEvent::Down => self.list.move_down(),
-                KeyEvent::Esc => output.transition = Some(Transition::Quit),
-                KeyEvent::Enter => {
+        for key in input.iter().filter_map(|event| event.pressed()) {
+            match key {
+                Key::Up => self.list.move_up(),
+                Key::Down => self.list.move_down(),
+                Key::Esc => output.transition = Some(Transition::Quit),
+                Key::Enter => {
                     if let Some(item) = MenuItem::iter().nth(self.list.selected()) {
                         output.transition = item.activate();
                     }
                 }
-                KeyEvent::Char(_) => {}
+                Key::Left | Key::Right | Key::Char(_) => {}
             }
         }
 
@@ -106,10 +106,10 @@ mod tests {
         let mut menu = test_menu();
         let last = MenuItem::iter().count() - 1;
 
-        menu.update(Duration::ZERO, &[KeyEvent::Up]);
+        menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Up)]);
         assert_eq!(menu.list.selected(), last);
 
-        menu.update(Duration::ZERO, &[KeyEvent::Down]);
+        menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Down)]);
         assert_eq!(menu.list.selected(), 0);
     }
 
@@ -119,11 +119,16 @@ mod tests {
         // MUSIC MENU is the fourth item (index 3).
         menu.update(
             Duration::ZERO,
-            &[KeyEvent::Down, KeyEvent::Down, KeyEvent::Down],
+            &[
+                KeyEvent::Pressed(Key::Down),
+                KeyEvent::Pressed(Key::Down),
+                KeyEvent::Pressed(Key::Down),
+            ],
         );
 
         assert_eq!(
-            menu.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .transition,
             Some(Transition::To(SceneId::MusicMenu))
         );
     }
@@ -131,10 +136,11 @@ mod tests {
     #[test]
     fn enter_on_quit_requests_exit() {
         let mut menu = test_menu();
-        menu.update(Duration::ZERO, &[KeyEvent::Up]); // QUIT is the last item
+        menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Up)]); // QUIT is the last item
 
         assert_eq!(
-            menu.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .transition,
             Some(Transition::Quit)
         );
     }
@@ -144,7 +150,8 @@ mod tests {
         let mut menu = test_menu(); // starts on NEW GAME
 
         assert_eq!(
-            menu.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .transition,
             None
         );
     }
@@ -154,7 +161,8 @@ mod tests {
         let mut menu = test_menu();
 
         assert_eq!(
-            menu.update(Duration::ZERO, &[KeyEvent::Esc]).transition,
+            menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Esc)])
+                .transition,
             Some(Transition::Quit)
         );
     }

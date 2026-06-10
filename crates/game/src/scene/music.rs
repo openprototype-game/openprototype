@@ -14,7 +14,7 @@ use crate::scene::list_menu::ListMenu;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::input::KeyEvent;
+use openprototype_core::input::{Key, KeyEvent};
 
 /// Number of songs (MUSIC 1..=7).
 const TRACK_COUNT: usize = 7;
@@ -39,16 +39,16 @@ impl Scene for MusicMenu {
     fn update(&mut self, _dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
 
-        for event in input {
-            match event {
-                KeyEvent::Up => self.list.move_up(),
-                KeyEvent::Down => self.list.move_down(),
-                KeyEvent::Esc => output.transition = Some(Transition::To(SceneId::MainMenu)),
-                KeyEvent::Enter => {
+        for key in input.iter().filter_map(|event| event.pressed()) {
+            match key {
+                Key::Up => self.list.move_up(),
+                Key::Down => self.list.move_down(),
+                Key::Esc => output.transition = Some(Transition::To(SceneId::MainMenu)),
+                Key::Enter => {
                     let track = FIRST_MUSIC_TRACK + self.list.selected() as u8;
                     output.audio.push(AudioCommand::PlayTrack(track));
                 }
-                KeyEvent::Char(_) => {}
+                Key::Left | Key::Right | Key::Char(_) => {}
             }
         }
 
@@ -74,7 +74,9 @@ mod tests {
         let mut jukebox = test_jukebox(); // starts on MUSIC 1
 
         assert_eq!(
-            jukebox.update(Duration::ZERO, &[KeyEvent::Enter]).audio,
+            jukebox
+                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .audio,
             vec![AudioCommand::PlayTrack(2)]
         );
     }
@@ -82,10 +84,12 @@ mod tests {
     #[test]
     fn enter_on_music_7_plays_the_last_track() {
         let mut jukebox = test_jukebox();
-        jukebox.update(Duration::ZERO, &[KeyEvent::Up]); // MUSIC 7 is the last entry (wrap up)
+        jukebox.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Up)]); // MUSIC 7 is the last entry (wrap up)
 
         assert_eq!(
-            jukebox.update(Duration::ZERO, &[KeyEvent::Enter]).audio,
+            jukebox
+                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .audio,
             vec![AudioCommand::PlayTrack(8)]
         );
     }
@@ -95,7 +99,9 @@ mod tests {
         let mut jukebox = test_jukebox();
 
         assert_eq!(
-            jukebox.update(Duration::ZERO, &[KeyEvent::Esc]).transition,
+            jukebox
+                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Esc)])
+                .transition,
             Some(Transition::To(SceneId::MainMenu))
         );
     }
@@ -103,7 +109,7 @@ mod tests {
     #[test]
     fn navigation_does_not_play_or_transition() {
         let mut jukebox = test_jukebox();
-        let output = jukebox.update(Duration::ZERO, &[KeyEvent::Down]);
+        let output = jukebox.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Down)]);
 
         assert!(output.audio.is_empty());
         assert_eq!(output.transition, None);

@@ -24,4 +24,4 @@ pub use game_state::{
     ActiveWeapon, GameState, HitOutcome, Lives, PerWeapon, Severity, SmartBombs, Weapon,
     WeaponLevel,
 };
-pub use input::KeyEvent;
+pub use input::{Key, KeyEvent};

@@ -34,7 +34,7 @@ use crate::audio::{MusicPlayer, make_music_player};
 use crate::renderer::Renderer;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::game::Game;
-use openprototype_core::input::KeyEvent;
+use openprototype_core::input::{Key as CoreKey, KeyEvent};
 
 const INITIAL_SCALE: u32 = 4;
 
@@ -166,11 +166,16 @@ impl ApplicationHandler for App {
             WindowEvent::ModifiersChanged(modifiers) => self.modifiers = modifiers.state(),
 
             WindowEvent::KeyboardInput { event, .. } => {
-                if event.state != ElementState::Pressed || event.repeat {
+                if event.repeat {
                     return;
                 }
 
-                if self.modifiers.alt_key() && event.logical_key == Key::Named(NamedKey::Enter) {
+                let pressed = event.state == ElementState::Pressed;
+
+                if pressed
+                    && self.modifiers.alt_key()
+                    && event.logical_key == Key::Named(NamedKey::Enter)
+                {
                     if let Some(renderer) = &self.renderer {
                         renderer.toggle_fullscreen();
                     }
@@ -180,7 +185,11 @@ impl ApplicationHandler for App {
                 }
 
                 if let Some(key) = translate_key(&event.logical_key) {
-                    self.pending_input.push(key);
+                    self.pending_input.push(if pressed {
+                        KeyEvent::Pressed(key)
+                    } else {
+                        KeyEvent::Released(key)
+                    });
                     self.request_redraw();
                 }
             }
@@ -230,13 +239,15 @@ fn create_renderer(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<R
     Renderer::new(window, source)
 }
 
-fn translate_key(key: &Key) -> Option<KeyEvent> {
+fn translate_key(key: &Key) -> Option<CoreKey> {
     match key {
-        Key::Named(NamedKey::ArrowUp) => Some(KeyEvent::Up),
-        Key::Named(NamedKey::ArrowDown) => Some(KeyEvent::Down),
-        Key::Named(NamedKey::Enter) => Some(KeyEvent::Enter),
-        Key::Named(NamedKey::Escape) => Some(KeyEvent::Esc),
-        Key::Character(text) => text.chars().next().map(KeyEvent::Char),
+        Key::Named(NamedKey::ArrowUp) => Some(CoreKey::Up),
+        Key::Named(NamedKey::ArrowDown) => Some(CoreKey::Down),
+        Key::Named(NamedKey::ArrowLeft) => Some(CoreKey::Left),
+        Key::Named(NamedKey::ArrowRight) => Some(CoreKey::Right),
+        Key::Named(NamedKey::Enter) => Some(CoreKey::Enter),
+        Key::Named(NamedKey::Escape) => Some(CoreKey::Esc),
+        Key::Character(text) => text.chars().next().map(CoreKey::Char),
         _ => None,
     }
 }

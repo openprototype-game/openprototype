@@ -8,14 +8,15 @@
 
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
-use prototype_formats::bin::{SpriteSheet, decode_banked, decode_banked_direct};
+use prototype_formats::bin::{SpriteSheet, decode_banked, decode_banked_direct, decode_ship};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
 use crate::background::{Background, Sp};
-use crate::levels::{Level, Overlay, SceneryData, StarPlaneData};
+use crate::levels::{Level, Overlay, SceneryData, ShipData, StarPlaneData};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::ship::SHIELD_FRAMES;
 use openprototype_core::PerWeapon;
 
 /// Everything the main menu needs to render.
@@ -134,6 +135,14 @@ pub struct LevelAssets {
     pub catalog: SpriteSheet,
     /// The level's parallax scenery layers, decoded from the level WAD's tilemaps.
     pub scenery: Scenery,
+    /// The ship's frames from `PTURN1.BN1`: the 27-frame barrel-roll cycle
+    /// plus the level's idle exhaust-flicker frame(s) (see [`crate::ship`]).
+    pub ship_frames: SpriteSheet,
+    /// The level's ship frame selection, straight from the registry.
+    pub ship: ShipData,
+    /// The shield's animation frames, assembled from the WAD's sprite
+    /// directory over the clip-header catalog.
+    pub shield_frames: Vec<OverlaySprite>,
     /// The level's star-field planes, straight from the registry (the positions
     /// are generated per scene, not loaded).
     pub stars: &'static [StarPlaneData],
@@ -253,6 +262,10 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let overlay_slide = read_overlay_slide(&wad, data.overlay_positions)?;
     let scenery = decode_scenery(&wad, data.scenery);
 
+    let pturn1 = disc.read("PTURN1.BN1").context("reading PTURN1.BN1")?;
+    let ship_frames = decode_ship(&pturn1, &wad, data.ship.catalog).context("decoding PTURN1")?;
+    let shield_frames = load_shield_frames(&wad, data.shield_directory, &overlay_catalog)?;
+
     Ok(LevelAssets {
         background,
         hud,
@@ -260,9 +273,51 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         overlay_slide,
         catalog,
         scenery,
+        ship_frames,
+        ship: data.ship,
+        shield_frames,
         stars: data.stars,
         camera_min: data.camera_min,
     })
+}
+
+/// Assemble the shield's animation frames from the WAD's sprite directory.
+///
+/// Each 8-byte record is `{ncells, width, height, cell}` (all `u16`), `cell`
+/// indexing the level's clip-header catalog; the animation cycles the first
+/// [`SHIELD_FRAMES`] records.
+fn load_shield_frames(
+    wad: &[u8],
+    directory: usize,
+    catalog: &SpriteSheet,
+) -> Result<Vec<OverlaySprite>> {
+    let table_end = directory + SHIELD_FRAMES * 8;
+
+    if wad.len() < table_end {
+        anyhow::bail!(
+            "WAD is {} bytes, the shield directory needs {table_end}",
+            wad.len()
+        );
+    }
+
+    (0..SHIELD_FRAMES)
+        .map(|frame| {
+            let record = directory + frame * 8;
+            let read = |at: usize| usize::from(u16::from_le_bytes([wad[at], wad[at + 1]]));
+            let ncells = read(record);
+            let cell = read(record + 6);
+
+            if catalog.sprites.len() < cell + ncells {
+                anyhow::bail!(
+                    "catalog has {} sprites, shield frame {frame} needs {}",
+                    catalog.sprites.len(),
+                    cell + ncells
+                );
+            }
+
+            Ok(assemble_overlay(catalog, cell, ncells))
+        })
+        .collect()
 }
 
 /// Assemble each weapon's overlay from the decoded catalog.
@@ -647,6 +702,18 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             sprites: Vec::new(),
         },
         scenery: Scenery::new(Vec::new()),
+        ship_frames: SpriteSheet {
+            sprites: Vec::new(),
+        },
+        ship: ShipData {
+            catalog: 0,
+            idle_frame: 0,
+            flicker_frame: 27,
+            y_min: -2,
+            y_max: 110,
+            spawn_shield_ticks: 300,
+        },
+        shield_frames: Vec::new(),
         stars: &[],
         camera_min: 0,
     }

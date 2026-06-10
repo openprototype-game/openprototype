@@ -326,7 +326,7 @@ impl Scene for Intro {
             self.started = true;
         }
 
-        if !input.is_empty() {
+        if input.iter().any(|event| event.pressed().is_some()) {
             output.transition = Some(Transition::To(SceneId::MainMenu));
             return output;
         }
@@ -485,6 +485,7 @@ fn blank_image() -> IndexedImage {
 mod tests {
     use super::*;
     use crate::assets::{test_intro_assets, test_menu_assets};
+    use openprototype_core::input::Key;
 
     fn test_intro() -> Intro {
         Intro::new(Rc::new(test_intro_assets()), Rc::new(test_menu_assets()))
@@ -507,7 +508,9 @@ mod tests {
         intro.update(Duration::ZERO, &[]); // consume the boot frame
 
         assert_eq!(
-            intro.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
+            intro
+                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .transition,
             Some(Transition::To(SceneId::MainMenu))
         );
     }

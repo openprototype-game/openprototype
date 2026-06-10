@@ -6,9 +6,10 @@
 //! so the scroll, panel geometry, and the pod's open/settle animation can be
 //! checked against footage.
 //!
-//! All four weapons start fully charged. Enter cycles the selected weapon
-//! (replaying the pod and overlay animations), Up/Down pan the camera (the
-//! 160-tall background over the ~128-row window), WASD nudge the overlay, Esc quits.
+//! All four weapons start fully charged. The arrow keys fly the ship (which
+//! drags the vertical camera, like the original), Enter cycles the selected
+//! weapon (replaying the pod and overlay animations), WASD nudge the overlay,
+//! Esc quits.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -22,9 +23,10 @@ use crate::level::prng::{EngineRng, clock_seed};
 use crate::playfield;
 use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
+use crate::ship::{HeldKeys, Ship};
 use crate::stars::StarField;
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::input::KeyEvent;
+use openprototype_core::input::{Key, KeyEvent};
 use openprototype_core::{
     ActiveWeapon, GameState, Lives, PerWeapon, SmartBombs, Weapon, WeaponLevel,
 };
@@ -51,11 +53,6 @@ const TICK: Duration = Duration::from_nanos(1_000_000_000 / 60);
 /// traced.
 const POD_FRAME_TICKS: u32 = 4;
 
-/// The camera's lower stop: the 160-tall background minus the ~128-row playfield
-/// window. The original clamps its vertical-scroll counter to this in every
-/// level; the upper stop is per-level ([`LevelAssets::camera_min`]).
-const CAMERA_MAX: i32 = 32;
-
 /// The overlay's x. Pinned against footage; it lands on the weapon pod's column
 /// (the pod draws at screen x 252, `di` 0x3f), so the cut-off weapon top sits
 /// directly above its pod. Still nudgeable with A/D.
@@ -76,8 +73,12 @@ pub struct LevelScene {
     scenery_scroll: SceneryScroll,
     /// The level's star field, seeded from the wall clock like the original.
     stars: StarField,
-    /// Vertical camera, `camera_min..=CAMERA_MAX`: which background row sits at
-    /// the top of the playfield. Nudged with Up/Down.
+    /// The player ship, flown with the arrow keys.
+    ship: Ship,
+    /// Flight keys currently held, maintained from the key transitions.
+    held: HeldKeys,
+    /// Vertical camera, `camera_min..=32`: which background row sits at the
+    /// top of the playfield. The ship's flight drags it (see [`Ship::update`]).
     camera_y: i32,
     /// The overlay's screen x, nudged with A/D.
     overlay_x: i32,
@@ -106,7 +107,7 @@ impl LevelScene {
         };
 
         eprintln!(
-            "level scene: Enter cycles weapon, Up/Down pan the camera, \
+            "level scene: arrows fly the ship, Enter cycles weapon, \
              WASD nudge the overlay, P pauses the scroll, Esc quits"
         );
 
@@ -114,6 +115,7 @@ impl LevelScene {
         let background_scroll = assets.background.scroll();
         let scenery_scroll = assets.scenery.scroll();
         let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
+        let ship = Ship::new(assets.ship);
         let camera_y = assets.camera_min;
         let mut scene = Self {
             assets,
@@ -122,6 +124,8 @@ impl LevelScene {
             background_scroll,
             scenery_scroll,
             stars,
+            ship,
+            held: HeldKeys::default(),
             camera_y,
             overlay_x: OVERLAY_X,
             overlay_offset_y: OVERLAY_OFFSET_Y,
@@ -142,12 +146,6 @@ impl LevelScene {
         self.pod_ticks = 0;
     }
 
-    /// Pan the camera by `delta` rows, clamped to the level's range.
-    fn nudge_camera(&mut self, delta: i32) {
-        self.camera_y = (self.camera_y + delta).clamp(self.assets.camera_min, CAMERA_MAX);
-        eprintln!("camera_y = {}", self.camera_y);
-    }
-
     /// Move the overlay by `(dx, dy)` and report its position, to pin it live.
     fn nudge_overlay(&mut self, dx: i32, dy: i32) {
         self.overlay_x += dx;
@@ -158,8 +156,13 @@ impl LevelScene {
         );
     }
 
-    /// Advance the parallax scroll and the pod animation by `ticks`.
+    /// Advance the ship, the parallax scroll, and the pod animation by `ticks`.
     fn advance(&mut self, ticks: u32) {
+        for _ in 0..ticks {
+            self.ship
+                .update(self.held, &mut self.camera_y, self.assets.camera_min);
+        }
+
         self.assets
             .background
             .advance(&mut self.background_scroll, ticks);
@@ -196,6 +199,13 @@ impl LevelScene {
         self.assets.scenery.render(
             &self.scenery_scroll,
             &self.assets.catalog,
+            &mut self.frame,
+            self.camera_y,
+        );
+
+        self.ship.render(
+            &self.assets.ship_frames,
+            &self.assets.shield_frames,
             &mut self.frame,
             self.camera_y,
         );
@@ -252,20 +262,31 @@ impl Scene for LevelScene {
         let mut output = SceneOutput::default();
 
         for event in input {
-            match event {
-                KeyEvent::Enter => self.cycle_weapon(),
-                KeyEvent::Up => self.nudge_camera(-1),
-                KeyEvent::Down => self.nudge_camera(1),
-                KeyEvent::Esc => output.transition = Some(Transition::Quit),
-                KeyEvent::Char(c) => match c.to_ascii_lowercase() {
-                    'a' => self.nudge_overlay(-1, 0),
-                    'd' => self.nudge_overlay(1, 0),
-                    'w' => self.nudge_overlay(0, -1),
-                    's' => self.nudge_overlay(0, 1),
-                    'p' => {
-                        self.paused = !self.paused;
-                        eprintln!("scroll {}", if self.paused { "paused" } else { "running" });
-                    }
+            match *event {
+                KeyEvent::Pressed(key) => match key {
+                    Key::Enter => self.cycle_weapon(),
+                    Key::Up => self.held.up = true,
+                    Key::Down => self.held.down = true,
+                    Key::Left => self.held.left = true,
+                    Key::Right => self.held.right = true,
+                    Key::Esc => output.transition = Some(Transition::Quit),
+                    Key::Char(c) => match c.to_ascii_lowercase() {
+                        'a' => self.nudge_overlay(-1, 0),
+                        'd' => self.nudge_overlay(1, 0),
+                        'w' => self.nudge_overlay(0, -1),
+                        's' => self.nudge_overlay(0, 1),
+                        'p' => {
+                            self.paused = !self.paused;
+                            eprintln!("scroll {}", if self.paused { "paused" } else { "running" });
+                        }
+                        _ => {}
+                    },
+                },
+                KeyEvent::Released(key) => match key {
+                    Key::Up => self.held.up = false,
+                    Key::Down => self.held.down = false,
+                    Key::Left => self.held.left = false,
+                    Key::Right => self.held.right = false,
                     _ => {}
                 },
             }
@@ -333,7 +354,7 @@ mod tests {
             ActiveWeapon::Selected(Weapon::Multishot)
         );
 
-        scene.update(Duration::ZERO, &[KeyEvent::Enter]);
+        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
 
         assert_eq!(
             scene.state.active_weapon(),
@@ -345,7 +366,7 @@ mod tests {
     #[test]
     fn the_pod_animation_advances_to_settled_then_stops() {
         let mut scene = test_scene();
-        scene.update(Duration::ZERO, &[KeyEvent::Enter]);
+        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
         assert_eq!(scene.pod_frame, 0);
 
         // Enough ticks to carry frame 0 up to the settled frame and then hold.
@@ -356,22 +377,21 @@ mod tests {
     }
 
     #[test]
-    fn up_and_down_pan_the_camera_and_clamp_to_the_range() {
+    fn flying_down_drags_the_camera_to_its_stop_and_release_holds_the_ship() {
         let mut scene = test_scene();
         assert_eq!(scene.camera_y, 0);
 
-        scene.update(Duration::ZERO, &[KeyEvent::Down]);
-        assert_eq!(scene.camera_y, 1);
+        // Hold Down through the spawn ramp and far past the pan threshold:
+        // the ship's flight drags the camera all the way to its lower stop.
+        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Down)]);
+        scene.update(TICK * 200, &[]);
+        assert_eq!(scene.camera_y, 32);
 
-        // Up past the top clamps at 0.
-        scene.update(Duration::ZERO, &[KeyEvent::Up, KeyEvent::Up]);
-        assert_eq!(scene.camera_y, 0);
-
-        // Down past the bottom clamps at CAMERA_MAX.
-        for _ in 0..CAMERA_MAX + 5 {
-            scene.update(Duration::ZERO, &[KeyEvent::Down]);
-        }
-        assert_eq!(scene.camera_y, CAMERA_MAX);
+        // Releasing the key stops the ship where it is.
+        scene.update(Duration::ZERO, &[KeyEvent::Released(Key::Down)]);
+        let position = scene.ship.position();
+        scene.update(TICK * 10, &[]);
+        assert_eq!(scene.ship.position(), position);
     }
 
     #[test]
@@ -388,10 +408,22 @@ mod tests {
         let mut scene = test_scene();
         let (x, y) = (scene.overlay_x, scene.overlay_offset_y);
 
-        scene.update(Duration::ZERO, &[KeyEvent::Char('d'), KeyEvent::Char('s')]);
+        scene.update(
+            Duration::ZERO,
+            &[
+                KeyEvent::Pressed(Key::Char('d')),
+                KeyEvent::Pressed(Key::Char('s')),
+            ],
+        );
         assert_eq!((scene.overlay_x, scene.overlay_offset_y), (x + 1, y + 1));
 
-        scene.update(Duration::ZERO, &[KeyEvent::Char('a'), KeyEvent::Char('w')]);
+        scene.update(
+            Duration::ZERO,
+            &[
+                KeyEvent::Pressed(Key::Char('a')),
+                KeyEvent::Pressed(Key::Char('w')),
+            ],
+        );
         assert_eq!((scene.overlay_x, scene.overlay_offset_y), (x, y));
     }
 
@@ -400,7 +432,9 @@ mod tests {
         let mut scene = test_scene();
 
         assert_eq!(
-            scene.update(Duration::ZERO, &[KeyEvent::Esc]).transition,
+            scene
+                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Esc)])
+                .transition,
             Some(Transition::Quit)
         );
     }

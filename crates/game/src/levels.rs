@@ -41,6 +41,39 @@ pub struct StarPlaneData {
     pub seeded: bool,
 }
 
+/// A level's ship table: where its frame catalog sits in the WAD, and which
+/// frame is level flight.
+///
+/// Every level shares `PTURN1.BN1` and the same 27-frame barrel-roll cycle,
+/// but the levels disagree on the camera angle of level flight: most idle on
+/// frame 0 (the top-down view) and flicker their exhaust via an extra frame at
+/// 27; L3 and L5 idle on frame 21 (the side view) and carry a 29th catalog
+/// frame (28, idle + 7) as its exhaust variant. The roll handler returns to
+/// `idle_frame` by the shortest way around the cycle in every level; the ship
+/// still spawns on frame 0, so the side-view levels visibly roll into their
+/// pose during the fly-in.
+#[derive(Clone, Copy)]
+pub struct ShipData {
+    /// File offset of the frame catalog in the level's WAD (L1 `cs:0x43ea` +
+    /// 2, the `decode_ship` convention): two-cell frames of `PTURN1.BN1`
+    /// plane pointers.
+    pub catalog: usize,
+    /// The level-flight frame the roll returns to (`cmp` target in the
+    /// no-key branch of the roll handler).
+    pub idle_frame: usize,
+    /// The idle exhaust-flicker alternate frame (the draw site's `add di`
+    /// over 18).
+    pub flicker_frame: usize,
+    /// The vertical clamps (`cmp` guards before the 2-pixel steps): L1 stops
+    /// higher (-2..110), L5 at 113, the rest fly -12..120. The horizontal
+    /// clamps are -12..230 in every level.
+    pub y_min: i32,
+    pub y_max: i32,
+    /// Shield ticks granted at spawn: 300 (~5s) in L1 and L5, 180 (~3s)
+    /// elsewhere.
+    pub spawn_shield_ticks: i32,
+}
+
 /// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
 /// cs_base`), the cell-base offset, and its layers, back to front. The asset
 /// loader decodes this into renderable layers.
@@ -143,6 +176,13 @@ pub struct LevelData {
     /// each settle-animation frame. The table bytes are identical in all seven
     /// WADs, located per level by byte-matching L1's.
     pub overlay_positions: usize,
+    /// The level's ship catalog and frame selection (see [`ShipData`]).
+    pub ship: ShipData,
+    /// File offset of the shield sprite directory in the level's WAD (L1
+    /// `cs:0x438a`): 8-byte records `{ncells, width, height, cell}` whose
+    /// `cell` indexes [`LevelData::catalog`]. The shield animation cycles the
+    /// first [`SHIELD_FRAMES`](crate::ship::SHIELD_FRAMES) records.
+    pub shield_directory: usize,
     /// The level's parallax scenery layers, back to front, all reverse-
     /// engineered from each level's WAD.
     pub scenery: SceneryData,
@@ -200,6 +240,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0xbb18,
+                ship: ShipData {
+                    catalog: 0x6ddc,
+                    y_min: -2,
+                    y_max: 110,
+                    spawn_shield_ticks: 300,
+                    idle_frame: 0,
+                    flicker_frame: 27,
+                },
+                shield_directory: 0x6d7a,
                 scenery: SceneryData {
                     cs_base: 0x29F0,
                     cell_base: -1,
@@ -250,6 +299,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0x9683,
+                ship: ShipData {
+                    catalog: 0x4954,
+                    y_min: -12,
+                    y_max: 120,
+                    spawn_shield_ticks: 180,
+                    idle_frame: 0,
+                    flicker_frame: 27,
+                },
+                shield_directory: 0x438a,
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 968,
@@ -291,6 +349,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0xf504,
+                ship: ShipData {
+                    catalog: 0xa85a,
+                    y_min: -2,
+                    y_max: 120,
+                    spawn_shield_ticks: 180,
+                    idle_frame: 21,
+                    flicker_frame: 28,
+                },
+                shield_directory: 0x995e,
                 scenery: SceneryData {
                     cs_base: 0x4710,
                     cell_base: 273,
@@ -339,6 +406,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0x96fb,
+                ship: ShipData {
+                    catalog: 0x49cc,
+                    y_min: -12,
+                    y_max: 120,
+                    spawn_shield_ticks: 180,
+                    idle_frame: 0,
+                    flicker_frame: 27,
+                },
+                shield_directory: 0x4402,
                 // The race levels' tilemap streams are byte-identical; the look
                 // differs through cell_base, which points the shared codes at a
                 // different window of RACE1.BIN per level.
@@ -378,6 +454,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0xd1e0,
+                ship: ShipData {
+                    catalog: 0x84d0,
+                    y_min: -12,
+                    y_max: 113,
+                    spawn_shield_ticks: 300,
+                    idle_frame: 21,
+                    flicker_frame: 28,
+                },
+                shield_directory: 0x775a,
                 scenery: SceneryData {
                     cs_base: 0x3f90,
                     cell_base: 273,
@@ -421,6 +506,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0x9bfb,
+                ship: ShipData {
+                    catalog: 0x4ecc,
+                    y_min: -12,
+                    y_max: 120,
+                    spawn_shield_ticks: 180,
+                    idle_frame: 0,
+                    flicker_frame: 27,
+                },
+                shield_directory: 0x4902,
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 1106,
@@ -457,6 +551,15 @@ impl Level {
                     },
                 },
                 overlay_positions: 0xf75d,
+                ship: ShipData {
+                    catalog: 0xaa94,
+                    y_min: -12,
+                    y_max: 120,
+                    spawn_shield_ticks: 180,
+                    idle_frame: 0,
+                    flicker_frame: 27,
+                },
+                shield_directory: 0x94d7,
                 // Both layers share row 1 and rate 16 on separate
                 // accumulators; the split is back-vs-front art, not depth.
                 scenery: SceneryData {

@@ -168,7 +168,7 @@ impl Scene for HighscoreScreen {
     fn update(&mut self, dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
 
-        if !input.is_empty() {
+        if input.iter().any(|event| event.pressed().is_some()) {
             match self.phase {
                 // A key skips the FLI, then the fly-in, then exits.
                 Phase::Playing(_) => self.start_fly_in(),
@@ -337,6 +337,7 @@ fn black() -> Palette {
 mod tests {
     use super::*;
     use crate::assets::test_highscore_assets;
+    use openprototype_core::input::Key;
 
     fn test_screen() -> HighscoreScreen {
         // Synthetic assets have an empty FLI, so the scene goes straight to the
@@ -372,12 +373,14 @@ mod tests {
     fn a_key_during_the_fly_in_lands_everything() {
         let mut screen = test_screen();
 
-        screen.update(Duration::ZERO, &[KeyEvent::Enter]);
+        screen.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
         assert!(matches!(screen.phase, Phase::Resting));
 
         // A further key then returns to the menu.
         assert_eq!(
-            screen.update(Duration::ZERO, &[KeyEvent::Enter]).transition,
+            screen
+                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .transition,
             Some(Transition::To(SceneId::MainMenu))
         );
     }

@@ -111,6 +111,7 @@ mod tests {
     };
     use crate::highscores::test_store;
     use openprototype_core::audio::AudioCommand;
+    use openprototype_core::input::Key;
 
     const FRAME: Duration = Duration::ZERO;
 
@@ -127,7 +128,7 @@ mod tests {
     /// Skip the intro to land on the main menu. The intro emits the title theme
     /// on its first update, then the key transitions to the menu.
     fn skip_intro(app: &mut App) {
-        app.step(FRAME, &[KeyEvent::Enter]);
+        app.step(FRAME, &[KeyEvent::Pressed(Key::Enter)]);
     }
 
     #[test]
@@ -144,7 +145,7 @@ mod tests {
         skip_intro(&mut app);
 
         assert!(!app.is_animating(), "the menu is static");
-        assert!(app.step(FRAME, &[KeyEvent::Esc]).quit);
+        assert!(app.step(FRAME, &[KeyEvent::Pressed(Key::Esc)]).quit);
     }
 
     #[test]
@@ -156,24 +157,30 @@ mod tests {
         let open = app.step(
             FRAME,
             &[
-                KeyEvent::Down,
-                KeyEvent::Down,
-                KeyEvent::Down,
-                KeyEvent::Enter,
+                KeyEvent::Pressed(Key::Down),
+                KeyEvent::Pressed(Key::Down),
+                KeyEvent::Pressed(Key::Down),
+                KeyEvent::Pressed(Key::Enter),
             ],
         );
         assert!(!open.quit);
 
         // The jukebox starts on MUSIC 1, which is CD track 2.
         assert_eq!(
-            app.step(FRAME, &[KeyEvent::Enter]).audio,
+            app.step(FRAME, &[KeyEvent::Pressed(Key::Enter)]).audio,
             vec![AudioCommand::PlayTrack(2)]
         );
 
         // Esc returns to the menu rather than quitting.
-        assert!(!app.step(FRAME, &[KeyEvent::Esc]).quit);
+        assert!(!app.step(FRAME, &[KeyEvent::Pressed(Key::Esc)]).quit);
 
         // The menu was rebuilt with the cursor on NEW GAME; Up wraps to QUIT.
-        assert!(app.step(FRAME, &[KeyEvent::Up, KeyEvent::Enter]).quit);
+        assert!(
+            app.step(
+                FRAME,
+                &[KeyEvent::Pressed(Key::Up), KeyEvent::Pressed(Key::Enter)]
+            )
+            .quit
+        );
     }
 }

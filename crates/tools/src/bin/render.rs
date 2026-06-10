@@ -326,7 +326,7 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
         (Weapon::Missile, 4),
     ];
 
-    const CROP_TOP: u32 = openprototype::hud::PANEL_TOP as u32;
+    const CROP_TOP: u32 = openprototype::playfield::PANEL_TOP as u32;
     const CROP_HEIGHT: u32 = 32;
     const ROW_WIDTH: u32 = 640;
     const ROW_HEIGHT: u32 = 96;
@@ -346,7 +346,12 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
         };
 
         let mut frame = Framebuffer::new(Dimensions::new(320, 160), assets.palette.clone());
-        openprototype::hud::draw_hud(&state, &assets, openprototype::hud::PANEL_TOP, &mut frame);
+        openprototype::hud::draw_hud(
+            &state,
+            &assets,
+            openprototype::playfield::PANEL_TOP,
+            &mut frame,
+        );
         let native = to_png(&frame.image, &frame.palette);
         let panel = image::imageops::crop_imm(&native, 0, CROP_TOP, 320, CROP_HEIGHT).to_image();
         rows.push(image::imageops::resize(
