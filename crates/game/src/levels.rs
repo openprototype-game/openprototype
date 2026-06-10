@@ -49,10 +49,41 @@ pub struct SceneryData {
     pub cs_base: usize,
     /// Added to each stream byte to get its catalog cell index, so the
     /// per-level render routine's cell base maps onto our `decode_banked` sprite
-    /// indices (L1 `-1`, L2 `968`; stubbed levels `0`).
+    /// indices (L1 `-1`, L2 `968`, L4 `978`, L6 `1106`; stubbed levels `0`).
     pub cell_base: i32,
     pub layers: &'static [SceneryLayerData],
 }
+
+/// The race levels' shared star field: four blue planes over the nebula,
+/// brightness tracking speed (the nebula itself scrolls at 32, so one plane
+/// drifts behind it and two ahead). The engine code and tables are identical
+/// in L2/4/6; the second table is the one the original never seeds.
+const RACE_STARS: &[StarPlaneData] = &[
+    StarPlaneData {
+        speed: 0x1c,
+        color: 0x8d,
+        only_on_black: true,
+        seeded: true,
+    },
+    StarPlaneData {
+        speed: 0x24,
+        color: 0x8b,
+        only_on_black: false,
+        seeded: false,
+    },
+    StarPlaneData {
+        speed: 0x28,
+        color: 0x89,
+        only_on_black: false,
+        seeded: true,
+    },
+    StarPlaneData {
+        speed: 0x2c,
+        color: 0x87,
+        only_on_black: false,
+        seeded: true,
+    },
+];
 
 /// One of the seven levels.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -106,9 +137,9 @@ pub struct LevelData {
     /// content-matching L1's overlay sprites in each level's catalog. The
     /// chaingun has no overlay, so it has no entry.
     pub overlays: PerWeapon<Overlay>,
-    /// The level's parallax scenery. L1 and L2 are reverse-engineered; 3-7 use
-    /// the same engine but are still stubbed (`cs_base: 0`, no layers) until
-    /// their layer composition is mapped.
+    /// The level's parallax scenery. L1 and the race levels (2/4/6) are
+    /// reverse-engineered; 3/5/7 use the same engine but are still stubbed
+    /// (`cs_base: 0`, no layers) until their layer composition is mapped.
     pub scenery: SceneryData,
     /// The level's star-field planes, drawn between the parallax background
     /// and the scenery, back to front. Empty for levels without one (or not
@@ -220,36 +251,7 @@ impl Level {
                         speed: 48,
                     }],
                 },
-                // Four blue star planes over the nebula; brightness tracks
-                // speed (the nebula itself scrolls at 32, so one plane drifts
-                // behind it and two ahead). The second table is the one the
-                // original never seeds.
-                stars: &[
-                    StarPlaneData {
-                        speed: 0x1c,
-                        color: 0x8d,
-                        only_on_black: true,
-                        seeded: true,
-                    },
-                    StarPlaneData {
-                        speed: 0x24,
-                        color: 0x8b,
-                        only_on_black: false,
-                        seeded: false,
-                    },
-                    StarPlaneData {
-                        speed: 0x28,
-                        color: 0x89,
-                        only_on_black: false,
-                        seeded: true,
-                    },
-                    StarPlaneData {
-                        speed: 0x2c,
-                        color: 0x87,
-                        only_on_black: false,
-                        seeded: true,
-                    },
-                ],
+                stars: RACE_STARS,
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
@@ -305,13 +307,19 @@ impl Level {
                         count: 2,
                     },
                 },
-                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                // The race levels' tilemap streams are byte-identical; the look
+                // differs through cell_base, which points the shared codes at a
+                // different window of RACE1.BIN per level.
                 scenery: SceneryData {
-                    cs_base: 0,
-                    cell_base: 0,
-                    layers: &[],
+                    cs_base: 0x09B0,
+                    cell_base: 978,
+                    layers: &[SceneryLayerData {
+                        cs_offset: 0x3561,
+                        top: 38,
+                        speed: 48,
+                    }],
                 },
-                stars: &[],
+                stars: RACE_STARS,
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
@@ -367,13 +375,16 @@ impl Level {
                         count: 2,
                     },
                 },
-                // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
-                    cs_base: 0,
-                    cell_base: 0,
-                    layers: &[],
+                    cs_base: 0x09B0,
+                    cell_base: 1106,
+                    layers: &[SceneryLayerData {
+                        cs_offset: 0x3a61,
+                        top: 38,
+                        speed: 48,
+                    }],
                 },
-                stars: &[],
+                stars: RACE_STARS,
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",

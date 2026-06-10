@@ -311,7 +311,7 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
 /// strip, exactly one loop long. The stream is bytes: `0` is an empty column,
 /// `0xFF` is a jump to the 16-bit cs-offset that follows, and any other byte `n`
 /// is catalog cell `n + cell_base` (the per-level offset the render routine bakes
-/// in; L1 `-1`, L2 `968`).
+/// in; L1 `-1`, the race levels `968`/`978`/`1106`).
 ///
 /// Each layer's stream ends in a jump back to its own start, so the strip is a
 /// short repeating pattern (the original loops it under the level forever).
