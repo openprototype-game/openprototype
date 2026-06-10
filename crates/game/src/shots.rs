@@ -25,8 +25,9 @@
 //! last one forward as a slow orb projectile (`cs:[0xce3]`, the launch shot
 //! bypasses the fire-held gate).
 //!
-//! Not ported yet: the missile's homing steer (needs enemies to target) and
-//! the spawners' sound triggers.
+//! Not ported yet: the missile's homing steer (needs enemies to target).
+//! The spawners' sound triggers are reported through [`FireSounds`] and
+//! mapped to samples by [`crate::sfx`].
 
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::{ActiveWeapon, GameState, Weapon};
@@ -108,6 +109,21 @@ enum ShotKind {
     Missile,
 }
 
+/// What the fire pass did this tick, for the sound triggers.
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct FireSounds {
+    /// The weapon that spawned shots this tick (for plasma, every held tick:
+    /// its dispatch bypasses the cooldown and re-triggers the hum's guard).
+    pub fired: Option<ActiveWeapon>,
+    /// The plasma ball launched this tick, ending the hum loop.
+    pub launched: bool,
+    /// The firing weapon resolved to a different one (the original's per-tick
+    /// resolve at file `0xae59` plays the switch sound and restarts the pod
+    /// on this change, so switching to an uncharged slot is silent and a
+    /// switch while fire is held sounds on release).
+    pub switched: bool,
+}
+
 /// One live shot, in 1/16-pixel window coordinates.
 struct Shot {
     kind: ShotKind,
@@ -156,11 +172,14 @@ pub struct Weapons {
 }
 
 impl Weapons {
-    pub fn new(bob_wave: Vec<i32>) -> Self {
+    /// `firing` is the initial firing weapon, normally the resolve of the
+    /// starting [`GameState`] (so the first tick's re-resolve is a no-op
+    /// rather than a spurious switch).
+    pub fn new(bob_wave: Vec<i32>, firing: ActiveWeapon) -> Self {
         Self {
             cooldown: 0,
             rate: 6,
-            firing: ActiveWeapon::Chaingun,
+            firing,
             missile_toggle: false,
             flash_offset: FLASH_END,
             orbs: 0,
@@ -192,7 +211,7 @@ impl Weapons {
     /// Advance one logic tick: re-resolve the firing weapon (unless frozen by
     /// held fire), run the cooldown, spawn due shots from the ship at `(x, y)`
     /// with roll frame `roll` (for the barrel offsets), move the live shots,
-    /// and advance the flash.
+    /// and advance the flash. Returns what fired, for the sound triggers.
     pub fn update(
         &mut self,
         fire_held: bool,
@@ -200,9 +219,13 @@ impl Weapons {
         ship: (i32, i32),
         roll: usize,
         barrels: &[(i32, i32)],
-    ) {
+    ) -> FireSounds {
+        let mut switched = false;
+
         if !fire_held {
-            self.firing = state.active_weapon();
+            let resolved = state.active_weapon();
+            switched = resolved != self.firing;
+            self.firing = resolved;
         }
 
         self.trail.rotate_right(1);
@@ -241,22 +264,34 @@ impl Weapons {
         };
 
         let plasma = self.firing == ActiveWeapon::Selected(Weapon::Plasma);
-        self.step_orbs(fire_held && plasma, state, ship);
+        let launched = self.step_orbs(fire_held && plasma, state, ship);
+        let mut fired = None;
 
         if fire_held && (due || plasma) {
             self.fire(state, ship, roll, barrels);
             self.cooldown = 0;
+            fired = Some(self.firing);
+        }
+
+        FireSounds {
+            fired,
+            launched,
+            switched,
         }
     }
 
     /// The orb deploy/retract machine (file `0xafe2`): holding plasma fire
     /// brings out one orb immediately and one more every 2nd tick up to the
     /// charge level; releasing retracts one every 2nd tick and launches the
-    /// last as a forward orb projectile.
-    fn step_orbs(&mut self, plasma_held: bool, state: &GameState, (x, y): (i32, i32)) {
+    /// last as a forward orb projectile. Returns whether the ball launched
+    /// this tick.
+    fn step_orbs(&mut self, plasma_held: bool, state: &GameState, (x, y): (i32, i32)) -> bool {
+        let mut launched = false;
+
         if self.launch_pending {
             self.launch_pending = false;
             self.spawn(ShotKind::PlasmaBall, x + ORBS[0].x, y + ORBS[0].y, 160, 0);
+            launched = true;
         }
 
         if plasma_held {
@@ -287,6 +322,8 @@ impl Weapons {
                 }
             }
         }
+
+        launched
     }
 
     /// Spawn the firing weapon's shots from ship position `(x, y)` (window
@@ -451,7 +488,7 @@ mod tests {
 
     #[test]
     fn the_chaingun_fires_two_barrel_shots_on_its_cooldown() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Multishot, 0); // empty slot -> chaingun
 
         run(&mut weapons, true, &state, 6);
@@ -466,7 +503,7 @@ mod tests {
 
     #[test]
     fn shots_move_and_despawn_at_the_window_bounds() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Multishot, 0);
 
         run(&mut weapons, true, &state, 6);
@@ -481,13 +518,13 @@ mod tests {
 
     #[test]
     fn max_level_multishot_adds_the_two_backward_shots() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let low = state(Weapon::Multishot, 1);
         run(&mut weapons, false, &low, 1);
         run(&mut weapons, true, &low, 8);
         assert_eq!(weapons.shots.len(), 3);
 
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let max = state(Weapon::Multishot, 4);
         run(&mut weapons, false, &max, 1);
         run(&mut weapons, true, &max, 8);
@@ -497,7 +534,7 @@ mod tests {
 
     #[test]
     fn the_firing_weapon_freezes_while_fire_is_held() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let mut state = state(Weapon::Burning, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -516,7 +553,7 @@ mod tests {
 
     #[test]
     fn plasma_deploys_orbs_progressively_and_fires_a_bolt_per_orb() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Plasma, 3);
 
         // The first held tick brings out orb 1; one more joins every 2nd
@@ -540,7 +577,7 @@ mod tests {
 
     #[test]
     fn releasing_fire_retracts_the_orbs_and_launches_the_ball() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Plasma, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -576,7 +613,7 @@ mod tests {
 
     #[test]
     fn the_orbs_ride_the_ship_trail() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Plasma, 4);
         run(&mut weapons, false, &state, 1);
 
@@ -594,8 +631,37 @@ mod tests {
     }
 
     #[test]
+    fn the_resolve_reports_a_switch_only_when_the_firing_weapon_changes() {
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut state = state(Weapon::Multishot, 2);
+        *state.weapons.get_mut(Weapon::Burning) = WeaponLevel::new(2);
+
+        // Chaingun -> multishot reports once, then settles.
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        assert!(sounds.switched);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        assert!(!sounds.switched);
+
+        // While fire is held the resolve freezes, so changing the selection
+        // stays silent until release.
+        state.selected = Weapon::Burning;
+        let sounds = weapons.update(true, &state, (100, 60), 0, &BARRELS);
+        assert!(!sounds.switched);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        assert!(sounds.switched);
+
+        // Selecting an uncharged slot resolves back to the chaingun: one
+        // switch, then silence again.
+        state.selected = Weapon::Missile;
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        assert!(sounds.switched);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        assert!(!sounds.switched);
+    }
+
+    #[test]
     fn the_missile_alternates_its_spawn_row_at_its_slow_rate() {
-        let mut weapons = Weapons::new(vec![0; 20]);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Missile, 1);
 
         // The rate variable still holds the previous weapon's period until the

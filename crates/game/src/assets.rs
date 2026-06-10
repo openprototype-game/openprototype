@@ -12,10 +12,13 @@ use prototype_formats::bin::{SpriteSheet, decode_banked, decode_banked_direct, d
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
+use std::sync::Arc;
+
 use crate::background::{Background, Sp};
-use crate::levels::{Level, Overlay, SceneryData, ShipData, StarPlaneData};
+use crate::levels::{Level, Overlay, SceneryData, SfxData, ShipData, StarPlaneData};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::sfx::SfxBank;
 use crate::ship::SHIELD_FRAMES;
 use openprototype_core::PerWeapon;
 
@@ -150,6 +153,8 @@ pub struct LevelAssets {
     pub barrel_offsets: Vec<(i32, i32)>,
     /// The plasma orbs' bob wave, sampled at staggered phases per orb.
     pub bob_wave: Vec<i32>,
+    /// The level's sound-effect samples, indexed by slot.
+    pub sfx: SfxBank,
     /// The level's star-field planes, straight from the registry (the positions
     /// are generated per scene, not loaded).
     pub stars: &'static [StarPlaneData],
@@ -288,6 +293,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let ship_frames = decode_ship(&pturn1, &wad, data.ship.catalog).context("decoding PTURN1")?;
     let shield_frames = load_shield_frames(&wad, data.shield_directory, &overlay_catalog)?;
     let (fire_sprites, barrel_offsets, bob_wave) = load_fire(&wad, &overlay_catalog, data.fire)?;
+    let sfx = load_sfx(disc, &wad, data.sfx)?;
 
     Ok(LevelAssets {
         background,
@@ -302,9 +308,57 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         fire_sprites,
         barrel_offsets,
         bob_wave,
+        sfx,
         stars: data.stars,
         camera_min: data.camera_min,
     })
+}
+
+/// Bytes per entry in the WAD's `.SMP` filename table.
+const SFX_NAME_STRIDE: usize = 16;
+
+/// Load the level's sound-effect samples: read the WAD's NUL-padded filename
+/// table and pull each `.SMP` off the disc, cut to its trigger's authored
+/// length (see [`SfxData`]). The files are raw signed 8-bit mono at 22222 Hz
+/// and are kept that way; the platform's mixer does the format conversion.
+fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
+    let table_end = data.name_table + data.sample_lengths.len() * SFX_NAME_STRIDE;
+
+    if wad.len() < table_end {
+        anyhow::bail!(
+            "WAD is {} bytes, the SMP name table needs {table_end}",
+            wad.len()
+        );
+    }
+
+    let samples = data
+        .sample_lengths
+        .iter()
+        .enumerate()
+        .map(|(slot, &length)| {
+            let entry_start = data.name_table + slot * SFX_NAME_STRIDE;
+            let entry = &wad[entry_start..entry_start + SFX_NAME_STRIDE];
+            let name_length = entry
+                .iter()
+                .position(|&byte| byte == 0)
+                .unwrap_or(entry.len());
+            let name = std::str::from_utf8(&entry[..name_length])
+                .with_context(|| format!("SMP name table slot {slot} is not text"))?
+                .to_ascii_uppercase();
+
+            let bytes = disc
+                .read(&name)
+                .with_context(|| format!("reading {name}"))?;
+            let cut = bytes[..length.min(bytes.len())]
+                .iter()
+                .map(|&byte| byte as i8)
+                .collect::<Vec<i8>>();
+
+            Ok(Arc::from(cut))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(SfxBank { samples })
 }
 
 /// Assemble one sprite from a directory record at `record` in the WAD:
@@ -333,13 +387,17 @@ fn directory_sprite(wad: &[u8], catalog: &SpriteSheet, record: usize) -> Result<
     Ok(assemble_overlay(catalog, cell, ncells))
 }
 
+/// What [`load_fire`] produces: the fire sprites, the per-roll-frame barrel
+/// pairs, and the orbs' bob wave.
+type FireAssets = (FireSprites, Vec<(i32, i32)>, Vec<i32>);
+
 /// Load the player-fire sprites, the barrel-offset table, and the orbs' bob
 /// wave.
 fn load_fire(
     wad: &[u8],
     catalog: &SpriteSheet,
     fire: crate::levels::FireData,
-) -> Result<(FireSprites, Vec<(i32, i32)>, Vec<i32>)> {
+) -> Result<FireAssets> {
     let sprite = |record: usize| directory_sprite(wad, catalog, record);
     let leveled = |records: [usize; 4]| -> Result<[OverlaySprite; 4]> {
         Ok([
@@ -888,6 +946,9 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         },
         barrel_offsets: vec![(0, 0); ROLL_FRAMES],
         bob_wave: vec![0; 20],
+        sfx: SfxBank {
+            samples: (0..16).map(|_| Arc::from(Vec::new())).collect(),
+        },
         stars: &[],
         camera_min: 0,
     }

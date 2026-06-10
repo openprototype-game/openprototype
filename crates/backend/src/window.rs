@@ -30,7 +30,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::audio::{MusicPlayer, make_music_player};
+use crate::audio::{MusicPlayer, SfxPlayer, make_music_player, make_sfx_player};
 use crate::renderer::Renderer;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::game::Game;
@@ -45,6 +45,7 @@ pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
     let mut app = App {
         game,
         music: make_music_player(disc),
+        sfx: make_sfx_player(),
         renderer: None,
         pending_input: Vec::new(),
         modifiers: ModifiersState::empty(),
@@ -66,6 +67,7 @@ pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
 struct App {
     game: Box<dyn Game>,
     music: Box<dyn MusicPlayer>,
+    sfx: Box<dyn SfxPlayer>,
     renderer: Option<Renderer>,
     /// Keys that arrived since the last frame, drained into the next step.
     pending_input: Vec<KeyEvent>,
@@ -99,6 +101,11 @@ impl App {
             match command {
                 AudioCommand::PlayTrack(track) => self.music.play_track(*track),
                 AudioCommand::StopMusic => self.music.stop(),
+                AudioCommand::PlaySfx(play) => {
+                    self.sfx
+                        .play(play.channel, play.sample.clone(), play.looped);
+                }
+                AudioCommand::EndSfxLoop { channel } => self.sfx.end_loop(*channel),
             }
         }
 

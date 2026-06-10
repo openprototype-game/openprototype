@@ -24,9 +24,11 @@ use crate::level::prng::{EngineRng, clock_seed};
 use crate::playfield;
 use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
+use crate::sfx::Sfx;
 use crate::ship::{HeldKeys, Ship};
 use crate::shots::Weapons;
 use crate::stars::StarField;
+use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::{Key, KeyEvent};
 use openprototype_core::{
@@ -79,6 +81,8 @@ pub struct LevelScene {
     ship: Ship,
     /// The player's fire state: cooldown, live shots, muzzle flash.
     weapons: Weapons,
+    /// The sound-effect trigger state (the plasma hum's loop flag).
+    sfx: Sfx,
     /// Flight keys currently held, maintained from the key transitions.
     held: HeldKeys,
     /// Whether the fire key (Ctrl) is held.
@@ -123,7 +127,7 @@ impl LevelScene {
         let scenery_scroll = assets.scenery.scroll();
         let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
         let ship = Ship::new(assets.ship);
-        let weapons = Weapons::new(assets.bob_wave.clone());
+        let weapons = Weapons::new(assets.bob_wave.clone(), state.active_weapon());
         let camera_y = assets.camera_min;
         let mut scene = Self {
             assets,
@@ -134,6 +138,7 @@ impl LevelScene {
             stars,
             ship,
             weapons,
+            sfx: Sfx::new(),
             held: HeldKeys::default(),
             fire_held: false,
             camera_y,
@@ -175,18 +180,31 @@ impl LevelScene {
         );
     }
 
-    /// Advance the ship, the parallax scroll, and the pod animation by `ticks`.
-    fn advance(&mut self, ticks: u32) {
+    /// Advance the ship, the parallax scroll, and the pod animation by `ticks`,
+    /// collecting the fire pass's sound triggers into `audio`.
+    fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
             self.ship
                 .update(self.held, &mut self.camera_y, self.assets.camera_min);
-            self.weapons.update(
+            let sounds = self.weapons.update(
                 self.fire_held,
                 &self.state,
                 self.ship.position(),
                 self.ship.roll_frame(),
                 &self.assets.barrel_offsets,
             );
+
+            if sounds.switched {
+                self.sfx.weapon_switched(&self.assets.sfx, audio);
+            }
+
+            if let Some(weapon) = sounds.fired {
+                self.sfx.weapon_fired(weapon, &self.assets.sfx, audio);
+            }
+
+            if sounds.launched {
+                self.sfx.plasma_launched(audio);
+            }
         }
 
         self.assets
@@ -359,7 +377,7 @@ impl Scene for LevelScene {
         }
 
         if !self.paused {
-            self.advance(ticks);
+            self.advance(ticks, &mut output.audio);
         }
 
         self.render();

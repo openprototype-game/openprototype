@@ -1,10 +1,10 @@
-//! Music playback behind a trait.
+//! Music and sound-effect playback behind traits.
 //!
 //! The core emits [`AudioCommand`](openprototype_core::audio::AudioCommand)s; the
-//! platform turns them into device calls through this trait. [`make_music_player`]
-//! picks the real CD-DA player ([`RodioMusicPlayer`], built with the `audio`
-//! feature) or, failing that, the silent [`NullMusicPlayer`]. The core never
-//! sees any of this.
+//! platform turns them into device calls through these traits.
+//! [`make_music_player`] and [`make_sfx_player`] pick the real rodio-backed
+//! players (built with the `audio` feature) or, failing that, the silent null
+//! players. The core never sees any of this.
 
 use std::sync::Arc;
 
@@ -62,10 +62,63 @@ pub fn make_music_player(_disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
     Box::new(NullMusicPlayer::new())
 }
 
+/// Plays the game's sound effects: a three-channel sample mixer (see
+/// [`SFX_CHANNELS`](openprototype_core::audio::SFX_CHANNELS)), matching the
+/// original's DMA feed. A play replaces whatever its channel holds.
+pub trait SfxPlayer {
+    /// Play a sample (signed 8-bit mono, 22222 Hz) on `channel`, replacing
+    /// the channel's current sound. A looped sample restarts at its end until
+    /// [`end_loop`](SfxPlayer::end_loop) or a replacing play.
+    fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool);
+
+    /// End a channel's loop: the current pass plays to its end and the
+    /// channel then frees.
+    fn end_loop(&mut self, channel: usize);
+}
+
+/// A silent sound-effect player used when the `audio` feature is off or no
+/// audio device could be opened.
+pub struct NullSfxPlayer;
+
+// `new` logs a one-time notice, so a derived `Default` would hide that side
+// effect behind an implicit call.
+#[allow(clippy::new_without_default)]
+impl NullSfxPlayer {
+    pub fn new() -> Self {
+        debug!("sound effects disabled");
+        Self
+    }
+}
+
+impl SfxPlayer for NullSfxPlayer {
+    fn play(&mut self, _channel: usize, _sample: Arc<[i8]>, _looped: bool) {}
+
+    fn end_loop(&mut self, _channel: usize) {}
+}
+
+/// Build the best available sound-effect player. With the `audio` feature this
+/// is a [`RodioSfxPlayer`]; if the audio device cannot be opened (or the
+/// feature is off) it falls back to [`NullSfxPlayer`] so the app still runs.
+#[cfg(feature = "audio")]
+pub fn make_sfx_player() -> Box<dyn SfxPlayer> {
+    match RodioSfxPlayer::new() {
+        Ok(player) => Box::new(player),
+        Err(error) => {
+            warn!("no audio output ({error:#}); sound effects disabled");
+            Box::new(NullSfxPlayer::new())
+        }
+    }
+}
+
+#[cfg(not(feature = "audio"))]
+pub fn make_sfx_player() -> Box<dyn SfxPlayer> {
+    Box::new(NullSfxPlayer::new())
+}
+
 #[cfg(feature = "audio")]
 mod rodio_backend {
     use std::num::{NonZeroU16, NonZeroU32};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     use anyhow::{Context, Result};
@@ -74,9 +127,10 @@ mod rodio_backend {
     use rodio::{ChannelCount, DeviceSinkBuilder, MixerDeviceSink, Player, Sample, SampleRate};
     use tracing::{error, warn};
 
+    use openprototype_core::audio::SFX_CHANNELS;
     use prototype_formats::pcm::append_i16_le_to_f32;
 
-    use super::MusicPlayer;
+    use super::{MusicPlayer, SfxPlayer};
 
     /// Red-book CD-DA: 44100 Hz, 2 channels.
     const SAMPLE_RATE: u32 = 44100;
@@ -244,6 +298,154 @@ mod rodio_backend {
         }
     }
 
+    /// The original's sample rate: Sound Blaster time constant `0xD3`,
+    /// `1000000 / (256 - 211)`.
+    const SFX_SAMPLE_RATE: u32 = 22222;
+
+    /// Samples mixed per buffer refill. 250 is the original's DMA chunk, so
+    /// trigger latency and end-of-sample granularity (~11 ms) match it.
+    const MIX_BLOCK: usize = 250;
+
+    /// One mixer channel: the playing sample and the read position.
+    #[derive(Default)]
+    struct SfxChannel {
+        sample: Option<Arc<[i8]>>,
+        position: usize,
+        looped: bool,
+    }
+
+    impl SfxChannel {
+        /// The channel's next sample value, advancing it: wraps while looped,
+        /// frees itself at the end otherwise.
+        fn next(&mut self) -> i32 {
+            let Some(sample) = &self.sample else {
+                return 0;
+            };
+
+            let value = i32::from(sample[self.position]);
+            self.position += 1;
+
+            if self.position >= sample.len() {
+                self.position = 0;
+
+                if !self.looped {
+                    self.sample = None;
+                }
+            }
+
+            value
+        }
+    }
+
+    type SharedChannels = Arc<Mutex<[SfxChannel; SFX_CHANNELS]>>;
+
+    /// Plays sound effects through the default audio device: a three-channel
+    /// additive mixer, like the original's DMA feed (which adds the channels'
+    /// signed bytes; this saturates instead of wrapping on overflow). The
+    /// [`MixerDeviceSink`] must stay alive for playback.
+    pub struct RodioSfxPlayer {
+        channels: SharedChannels,
+        _sink: MixerDeviceSink,
+        _player: Player,
+    }
+
+    impl RodioSfxPlayer {
+        pub fn new() -> Result<Self> {
+            let mut sink =
+                DeviceSinkBuilder::open_default_sink().context("opening audio output")?;
+            sink.log_on_drop(false);
+
+            let channels: SharedChannels = Arc::default();
+            let player = Player::connect_new(sink.mixer());
+            player.append(SfxSource {
+                channels: channels.clone(),
+                buffer: Vec::new(),
+                position: 0,
+            });
+
+            Ok(Self {
+                channels,
+                _sink: sink,
+                _player: player,
+            })
+        }
+    }
+
+    impl SfxPlayer for RodioSfxPlayer {
+        fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool) {
+            let mut channels = self.channels.lock().expect("sfx mixer lock");
+
+            let Some(slot) = channels.get_mut(channel) else {
+                return;
+            };
+
+            // An empty sample would underflow the mixer's position math;
+            // treat it as silence.
+            *slot = SfxChannel {
+                sample: (!sample.is_empty()).then_some(sample),
+                position: 0,
+                looped,
+            };
+        }
+
+        fn end_loop(&mut self, channel: usize) {
+            let mut channels = self.channels.lock().expect("sfx mixer lock");
+
+            if let Some(slot) = channels.get_mut(channel) {
+                slot.looped = false;
+            }
+        }
+    }
+
+    /// An endless mono [`Source`] mixing the three channels a block at a
+    /// time, so the lock is taken once per ~11 ms rather than per sample.
+    /// Idle channels contribute silence; the source never ends.
+    struct SfxSource {
+        channels: SharedChannels,
+        buffer: Vec<f32>,
+        position: usize,
+    }
+
+    impl Iterator for SfxSource {
+        type Item = Sample;
+
+        fn next(&mut self) -> Option<Sample> {
+            if self.position >= self.buffer.len() {
+                let mut channels = self.channels.lock().expect("sfx mixer lock");
+                self.buffer.clear();
+
+                for _ in 0..MIX_BLOCK {
+                    let sum: i32 = channels.iter_mut().map(SfxChannel::next).sum();
+                    self.buffer.push(sum.clamp(-128, 127) as f32 / 128.0);
+                }
+
+                self.position = 0;
+            }
+
+            let sample = self.buffer[self.position];
+            self.position += 1;
+            Some(sample)
+        }
+    }
+
+    impl Source for SfxSource {
+        fn current_span_len(&self) -> Option<usize> {
+            None
+        }
+
+        fn channels(&self) -> ChannelCount {
+            NonZeroU16::new(1).expect("mono is non-zero")
+        }
+
+        fn sample_rate(&self) -> SampleRate {
+            NonZeroU32::new(SFX_SAMPLE_RATE).expect("SFX_SAMPLE_RATE is non-zero")
+        }
+
+        fn total_duration(&self) -> Option<Duration> {
+            None
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -251,6 +453,81 @@ mod rodio_backend {
         /// Frames per CD sector (2352 bytes / 4 bytes per stereo frame) times the
         /// two interleaved channels.
         const SAMPLES_PER_SECTOR: usize = 588 * CHANNELS as usize;
+
+        /// A mixer source over fresh channels, with the channel handle to
+        /// drive it (the device-facing [`RodioSfxPlayer`] is not needed to
+        /// exercise the mixing).
+        fn sfx_source() -> (SfxSource, SharedChannels) {
+            let channels: SharedChannels = Arc::default();
+            let source = SfxSource {
+                channels: channels.clone(),
+                buffer: Vec::new(),
+                position: 0,
+            };
+
+            (source, channels)
+        }
+
+        fn set(channels: &SharedChannels, channel: usize, bytes: &[i8], looped: bool) {
+            channels.lock().expect("sfx mixer lock")[channel] = SfxChannel {
+                sample: Some(Arc::from(bytes.to_vec())),
+                position: 0,
+                looped,
+            };
+        }
+
+        #[test]
+        fn mixes_the_channels_additively_and_saturates() {
+            let (mut source, channels) = sfx_source();
+            set(&channels, 0, &[10, 100, -100], false);
+            set(&channels, 1, &[20, 100, -100], false);
+            set(&channels, 2, &[30, 0, 0], false);
+
+            let mixed: Vec<f32> = source.by_ref().take(4).collect();
+
+            assert_eq!(mixed[0], 60.0 / 128.0);
+            // 200 and -200 overflow the byte range: saturated, not wrapped.
+            assert_eq!(mixed[1], 127.0 / 128.0);
+            assert_eq!(mixed[2], -1.0);
+            assert_eq!(mixed[3], 0.0, "ended channels mix as silence");
+        }
+
+        #[test]
+        fn a_sample_plays_once_and_frees_its_channel() {
+            let (mut source, channels) = sfx_source();
+            set(&channels, 1, &[1, 2, 3], false);
+
+            let mixed: Vec<f32> = source.by_ref().take(5).collect();
+
+            assert_eq!(mixed[..3], [1.0 / 128.0, 2.0 / 128.0, 3.0 / 128.0]);
+            assert_eq!(mixed[3..], [0.0, 0.0]);
+            assert!(
+                channels.lock().expect("sfx mixer lock")[1].sample.is_none(),
+                "the channel frees itself at the sample's end"
+            );
+        }
+
+        #[test]
+        fn a_looped_sample_wraps_until_its_loop_ends_then_plays_out() {
+            let (mut source, channels) = sfx_source();
+            set(&channels, 1, &[1, 2], true);
+
+            let mixed: Vec<f32> = source.by_ref().take(4).collect();
+            assert_eq!(
+                mixed,
+                [1.0 / 128.0, 2.0 / 128.0, 1.0 / 128.0, 2.0 / 128.0],
+                "the loop wraps at the sample's end"
+            );
+
+            // End the loop. The already-mixed remainder of the first block
+            // keeps sounding; the next block plays the sample's final pass
+            // (it had wrapped to its start) and then frees the channel.
+            channels.lock().expect("sfx mixer lock")[1].looped = false;
+            let rest: Vec<f32> = source.by_ref().take(MIX_BLOCK * 2).collect();
+            let next_block = MIX_BLOCK - 4;
+            assert_eq!(rest[next_block..next_block + 2], [1.0 / 128.0, 2.0 / 128.0]);
+            assert!(rest[next_block + 2..].iter().all(|&sample| sample == 0.0));
+        }
 
         #[test]
         #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
@@ -315,4 +592,4 @@ mod rodio_backend {
 }
 
 #[cfg(feature = "audio")]
-pub use rodio_backend::RodioMusicPlayer;
+pub use rodio_backend::{RodioMusicPlayer, RodioSfxPlayer};

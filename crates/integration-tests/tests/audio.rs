@@ -4,6 +4,8 @@
 //! the OST tracks and they decode to a non-empty, well-formed stereo `f32`
 //! buffer. Gated on the image being present.
 
+use openprototype::assets::load_level_assets;
+use openprototype::levels::Level;
 use openprototype_integration_tests::open_test_image;
 use prototype_disc::DiscImage;
 use prototype_formats::pcm::i16_le_to_f32;
@@ -51,5 +53,39 @@ fn all_seven_ost_tracks_are_present() {
         let samples = load_track_pcm_f32(&image, track)
             .unwrap_or_else(|error| panic!("track {track} should decode: {error:#}"));
         assert!(!samples.is_empty(), "track {track} produced no samples");
+    }
+}
+
+#[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
+fn every_level_loads_its_sfx_bank_at_the_authored_lengths() {
+    let image = open_test_image();
+    let levels = [
+        Level::L1,
+        Level::L2,
+        Level::L3,
+        Level::L4,
+        Level::L5,
+        Level::L6,
+        Level::L7,
+    ];
+
+    for level in levels {
+        let assets = load_level_assets(&image, level)
+            .unwrap_or_else(|error| panic!("{level:?} assets should load: {error:#}"));
+        let lengths = level.data().sfx.sample_lengths;
+
+        assert_eq!(
+            assets.sfx.samples.len(),
+            lengths.len(),
+            "{level:?} slot count"
+        );
+
+        // Every trigger length is shorter than its file, so a loaded sample
+        // is exactly its authored length; a mismatch means the registry's
+        // name-table offset or a length constant is wrong for this WAD.
+        for (slot, (sample, &length)) in assets.sfx.samples.iter().zip(lengths).enumerate() {
+            assert_eq!(sample.len(), length, "{level:?} slot {slot}");
+        }
     }
 }

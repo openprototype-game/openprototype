@@ -105,6 +105,25 @@ pub struct FireData {
     pub barrel_table: usize,
 }
 
+/// A level's sound effects: where its `.SMP` filename table sits in the WAD,
+/// and how much of each sample its triggers play.
+///
+/// Each WAD bakes in a table of 16-byte, NUL-padded sample filenames (17 in
+/// L5), loaded whole at level start. The trigger routines play each sample to
+/// an authored length constant, around 200 bytes short of the file, with real
+/// per-level quirks (L1's multisho stops 2 bytes earlier than the others';
+/// extraabg plays 1542 of its 1980 bytes everywhere but L1). Slot meanings are
+/// positional and identical across levels, except slot 8, the per-level enemy
+/// sound (gegrocke, lgegshot, kanone or scheren), and L5's extra slot 16.
+#[derive(Clone, Copy)]
+pub struct SfxData {
+    /// File offset of the filename table in the level's WAD.
+    pub name_table: usize,
+    /// Per slot, the authored playback length in bytes (its length doubles as
+    /// the slot count).
+    pub sample_lengths: &'static [usize],
+}
+
 /// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
 /// cs_base`), the cell-base offset, and its layers, back to front. The asset
 /// loader decodes this into renderable layers.
@@ -153,6 +172,38 @@ const RACE_STARS: &[StarPlaneData] = &[
         only_on_black: false,
         seeded: true,
     },
+];
+
+/// L1's per-slot trigger lengths. Slot 8 is gegrocke, and the multisho and
+/// extraabg constants differ from every other level's (see [`SfxData`]).
+const L1_SFX_LENGTHS: &[usize] = &[
+    0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0x2d62, 0x11e4, 0x1e68, 0x1912,
+    0x6f4, 0x606, 0x1482, 0x604,
+];
+
+/// The race levels' (2/4/6) per-slot trigger lengths. Slot 8 is gegrocke.
+const RACE_SFX_LENGTHS: &[usize] = &[
+    0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0x2d62, 0x11e4, 0x1e68, 0x1912,
+    0x6f4, 0x62c, 0x1482, 0x606,
+];
+
+/// L3's per-slot trigger lengths. Slot 8 is lgegshot.
+const L3_SFX_LENGTHS: &[usize] = &[
+    0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0xa78, 0x11e4, 0x1e68, 0x1912,
+    0x6f4, 0x62c, 0x1482, 0x606,
+];
+
+/// L5's per-slot trigger lengths. Slot 8 is kanone, and a 17th slot carries
+/// lgegshot.
+const L5_SFX_LENGTHS: &[usize] = &[
+    0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0x1e96, 0x11e4, 0x1e68, 0x1912,
+    0x6f4, 0x62c, 0x1482, 0x606, 0xa78,
+];
+
+/// L7's per-slot trigger lengths. Slot 8 is scheren.
+const L7_SFX_LENGTHS: &[usize] = &[
+    0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0x207c, 0x11e4, 0x1e68, 0x1912,
+    0x6f4, 0x62c, 0x1482, 0x606,
 ];
 
 /// One of the seven levels.
@@ -221,6 +272,8 @@ pub struct LevelData {
     pub shield_directory: usize,
     /// The level's player-fire data (see [`FireData`]).
     pub fire: FireData,
+    /// The level's sound-effect data (see [`SfxData`]).
+    pub sfx: SfxData,
     /// The level's parallax scenery layers, back to front, all reverse-
     /// engineered from each level's WAD.
     pub scenery: SceneryData,
@@ -298,6 +351,10 @@ impl Level {
                     bob_table: 0x55e8,
                     barrel_table: 0xb8dc,
                 },
+                sfx: SfxData {
+                    name_table: 0x5229,
+                    sample_lengths: L1_SFX_LENGTHS,
+                },
                 scenery: SceneryData {
                     cs_base: 0x29F0,
                     cell_base: -1,
@@ -369,6 +426,10 @@ impl Level {
                     bob_table: 0x3782,
                     barrel_table: 0x9447,
                 },
+                sfx: SfxData {
+                    name_table: 0x33c3,
+                    sample_lengths: RACE_SFX_LENGTHS,
+                },
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 968,
@@ -430,6 +491,10 @@ impl Level {
                     plasma_orbs: [0x95dc, 0x95fc, 0x961c, 0x963c],
                     bob_table: 0x85af,
                     barrel_table: 0xf2c4,
+                },
+                sfx: SfxData {
+                    name_table: 0x81f0,
+                    sample_lengths: L3_SFX_LENGTHS,
                 },
                 scenery: SceneryData {
                     cs_base: 0x4710,
@@ -500,6 +565,10 @@ impl Level {
                     bob_table: 0x37fa,
                     barrel_table: 0x94bf,
                 },
+                sfx: SfxData {
+                    name_table: 0x343b,
+                    sample_lengths: RACE_SFX_LENGTHS,
+                },
                 // The race levels' tilemap streams are byte-identical; the look
                 // differs through cell_base, which points the shared codes at a
                 // different window of RACE1.BIN per level.
@@ -559,6 +628,10 @@ impl Level {
                     plasma_orbs: [0x73d8, 0x73f8, 0x7418, 0x7438],
                     bob_table: 0x6b86,
                     barrel_table: 0xcfa0,
+                },
+                sfx: SfxData {
+                    name_table: 0x67ad,
+                    sample_lengths: L5_SFX_LENGTHS,
                 },
                 scenery: SceneryData {
                     cs_base: 0x3f90,
@@ -624,6 +697,10 @@ impl Level {
                     bob_table: 0x3cfa,
                     barrel_table: 0x99bf,
                 },
+                sfx: SfxData {
+                    name_table: 0x393b,
+                    sample_lengths: RACE_SFX_LENGTHS,
+                },
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 1106,
@@ -680,6 +757,10 @@ impl Level {
                     plasma_orbs: [0x9155, 0x9175, 0x9195, 0x91b5],
                     bob_table: 0x8605,
                     barrel_table: 0xf521,
+                },
+                sfx: SfxData {
+                    name_table: 0x8246,
+                    sample_lengths: L7_SFX_LENGTHS,
                 },
                 // Both layers share row 1 and rate 16 on separate
                 // accumulators; the split is back-vs-front art, not depth.
