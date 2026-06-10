@@ -23,6 +23,7 @@ pub mod highscores;
 pub mod hud;
 pub mod level;
 pub mod levels;
+pub mod playfield;
 pub mod scene;
 pub mod scenery;
 pub mod screen;

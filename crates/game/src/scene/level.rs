@@ -19,6 +19,7 @@ use crate::assets::LevelAssets;
 use crate::background::BackgroundScroll;
 use crate::hud::{self, POD_SETTLED_FRAME};
 use crate::level::prng::{EngineRng, clock_seed};
+use crate::playfield;
 use crate::scene::{Scene, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
 use crate::stars::StarField;
@@ -60,7 +61,7 @@ const CAMERA_MAX: i32 = 32;
 /// directly above its pod. Still nudgeable with A/D.
 const OVERLAY_X: i32 = 251;
 
-/// The overlay's top, as rows above [`hud::PANEL_TOP`]. Pinned: `-7` is the
+/// The overlay's top, as rows above [`playfield::PANEL_TOP`]. Pinned: `-7` is the
 /// overlay's own height, so its bottom edge meets the panel's top row and the
 /// cut-off top extends up from there. Still nudgeable with W/S.
 const OVERLAY_OFFSET_Y: i32 = -7;
@@ -80,7 +81,7 @@ pub struct LevelScene {
     camera_y: i32,
     /// The overlay's screen x, nudged with A/D.
     overlay_x: i32,
-    /// The overlay's top relative to [`hud::PANEL_TOP`], nudged with W/S.
+    /// The overlay's top relative to [`playfield::PANEL_TOP`], nudged with W/S.
     overlay_offset_y: i32,
     /// The pod's current animation frame, `0` (hidden) up to [`POD_SETTLED_FRAME`].
     pod_frame: usize,
@@ -186,11 +187,11 @@ impl LevelScene {
             &self.background_scroll,
             &mut self.frame,
             self.camera_y,
-            hud::PANEL_TOP,
+            playfield::PANEL_TOP,
         );
 
         self.stars
-            .render(&mut self.frame, self.camera_y, hud::PANEL_TOP);
+            .render(&mut self.frame, self.camera_y, playfield::PANEL_TOP);
 
         self.assets.scenery.render(
             &self.scenery_scroll,
@@ -198,6 +199,8 @@ impl LevelScene {
             &mut self.frame,
             self.camera_y,
         );
+
+        self.mask_playfield_margins();
 
         // The chaingun has no weapon-top overlay; only a selected weapon draws one.
         if let ActiveWeapon::Selected(weapon) = active {
@@ -208,23 +211,39 @@ impl LevelScene {
                 &overlay.pixels,
                 overlay.size,
                 self.overlay_x + slide_x,
-                hud::PANEL_TOP + self.overlay_offset_y + slide_y,
+                playfield::PANEL_TOP + self.overlay_offset_y + slide_y,
             );
         }
 
         hud::draw_hud(
             &self.state,
             &self.assets.hud,
-            hud::PANEL_TOP,
+            playfield::PANEL_TOP,
             &mut self.frame,
         );
         hud::draw_weapon_pod(
             active,
             self.pod_frame,
             &self.assets.hud,
-            hud::PANEL_TOP,
+            playfield::PANEL_TOP,
             &mut self.frame,
         );
+    }
+
+    /// Black out everything outside the playfield window, standing in for the
+    /// original's compose-buffer blit: it copies only the window's 72 bytes
+    /// per row to VGA (see [`playfield::LEFT`]), so the VGA side bars are
+    /// never written and whatever the layers bled past the window is dropped.
+    fn mask_playfield_margins(&mut self) {
+        let width = self.frame.image.size.width as usize;
+        let left = playfield::LEFT as usize;
+        let right = (playfield::LEFT + playfield::WIDTH) as usize;
+
+        for row in 0..playfield::PANEL_TOP as usize {
+            let row_start = row * width;
+            self.frame.image.pixels[row_start..row_start + left].fill(0);
+            self.frame.image.pixels[row_start + right..row_start + width].fill(0);
+        }
     }
 }
 

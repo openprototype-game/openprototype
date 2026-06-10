@@ -19,6 +19,7 @@
 //! cover the playfield: the forest (120 rows) and alien (135 rows) backgrounds
 //! leave black rows above the panel.
 
+use crate::playfield;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::IndexedImage;
 
@@ -496,8 +497,11 @@ impl Background {
             let column = (scroll.offsets[strip] >> self.subpixel_shift) as i32;
             let image_row = (image_y * image_width) as usize;
 
+            // The strip's scroll position appears at the playfield window's
+            // left edge (the original composes from buffer byte 4 = x 16); the
+            // scene masks the side bars after all playfield layers.
             for dest_x in 0..frame_width {
-                let src_x = (column + dest_x).rem_euclid(image_width) as usize;
+                let src_x = (column + dest_x - playfield::LEFT).rem_euclid(image_width) as usize;
                 frame.image.pixels[dest_row + dest_x as usize] =
                     self.image.pixels[image_row + src_x];
             }

@@ -12,6 +12,7 @@
 //! state lives separately in [`SceneryScroll`] so the layer data can stay shared
 //! and immutable, the way the parallax background is split.
 
+use crate::playfield;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
 
@@ -120,7 +121,11 @@ fn render_layer(
     let pixel = (offset / SUBPIXEL) as i32;
     let first_column = pixel / TILE_WIDTH;
     let sub = pixel % TILE_WIDTH;
-    let visible = frame.image.size.width as i32 / TILE_WIDTH + 2;
+    // The original's walker draws exactly 10 cells from `si = row*80 + 4`,
+    // shifted left by the sub-cell scroll: cell `k` lands at screen
+    // `16 - sub + 32k`, covering the 288-wide playfield window plus bleed the
+    // scene's bar mask drops.
+    let visible = playfield::WIDTH / TILE_WIDTH + 1;
     let len = layer.tiles.len() as i32;
 
     for column in 0..visible {
@@ -134,7 +139,7 @@ fn render_layer(
             continue;
         };
 
-        let x = column * TILE_WIDTH - sub + sprite.origin.0;
+        let x = playfield::LEFT + column * TILE_WIDTH - sub + sprite.origin.0;
         let y = layer.top - camera_y + sprite.origin.1;
         frame.blit_transparent(&sprite.pixels, sprite.size, x, y);
     }

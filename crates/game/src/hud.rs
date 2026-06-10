@@ -11,7 +11,7 @@
 //! screen pixel via the 80-byte Mode X plane stride: `x = (di % 80) * 4`,
 //! `y = di / 80`, offset down by the panel's top row. The relative offsets are
 //! exact; the panel's top row is passed in by the caller (defaulting to
-//! [`PANEL_TOP`]).
+//! [`crate::playfield::PANEL_TOP`]).
 
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::{ActiveWeapon, GameState, Weapon};
@@ -21,16 +21,6 @@ use crate::assets::HudAssets;
 
 /// Mode X plane-row stride: 320 px / 4 planes.
 const HUD_STRIDE: i32 = 80;
-
-/// Screen row of the panel's top edge in the level's 320x160 frame.
-///
-/// The level runs a hand-programmed Mode X 320x160: 480 scanlines with each row
-/// tripled (max-scan-line = 2), giving 160 logical rows. The CRTC line-compare
-/// splits at scanline 383 (= row 128), freezing the bottom band for the HUD, and
-/// `PANEL.RAW` (320x32) fills it at rows 128..160. Proven from the WAD (the
-/// triple-scan write at file `0x2d85`, the line-compare 383 set via routine
-/// `0xe285`) and confirmed against DOSBox-X's live mode readout `G320><160>480`.
-pub const PANEL_TOP: i32 = 128;
 
 /// Score readout: six digits, leading zeros. `di` `0x325`, `+4` (16 px) per digit.
 const SCORE_DI: i32 = 0x325;
