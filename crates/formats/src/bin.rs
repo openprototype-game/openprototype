@@ -166,10 +166,28 @@ fn run_subroutine(bin: &[u8], offset: usize) -> Option<Vec<PlaneWrite>> {
     }
 }
 
-/// Resolve a banked plane pointer to its subroutine writes. The pointer is
-/// either a clip-header (`hp + u16(bin[hp])`) for small clippable sprites, or a
-/// direct subroutine (`hp`) for large scenery; the data is self-describing.
-fn resolve_plane(bin: &[u8], base: usize, plane_pointer: usize) -> Option<Vec<PlaneWrite>> {
+/// How a consumer resolves a banked record's plane pointers. The same catalog
+/// serves two draw paths in the engine: the playfield-sprite blitter follows a
+/// clip-header (`hp + u16(bin[hp])`), while the scenery walker `lcall`s the
+/// pointer directly. The two readings can both parse for the same bytes, so
+/// the consumer's path decides, not the data.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum PlaneAddressing {
+    /// Prefer the clip-header reading (weapon overlays and other playfield
+    /// sprites).
+    Header,
+    /// Prefer the direct reading (scenery tilemap cells).
+    Direct,
+}
+
+/// Resolve a banked plane pointer to its subroutine writes, preferring the
+/// `addressing` reading and falling back to the other when it does not parse.
+fn resolve_plane(
+    bin: &[u8],
+    base: usize,
+    plane_pointer: usize,
+    addressing: PlaneAddressing,
+) -> Option<Vec<PlaneWrite>> {
     let header_pointer = base.checked_add(plane_pointer)?;
     let word0 = read_u16(bin, header_pointer)? as usize;
 
@@ -179,19 +197,22 @@ fn resolve_plane(bin: &[u8], base: usize, plane_pointer: usize) -> Option<Vec<Pl
         .flatten();
     let direct = run_subroutine(bin, header_pointer);
 
-    // Both interpretations can run to RETF; prefer the one that actually draws
-    // pixels (a header pointing at an empty sub otherwise wins over a direct
-    // sprite that has content). An all-empty result is a genuine blank entry.
-    match (header, direct) {
-        (Some(header), Some(direct)) => {
+    match (addressing, header, direct) {
+        (PlaneAddressing::Direct, _, Some(direct)) => Some(direct),
+        (PlaneAddressing::Direct, header, None) => header,
+        // Both readings can run to RETF; prefer the one that actually draws
+        // pixels (a header pointing at an empty sub otherwise wins over a
+        // direct sprite that has content). An all-empty result is a genuine
+        // blank entry.
+        (PlaneAddressing::Header, Some(header), Some(direct)) => {
             if header.is_empty() && !direct.is_empty() {
                 Some(direct)
             } else {
                 Some(header)
             }
         }
-        (Some(header), None) => Some(header),
-        (None, direct) => direct,
+        (PlaneAddressing::Header, Some(header), None) => Some(header),
+        (PlaneAddressing::Header, None, direct) => direct,
     }
 }
 
@@ -249,12 +270,33 @@ fn build_sprite(pixels: &[Pixel]) -> Sprite {
     }
 }
 
-/// Decode a banked scenery BIN (e.g. `OUT.BIN`) against its `.WAD` catalog.
+/// Decode a banked scenery BIN (e.g. `OUT.BIN`) against its `.WAD` catalog,
+/// reading plane pointers as clip-headers where they parse (the playfield
+/// sprite path; use [`decode_banked_direct`] for scenery cells).
 ///
 /// `catalog_offset` is the table position in `wad` (see [`OUT_BIN_CATALOG`]).
 /// Records are read until one fails to resolve, which is the table's natural
 /// end; the boundary terminator record after the last sprite stops the walk.
 pub fn decode_banked(bin: &[u8], wad: &[u8], catalog_offset: usize) -> Result<SpriteSheet> {
+    decode_banked_with(bin, wad, catalog_offset, PlaneAddressing::Header)
+}
+
+/// Decode a banked BIN like [`decode_banked`], but reading plane pointers the
+/// way the scenery walker does: as direct subroutine offsets.
+///
+/// Some scenery cells start with a write instruction whose bytes also parse as
+/// a small clip-header, so the header-preferring decode corrupts them; the
+/// walker never resolves headers.
+pub fn decode_banked_direct(bin: &[u8], wad: &[u8], catalog_offset: usize) -> Result<SpriteSheet> {
+    decode_banked_with(bin, wad, catalog_offset, PlaneAddressing::Direct)
+}
+
+fn decode_banked_with(
+    bin: &[u8],
+    wad: &[u8],
+    catalog_offset: usize,
+    addressing: PlaneAddressing,
+) -> Result<SpriteSheet> {
     let mut sprites = Vec::new();
     let mut record_offset = catalog_offset;
 
@@ -272,7 +314,7 @@ pub fn decode_banked(bin: &[u8], wad: &[u8], catalog_offset: usize) -> Result<Sp
             let plane_pointer =
                 read_u16(wad, record_offset + 2 + plane * 2).expect("bounds checked") as usize;
 
-            match resolve_plane(bin, base, plane_pointer) {
+            match resolve_plane(bin, base, plane_pointer, addressing) {
                 Some(writes) => planes.push((plane, writes)),
                 None => return finish_banked(sprites),
             }
@@ -422,15 +464,32 @@ mod tests {
     fn resolve_plane_follows_a_clip_header() {
         // header word0 = 2 -> subroutine sits 2 bytes after the header.
         let bin = &[0x02, 0x00, 0xC7, 0x04, 0xAA, 0xBB, 0xCB];
-        let writes = resolve_plane(bin, 0, 0).unwrap();
+        let writes = resolve_plane(bin, 0, 0, PlaneAddressing::Header).unwrap();
         assert_eq!(writes.len(), 2);
     }
 
     #[test]
     fn resolve_plane_falls_back_to_direct() {
         // word0 = 0xBBAA is far too large to be a header offset, so pk is direct.
-        let writes = resolve_plane(WORD_SUB, 0, 0).unwrap();
+        let writes = resolve_plane(WORD_SUB, 0, 0, PlaneAddressing::Header).unwrap();
         assert_eq!(writes.len(), 2);
+    }
+
+    #[test]
+    fn resolve_plane_direct_ignores_a_parsable_header() {
+        // `C6 04 02 CB` reads as header word0 = 0x04C6 (a valid forward
+        // offset) AND as direct code `mov [si], 2; retf`. The scenery walker
+        // calls direct, so the direct reading must win there, while the
+        // header-preferring reading follows the offset.
+        let mut bin = vec![0xC6, 0x04, 0x02, 0xCB];
+        bin.resize(0x04C6, 0);
+        bin.extend_from_slice(&[0xC7, 0x04, 0xAA, 0xBB, 0xCB]);
+
+        let direct = resolve_plane(&bin, 0, 0, PlaneAddressing::Direct).unwrap();
+        assert_eq!(direct.len(), 1);
+
+        let header = resolve_plane(&bin, 0, 0, PlaneAddressing::Header).unwrap();
+        assert_eq!(header.len(), 2);
     }
 
     fn pixel_at(sprite: &Sprite, x: u32, y: u32) -> Option<u8> {
