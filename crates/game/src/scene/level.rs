@@ -83,6 +83,12 @@ pub struct LevelScene {
     weapons: Weapons,
     /// The sound-effect trigger state (the plasma hum's loop flag).
     sfx: Sfx,
+    /// Whether the level's music track has been started (the original's
+    /// pending-start flag, baked set, consumed once at level begin).
+    music_started: bool,
+    /// Ticks until the music restarts (the original's `cs:[0x69ce]` TOC-length
+    /// countdown in the timer ISR; the track loops when it underflows).
+    music_countdown: i64,
     /// Flight keys currently held, maintained from the key transitions.
     held: HeldKeys,
     /// Whether the fire key (Ctrl) is held.
@@ -139,6 +145,8 @@ impl LevelScene {
             ship,
             weapons,
             sfx: Sfx::new(),
+            music_started: false,
+            music_countdown: 0,
             held: HeldKeys::default(),
             fire_held: false,
             camera_y,
@@ -178,6 +186,25 @@ impl LevelScene {
             "overlay x = {}, y = panel_top {:+}",
             self.overlay_x, self.overlay_offset_y
         );
+    }
+
+    /// Start the music on the first frame and loop it on the track-length
+    /// countdown, like the original's timer ISR.
+    fn advance_music(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
+        if !self.music_started {
+            self.music_started = true;
+            audio.push(AudioCommand::PlayTrack(self.assets.music.track));
+            self.music_countdown = i64::from(self.assets.music.length_ticks);
+        }
+
+        for _ in 0..ticks {
+            self.music_countdown -= 1;
+
+            if self.music_countdown < 0 {
+                audio.push(AudioCommand::PlayTrack(self.assets.music.track));
+                self.music_countdown = i64::from(self.assets.music.length_ticks);
+            }
+        }
     }
 
     /// Advance the ship, the parallax scroll, and the pod animation by `ticks`,
@@ -376,6 +403,10 @@ impl Scene for LevelScene {
             ticks += 1;
         }
 
+        // The music runs off the timer ISR in the original, so the dev pause
+        // (which freezes the scroll) does not stop its loop countdown.
+        self.advance_music(ticks, &mut output.audio);
+
         if !self.paused {
             self.advance(ticks, &mut output.audio);
         }
@@ -502,6 +533,25 @@ mod tests {
             ],
         );
         assert_eq!((scene.overlay_x, scene.overlay_offset_y), (x, y));
+    }
+
+    #[test]
+    fn the_music_starts_on_the_first_frame_and_loops_on_the_track_length() {
+        let mut scene = test_scene();
+        let track = scene.assets.music.track;
+
+        // The first frame starts the track, even without an elapsed tick.
+        let output = scene.update(Duration::ZERO, &[]);
+        assert_eq!(output.audio, vec![AudioCommand::PlayTrack(track)]);
+
+        // Nothing replays while the countdown runs (the test assets' track
+        // is 10 ticks long).
+        let output = scene.update(TICK * 10, &[]);
+        assert_eq!(output.audio, vec![]);
+
+        // The countdown underflows one tick past the length: restart.
+        let output = scene.update(TICK, &[]);
+        assert_eq!(output.audio, vec![AudioCommand::PlayTrack(track)]);
     }
 
     #[test]

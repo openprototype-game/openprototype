@@ -274,6 +274,12 @@ pub struct LevelData {
     pub fire: FireData,
     /// The level's sound-effect data (see [`SfxData`]).
     pub sfx: SfxData,
+    /// The level's CD-DA music track, baked into the WAD's data image (byte
+    /// `ds:0x632`, the `mov al` before the driver's play call): L1 plays 3,
+    /// L3 5, L5 4, L7 6, and the race levels share 7. The engine loops it by
+    /// timer: the track's TOC length in 60 Hz ticks counts down in the timer
+    /// ISR and an underflow restarts the track.
+    pub music_track: u8,
     /// The level's parallax scenery layers, back to front, all reverse-
     /// engineered from each level's WAD.
     pub scenery: SceneryData,
@@ -355,6 +361,7 @@ impl Level {
                     name_table: 0x5229,
                     sample_lengths: L1_SFX_LENGTHS,
                 },
+                music_track: 3,
                 scenery: SceneryData {
                     cs_base: 0x29F0,
                     cell_base: -1,
@@ -430,6 +437,7 @@ impl Level {
                     name_table: 0x33c3,
                     sample_lengths: RACE_SFX_LENGTHS,
                 },
+                music_track: 7,
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 968,
@@ -496,6 +504,7 @@ impl Level {
                     name_table: 0x81f0,
                     sample_lengths: L3_SFX_LENGTHS,
                 },
+                music_track: 5,
                 scenery: SceneryData {
                     cs_base: 0x4710,
                     cell_base: 273,
@@ -569,6 +578,7 @@ impl Level {
                     name_table: 0x343b,
                     sample_lengths: RACE_SFX_LENGTHS,
                 },
+                music_track: 7,
                 // The race levels' tilemap streams are byte-identical; the look
                 // differs through cell_base, which points the shared codes at a
                 // different window of RACE1.BIN per level.
@@ -633,6 +643,7 @@ impl Level {
                     name_table: 0x67ad,
                     sample_lengths: L5_SFX_LENGTHS,
                 },
+                music_track: 4,
                 scenery: SceneryData {
                     cs_base: 0x3f90,
                     cell_base: 273,
@@ -701,6 +712,7 @@ impl Level {
                     name_table: 0x393b,
                     sample_lengths: RACE_SFX_LENGTHS,
                 },
+                music_track: 7,
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 1106,
@@ -762,6 +774,7 @@ impl Level {
                     name_table: 0x8246,
                     sample_lengths: L7_SFX_LENGTHS,
                 },
+                music_track: 6,
                 // Both layers share row 1 and rate 16 on separate
                 // accumulators; the split is back-vs-front art, not depth.
                 scenery: SceneryData {

@@ -58,7 +58,7 @@ fn all_seven_ost_tracks_are_present() {
 
 #[test]
 #[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
-fn every_level_loads_its_sfx_bank_at_the_authored_lengths() {
+fn every_level_loads_its_audio_assets() {
     let image = open_test_image();
     let levels = [
         Level::L1,
@@ -87,5 +87,16 @@ fn every_level_loads_its_sfx_bank_at_the_authored_lengths() {
         for (slot, (sample, &length)) in assets.sfx.samples.iter().zip(lengths).enumerate() {
             assert_eq!(sample.len(), length, "{level:?} slot {slot}");
         }
+
+        // The music's loop period comes from the disc TOC; every level song
+        // is somewhere between one and ten minutes (track 7, the race song,
+        // is the shortest at ~77 seconds).
+        assert_eq!(assets.music.track, level.data().music_track);
+        assert!(
+            (3600..36000).contains(&assets.music.length_ticks),
+            "{level:?} track {} length {} ticks",
+            assets.music.track,
+            assets.music.length_ticks
+        );
     }
 }

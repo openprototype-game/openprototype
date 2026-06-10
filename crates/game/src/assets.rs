@@ -155,6 +155,8 @@ pub struct LevelAssets {
     pub bob_wave: Vec<i32>,
     /// The level's sound-effect samples, indexed by slot.
     pub sfx: SfxBank,
+    /// The level's CD-DA music track and its loop period.
+    pub music: LevelMusic,
     /// The level's star-field planes, straight from the registry (the positions
     /// are generated per scene, not loaded).
     pub stars: &'static [StarPlaneData],
@@ -294,6 +296,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let shield_frames = load_shield_frames(&wad, data.shield_directory, &overlay_catalog)?;
     let (fire_sprites, barrel_offsets, bob_wave) = load_fire(&wad, &overlay_catalog, data.fire)?;
     let sfx = load_sfx(disc, &wad, data.sfx)?;
+    let music = load_music(disc, data.music_track)?;
 
     Ok(LevelAssets {
         background,
@@ -309,8 +312,49 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         barrel_offsets,
         bob_wave,
         sfx,
+        music,
         stars: data.stars,
         camera_min: data.camera_min,
+    })
+}
+
+/// A level's music: which CD-DA track it plays and the track's TOC length in
+/// logic ticks. The original starts its track once at level begin and loops
+/// it by timer: the length counts down in the 60 Hz timer ISR and an
+/// underflow restarts the track (the driver recomputes the same length from
+/// the TOC each time).
+pub struct LevelMusic {
+    pub track: u8,
+    pub length_ticks: u32,
+}
+
+/// CD-DA frames (sectors) per second.
+const CD_FRAMES_PER_SECOND: u32 = 75;
+
+/// Logic ticks per second (the level's timer ISR rate).
+const TICKS_PER_SECOND: u32 = 60;
+
+/// Look up the level's music track and compute its loop period the way the
+/// original's driver does: the TOC track length in frames, floored to whole
+/// seconds, times 60. The TOC length runs to the NEXT track's start (so it
+/// includes the next track's 2-second pregap); the last track runs to the
+/// disc's end.
+fn load_music(disc: &DiscImage, track: u8) -> Result<LevelMusic> {
+    let tracks = disc.audio_tracks();
+    let position = tracks
+        .iter()
+        .position(|candidate| candidate.number == track)
+        .with_context(|| format!("disc has no audio track {track}"))?;
+
+    let start = tracks[position].start_lba;
+    let end = match tracks.get(position + 1) {
+        Some(next) => next.start_lba,
+        None => tracks[position].end_lba,
+    };
+
+    Ok(LevelMusic {
+        track,
+        length_ticks: (end - start) / CD_FRAMES_PER_SECOND * TICKS_PER_SECOND,
     })
 }
 
@@ -948,6 +992,10 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         bob_wave: vec![0; 20],
         sfx: SfxBank {
             samples: (0..16).map(|_| Arc::from(Vec::new())).collect(),
+        },
+        music: LevelMusic {
+            track: 3,
+            length_ticks: 10,
         },
         stars: &[],
         camera_min: 0,
