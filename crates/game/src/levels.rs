@@ -49,7 +49,8 @@ pub struct SceneryData {
     pub cs_base: usize,
     /// Added to each stream byte to get its catalog cell index, so the
     /// per-level render routine's cell base maps onto our `decode_banked` sprite
-    /// indices (L1 `-1`, L2 `968`, L4 `978`, L6 `1106`; stubbed levels `0`).
+    /// indices (L1 `-1`, the shooter levels `273`, the race levels
+    /// `968`/`978`/`1106`).
     pub cell_base: i32,
     pub layers: &'static [SceneryLayerData],
 }
@@ -137,14 +138,18 @@ pub struct LevelData {
     /// content-matching L1's overlay sprites in each level's catalog. The
     /// chaingun has no overlay, so it has no entry.
     pub overlays: PerWeapon<Overlay>,
-    /// The level's parallax scenery. L1 and the race levels (2/4/6) are
-    /// reverse-engineered; 3/5/7 use the same engine but are still stubbed
-    /// (`cs_base: 0`, no layers) until their layer composition is mapped.
+    /// The level's parallax scenery layers, back to front, all reverse-
+    /// engineered from each level's WAD.
     pub scenery: SceneryData,
     /// The level's star-field planes, drawn between the parallax background
     /// and the scenery, back to front. Empty for levels without one (or not
     /// yet reverse-engineered).
     pub stars: &'static [StarPlaneData],
+    /// The vertical camera's upper stop, from the WAD's clamp code (`cmp` before
+    /// the decrement; the lower stop is 32 in every level). The camera also
+    /// starts here, per the pan variable's data-image value. Only L3 is panned
+    /// down from row 0.
+    pub camera_min: i32,
 }
 
 impl Level {
@@ -213,6 +218,7 @@ impl Level {
                     ],
                 },
                 stars: &[],
+                camera_min: 0,
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
@@ -252,6 +258,7 @@ impl Level {
                     }],
                 },
                 stars: RACE_STARS,
+                camera_min: 0,
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
@@ -276,13 +283,29 @@ impl Level {
                         count: 2,
                     },
                 },
-                // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
-                    cs_base: 0,
-                    cell_base: 0,
-                    layers: &[],
+                    cs_base: 0x4710,
+                    cell_base: 273,
+                    layers: &[
+                        SceneryLayerData {
+                            cs_offset: 0x4706,
+                            top: 1,
+                            speed: 10,
+                        },
+                        SceneryLayerData {
+                            cs_offset: 0x4726,
+                            top: 3,
+                            speed: 16,
+                        },
+                        SceneryLayerData {
+                            cs_offset: 0x495d,
+                            top: 1,
+                            speed: 32,
+                        },
+                    ],
                 },
                 stars: &[],
+                camera_min: 4,
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
@@ -320,6 +343,7 @@ impl Level {
                     }],
                 },
                 stars: RACE_STARS,
+                camera_min: 0,
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
@@ -344,13 +368,24 @@ impl Level {
                         count: 2,
                     },
                 },
-                // TODO: reverse-engineer this level's scenery (cs_base + layers).
                 scenery: SceneryData {
-                    cs_base: 0,
-                    cell_base: 0,
-                    layers: &[],
+                    cs_base: 0x3f90,
+                    cell_base: 273,
+                    layers: &[
+                        SceneryLayerData {
+                            cs_offset: 0x3114,
+                            top: 50,
+                            speed: 8,
+                        },
+                        SceneryLayerData {
+                            cs_offset: 0x315c,
+                            top: 78,
+                            speed: 16,
+                        },
+                    ],
                 },
                 stars: &[],
+                camera_min: 0,
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
@@ -385,6 +420,7 @@ impl Level {
                     }],
                 },
                 stars: RACE_STARS,
+                camera_min: 0,
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
@@ -409,13 +445,26 @@ impl Level {
                         count: 2,
                     },
                 },
-                // TODO: reverse-engineer this level's scenery (cs_base + layers).
+                // Both layers share row 1 and rate 16 on separate
+                // accumulators; the split is back-vs-front art, not depth.
                 scenery: SceneryData {
-                    cs_base: 0,
-                    cell_base: 0,
-                    layers: &[],
+                    cs_base: 0x51e0,
+                    cell_base: 273,
+                    layers: &[
+                        SceneryLayerData {
+                            cs_offset: 0x39cd,
+                            top: 1,
+                            speed: 16,
+                        },
+                        SceneryLayerData {
+                            cs_offset: 0x3c2f,
+                            top: 1,
+                            speed: 16,
+                        },
+                    ],
                 },
                 stars: &[],
+                camera_min: 0,
             },
         }
     }

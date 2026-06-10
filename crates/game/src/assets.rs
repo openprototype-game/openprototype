@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
-use prototype_formats::bin::{SpriteSheet, decode_banked};
+use prototype_formats::bin::{SpriteSheet, decode_banked, decode_banked_direct};
 use prototype_formats::font::Font;
 use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, pal, raw, wad};
 
@@ -127,13 +127,18 @@ pub struct LevelAssets {
     /// to its settled position, indexed by animation frame. Each weapon has its
     /// own profile (some snap, some kick sideways).
     pub overlay_slide: PerWeapon<[(i32, i32); OVERLAY_FRAMES]>,
-    /// The decoded OUT.BIN sprite catalog, which the scenery layers index by cell.
+    /// The decoded sprite catalog the scenery layers index by cell, read with
+    /// the walker's direct plane addressing (the header-preferring sheet the
+    /// overlays use would corrupt cells whose code bytes also parse as a
+    /// clip-header).
     pub catalog: SpriteSheet,
     /// The level's parallax scenery layers, decoded from the level WAD's tilemaps.
     pub scenery: Scenery,
     /// The level's star-field planes, straight from the registry (the positions
     /// are generated per scene, not loaded).
     pub stars: &'static [StarPlaneData],
+    /// The vertical camera range start (and starting row), from the registry.
+    pub camera_min: i32,
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -241,9 +246,14 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let wad = disc
         .read(data.wad)
         .with_context(|| format!("reading {}", data.wad))?;
-    let catalog = decode_banked(&bin, &wad, data.catalog_offset)
+    // The weapon overlays are clip-header records; the scenery cells are
+    // direct subroutines. The two readings disagree on ambiguous bytes, so
+    // each consumer decodes the catalog its own way.
+    let overlay_catalog = decode_banked(&bin, &wad, data.catalog_offset)
         .with_context(|| format!("decoding {bin_name}"))?;
-    let overlays = load_overlays(&catalog, data.overlays)?;
+    let overlays = load_overlays(&overlay_catalog, data.overlays)?;
+    let catalog = decode_banked_direct(&bin, &wad, data.catalog_offset)
+        .with_context(|| format!("decoding {bin_name} for scenery"))?;
     let overlay_slide = read_overlay_slide(&wad)?;
     let scenery = decode_scenery(&wad, data.scenery);
 
@@ -255,6 +265,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         catalog,
         scenery,
         stars: data.stars,
+        camera_min: data.camera_min,
     })
 }
 
@@ -311,7 +322,7 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
 /// strip, exactly one loop long. The stream is bytes: `0` is an empty column,
 /// `0xFF` is a jump to the 16-bit cs-offset that follows, and any other byte `n`
 /// is catalog cell `n + cell_base` (the per-level offset the render routine bakes
-/// in; L1 `-1`, the race levels `968`/`978`/`1106`).
+/// in; L1 `-1`, the shooter levels `273`, the race levels `968`/`978`/`1106`).
 ///
 /// Each layer's stream ends in a jump back to its own start, so the strip is a
 /// short repeating pattern (the original loops it under the level forever).
@@ -638,6 +649,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         },
         scenery: Scenery::new(Vec::new()),
         stars: &[],
+        camera_min: 0,
     }
 }
 
