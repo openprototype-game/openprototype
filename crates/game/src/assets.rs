@@ -148,6 +148,8 @@ pub struct LevelAssets {
     /// Per roll frame, the ship's two barrel y offsets (shot spawns and the
     /// muzzle flash both anchor on them).
     pub barrel_offsets: Vec<(i32, i32)>,
+    /// The plasma orbs' bob wave, sampled at staggered phases per orb.
+    pub bob_wave: Vec<i32>,
     /// The level's star-field planes, straight from the registry (the positions
     /// are generated per scene, not loaded).
     pub stars: &'static [StarPlaneData],
@@ -173,6 +175,8 @@ pub struct FireSprites {
     pub missile: OverlaySprite,
     /// The chaingun muzzle flash's 6 animation frames.
     pub muzzle_flash: Vec<OverlaySprite>,
+    /// The four plasma orbs, 4 animation frames each.
+    pub plasma_orbs: [[OverlaySprite; 4]; 4],
 }
 
 /// Frames in a weapon's pod/overlay open-and-settle animation (`0` hidden ..=
@@ -283,7 +287,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let pturn1 = disc.read("PTURN1.BN1").context("reading PTURN1.BN1")?;
     let ship_frames = decode_ship(&pturn1, &wad, data.ship.catalog).context("decoding PTURN1")?;
     let shield_frames = load_shield_frames(&wad, data.shield_directory, &overlay_catalog)?;
-    let (fire_sprites, barrel_offsets) = load_fire(&wad, &overlay_catalog, data.fire)?;
+    let (fire_sprites, barrel_offsets, bob_wave) = load_fire(&wad, &overlay_catalog, data.fire)?;
 
     Ok(LevelAssets {
         background,
@@ -297,6 +301,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         shield_frames,
         fire_sprites,
         barrel_offsets,
+        bob_wave,
         stars: data.stars,
         camera_min: data.camera_min,
     })
@@ -328,12 +333,13 @@ fn directory_sprite(wad: &[u8], catalog: &SpriteSheet, record: usize) -> Result<
     Ok(assemble_overlay(catalog, cell, ncells))
 }
 
-/// Load the player-fire sprites and the barrel-offset table.
+/// Load the player-fire sprites, the barrel-offset table, and the orbs' bob
+/// wave.
 fn load_fire(
     wad: &[u8],
     catalog: &SpriteSheet,
     fire: crate::levels::FireData,
-) -> Result<(FireSprites, Vec<(i32, i32)>)> {
+) -> Result<(FireSprites, Vec<(i32, i32)>, Vec<i32>)> {
     let sprite = |record: usize| directory_sprite(wad, catalog, record);
     let leveled = |records: [usize; 4]| -> Result<[OverlaySprite; 4]> {
         Ok([
@@ -368,6 +374,29 @@ fn load_fire(
         })
         .collect();
 
+    let wave_end = fire.bob_table + BOB_WAVE_WORDS * 2;
+
+    if wad.len() < wave_end {
+        anyhow::bail!("WAD is {} bytes, the bob wave needs {wave_end}", wad.len());
+    }
+
+    let bob_wave = (0..BOB_WAVE_WORDS)
+        .map(|word| {
+            let at = fire.bob_table + word * 2;
+
+            i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
+        })
+        .collect();
+
+    let orb = |base: usize| -> Result<[OverlaySprite; 4]> {
+        Ok([
+            sprite(base)?,
+            sprite(base + 8)?,
+            sprite(base + 16)?,
+            sprite(base + 24)?,
+        ])
+    };
+
     Ok((
         FireSprites {
             chaingun: sprite(fire.chaingun)?,
@@ -376,10 +405,21 @@ fn load_fire(
             plasma_bolt: sprite(fire.plasma_bolt)?,
             missile: sprite(fire.missile)?,
             muzzle_flash,
+            plasma_orbs: [
+                orb(fire.plasma_orbs[0])?,
+                orb(fire.plasma_orbs[1])?,
+                orb(fire.plasma_orbs[2])?,
+                orb(fire.plasma_orbs[3])?,
+            ],
         },
         barrels,
+        bob_wave,
     ))
 }
+
+/// Words read from the orbs' bob wave: enough to cover the largest phase
+/// stagger (10 bytes) plus the 28-byte phase range.
+const BOB_WAVE_WORDS: usize = 20;
 
 /// Frames in the ship's barrel-roll cycle (the barrel table has one pair per
 /// frame).
@@ -844,8 +884,10 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             plasma_bolt: blank_overlay(),
             missile: blank_overlay(),
             muzzle_flash: Vec::new(),
+            plasma_orbs: std::array::from_fn(|_| std::array::from_fn(|_| blank_overlay())),
         },
         barrel_offsets: vec![(0, 0); ROLL_FRAMES],
+        bob_wave: vec![0; 20],
         stars: &[],
         camera_min: 0,
     }

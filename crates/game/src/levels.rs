@@ -95,6 +95,11 @@ pub struct FireData {
     pub missile: usize,
     /// The chaingun muzzle flash: 6 records (3 cells, 2 frames each).
     pub muzzle_flash: usize,
+    /// The four plasma orbs' sprite bases, each 4 animation-frame records.
+    pub plasma_orbs: [usize; 4],
+    /// The orbs' bob wave: a repeating table of signed words the orbs sample
+    /// at staggered phases.
+    pub bob_table: usize,
     /// 27 `(i16, i16)` pairs: the two barrel y offsets per roll frame, used
     /// by the chaingun/multishot shot spawns and the muzzle flash.
     pub barrel_table: usize,
@@ -289,6 +294,8 @@ impl Level {
                     plasma_bolt: 0x5cb0,
                     missile: 0x5cb8,
                     muzzle_flash: 0x6266,
+                    plasma_orbs: [0x5c30, 0x5c50, 0x5c70, 0x5c90],
+                    bob_table: 0x55e8,
                     barrel_table: 0xb8dc,
                 },
                 scenery: SceneryData {
@@ -358,6 +365,8 @@ impl Level {
                     plasma_bolt: 0x3f90,
                     missile: 0x4088,
                     muzzle_flash: 0x4188,
+                    plasma_orbs: [0x4008, 0x4028, 0x4048, 0x4068],
+                    bob_table: 0x3782,
                     barrel_table: 0x9447,
                 },
                 scenery: SceneryData {
@@ -418,6 +427,8 @@ impl Level {
                     plasma_bolt: 0x9564,
                     missile: 0x965c,
                     muzzle_flash: 0x975c,
+                    plasma_orbs: [0x95dc, 0x95fc, 0x961c, 0x963c],
+                    bob_table: 0x85af,
                     barrel_table: 0xf2c4,
                 },
                 scenery: SceneryData {
@@ -485,6 +496,8 @@ impl Level {
                     plasma_bolt: 0x4008,
                     missile: 0x4100,
                     muzzle_flash: 0x4200,
+                    plasma_orbs: [0x4080, 0x40a0, 0x40c0, 0x40e0],
+                    bob_table: 0x37fa,
                     barrel_table: 0x94bf,
                 },
                 // The race levels' tilemap streams are byte-identical; the look
@@ -543,6 +556,8 @@ impl Level {
                     plasma_bolt: 0x7360,
                     missile: 0x7458,
                     muzzle_flash: 0x7558,
+                    plasma_orbs: [0x73d8, 0x73f8, 0x7418, 0x7438],
+                    bob_table: 0x6b86,
                     barrel_table: 0xcfa0,
                 },
                 scenery: SceneryData {
@@ -605,6 +620,8 @@ impl Level {
                     plasma_bolt: 0x4508,
                     missile: 0x4600,
                     muzzle_flash: 0x4700,
+                    plasma_orbs: [0x4580, 0x45a0, 0x45c0, 0x45e0],
+                    bob_table: 0x3cfa,
                     barrel_table: 0x99bf,
                 },
                 scenery: SceneryData {
@@ -660,6 +677,8 @@ impl Level {
                     plasma_bolt: 0x90dd,
                     missile: 0x91d5,
                     muzzle_flash: 0x92d5,
+                    plasma_orbs: [0x9155, 0x9175, 0x9195, 0x91b5],
+                    bob_table: 0x8605,
                     barrel_table: 0xf521,
                 },
                 // Both layers share row 1 and rate 16 on separate

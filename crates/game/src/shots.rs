@@ -15,9 +15,18 @@
 //! a burst like the original's resolve gate. Firing restarts the muzzle-flash
 //! animation, which only shows while the chaingun is the firing weapon.
 //!
-//! Not ported yet: the plasma orbs (weapon 3 fires nothing here until their
-//! bob tables are reverse-engineered), the missile's homing steer (needs
-//! enemies to target), and the spawners' sound triggers.
+//! The plasma weapon is the satellite orbs: they trail the ship, riding its
+//! position history (delays 0/2/5/7 ticks) with a bobbing wave sampled at
+//! staggered phases and growing amplitude down the trail. Holding fire
+//! deploys the first orb immediately and one more every 2nd held tick up to
+//! the charge level (deploy machine at file `0xafe2`, stage `cs:[0xcde]`);
+//! each deployed orb fires an instant bolt every tick. Releasing fire
+//! retracts the orbs back to front, one every 2nd tick, and launches the
+//! last one forward as a slow orb projectile (`cs:[0xce3]`, the launch shot
+//! bypasses the fire-held gate).
+//!
+//! Not ported yet: the missile's homing steer (needs enemies to target) and
+//! the spawners' sound triggers.
 
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::{ActiveWeapon, GameState, Weapon};
@@ -38,6 +47,54 @@ const Y_MIN: i32 = -0xa0;
 /// restarted on every shot.
 const FLASH_END: i32 = 0x30;
 
+/// The orbs' bob phase (`cs:[0xcdf]`) steps 2 bytes per tick, wrapping at the
+/// wave's 14 words.
+const BOB_WRAP: i32 = 0x1c;
+/// Per orb: trail delay in ticks, x/y offsets from the trail position, the
+/// bob-wave phase stagger in bytes, and the bob's right-shift (amplitude
+/// grows down the trail). From the draw pass at file `0xb952` and the
+/// weapon-3 dispatch.
+const ORBS: [OrbData; 4] = [
+    OrbData {
+        delay: 0,
+        x: 0x2d,
+        y: 0x12,
+        stagger: 0,
+        shift: 2,
+    },
+    OrbData {
+        delay: 2,
+        x: 0x3a,
+        y: 0x11,
+        stagger: 4,
+        shift: 1,
+    },
+    OrbData {
+        delay: 5,
+        x: 0x46,
+        y: 0x10,
+        stagger: 8,
+        shift: 0,
+    },
+    OrbData {
+        delay: 7,
+        x: 0x55,
+        y: 0x10,
+        stagger: 10,
+        shift: 0,
+    },
+];
+/// Ticks the ship's position history remembers (shift chain at `0xb110`).
+const TRAIL: usize = 8;
+
+struct OrbData {
+    delay: usize,
+    x: i32,
+    y: i32,
+    stagger: i32,
+    shift: u32,
+}
+
 /// Which sprite a shot draws, resolved against [`FireSprites`] at render.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ShotKind {
@@ -45,6 +102,9 @@ enum ShotKind {
     /// Charge level 1..=4 picks the sprite.
     Multishot(usize),
     Burning(usize),
+    PlasmaBolt,
+    /// The launched orb itself, flying forward after fire is released.
+    PlasmaBall,
     Missile,
 }
 
@@ -70,19 +130,63 @@ pub struct Weapons {
     missile_toggle: bool,
     /// Muzzle-flash animation offset (`cs:[0xccb]`), `>= FLASH_END` = idle.
     flash_offset: i32,
+    /// How many plasma orbs are deployed (`cs:[0xcde]` stage and the
+    /// `cs:[0xcda..0xcdd]` flags).
+    orbs: usize,
+    /// Whether releasing fire should retract and launch the orbs
+    /// (`cs:[0xce2]`, armed while firing plasma).
+    launch_armed: bool,
+    /// The deploy/retract half-tick divider (`cs:[0xce1]`).
+    orb_step_divider: u8,
+    /// A launch shot is due (`cs:[0xce3]`); fired on the next tick without
+    /// needing fire held.
+    launch_pending: bool,
+    /// The orbs' bob phase (`cs:[0xcdf]`), a byte offset into the wave.
+    bob_phase: i32,
+    /// The orbs' animation-frame offset (`cs:[0xcd8]`), over 8.
+    orb_anim: usize,
+    /// Divider so the orb animation advances every 2nd tick (`cs:[0xcd7]`).
+    orb_anim_divider: u8,
+    /// The ship's recent positions, newest first (the original's shift chain
+    /// over `cs:[0x2644..0x2662]`).
+    trail: [(i32, i32); TRAIL],
+    /// The orbs' bob wave, from the level WAD.
+    bob_wave: Vec<i32>,
     shots: Vec<Shot>,
 }
 
 impl Weapons {
-    pub fn new() -> Self {
+    pub fn new(bob_wave: Vec<i32>) -> Self {
         Self {
             cooldown: 0,
             rate: 6,
             firing: ActiveWeapon::Chaingun,
             missile_toggle: false,
             flash_offset: FLASH_END,
+            orbs: 0,
+            launch_armed: false,
+            orb_step_divider: 0,
+            launch_pending: false,
+            bob_phase: 0,
+            orb_anim: 0,
+            orb_anim_divider: 0,
+            trail: [(0, 0); TRAIL],
+            bob_wave,
             shots: Vec::new(),
         }
+    }
+
+    /// Each orb's window position: its trail entry plus its fixed offset and
+    /// its staggered, amplitude-shifted sample of the bob wave.
+    fn orb_positions(&self) -> [(i32, i32); 4] {
+        std::array::from_fn(|orb| {
+            let data = &ORBS[orb];
+            let (trail_x, trail_y) = self.trail[data.delay];
+            let wave_index = ((self.bob_phase + data.stagger) / 2) as usize;
+            let bob = self.bob_wave.get(wave_index).copied().unwrap_or(0) >> data.shift;
+
+            (trail_x + data.x, trail_y + data.y + bob)
+        })
     }
 
     /// Advance one logic tick: re-resolve the firing weapon (unless frozen by
@@ -101,6 +205,32 @@ impl Weapons {
             self.firing = state.active_weapon();
         }
 
+        self.trail.rotate_right(1);
+        self.trail[0] = ship;
+
+        self.bob_phase = (self.bob_phase + 2) % BOB_WRAP;
+        self.orb_anim_divider += 1;
+
+        if self.orb_anim_divider == 2 {
+            self.orb_anim_divider = 0;
+            self.orb_anim = (self.orb_anim + 1) % 4;
+        }
+
+        if self.flash_offset < FLASH_END {
+            self.flash_offset += 8;
+        }
+
+        // Move before firing, so a fresh shot renders at its spawn position
+        // this frame (the plasma bolts cross the whole window in one tick and
+        // would otherwise despawn unseen).
+        for shot in &mut self.shots {
+            shot.x += shot.dx;
+            shot.y += shot.dy;
+        }
+
+        self.shots
+            .retain(|shot| shot.x < X_MAX && shot.x > X_MIN && shot.y < Y_MAX && shot.y > Y_MIN);
+
         // The cooldown counts up to the rate and holds there; firing resets
         // it to zero (file 0xb68a). Plasma bypasses the counter entirely.
         let due = if self.cooldown < self.rate {
@@ -111,22 +241,51 @@ impl Weapons {
         };
 
         let plasma = self.firing == ActiveWeapon::Selected(Weapon::Plasma);
+        self.step_orbs(fire_held && plasma, state, ship);
 
         if fire_held && (due || plasma) {
             self.fire(state, ship, roll, barrels);
             self.cooldown = 0;
         }
+    }
 
-        for shot in &mut self.shots {
-            shot.x += shot.dx;
-            shot.y += shot.dy;
+    /// The orb deploy/retract machine (file `0xafe2`): holding plasma fire
+    /// brings out one orb immediately and one more every 2nd tick up to the
+    /// charge level; releasing retracts one every 2nd tick and launches the
+    /// last as a forward orb projectile.
+    fn step_orbs(&mut self, plasma_held: bool, state: &GameState, (x, y): (i32, i32)) {
+        if self.launch_pending {
+            self.launch_pending = false;
+            self.spawn(ShotKind::PlasmaBall, x + ORBS[0].x, y + ORBS[0].y, 160, 0);
         }
 
-        self.shots
-            .retain(|shot| shot.x < X_MAX && shot.x > X_MIN && shot.y < Y_MAX && shot.y > Y_MIN);
+        if plasma_held {
+            self.orbs = self.orbs.max(1);
+            self.launch_armed = true;
+            self.orb_step_divider += 1;
 
-        if self.flash_offset < FLASH_END {
-            self.flash_offset += 8;
+            if self.orb_step_divider == 2 {
+                self.orb_step_divider = 0;
+                let deployable = charge_index(state, Weapon::Plasma) + 1;
+
+                if self.orbs < deployable {
+                    self.orbs += 1;
+                }
+            }
+        } else if self.launch_armed {
+            self.orb_step_divider += 1;
+
+            if self.orb_step_divider == 2 {
+                self.orb_step_divider = 0;
+
+                if self.orbs > 1 {
+                    self.orbs -= 1;
+                } else {
+                    self.orbs = 0;
+                    self.launch_armed = false;
+                    self.launch_pending = true;
+                }
+            }
         }
     }
 
@@ -162,8 +321,13 @@ impl Weapons {
                 self.rate = [19, 18, 17, 16][level];
             }
             ActiveWeapon::Selected(Weapon::Plasma) => {
-                // The plasma orbs are not ported yet (their trail/bob tables
-                // are still unread); the weapon fires nothing for now.
+                // Each deployed orb fires an instant bolt from 10 rows above
+                // its position, every tick (plasma bypasses the cooldown).
+                let positions = self.orb_positions();
+
+                for &(x, y) in positions.iter().take(self.orbs) {
+                    self.spawn(ShotKind::PlasmaBolt, x, y - 10, 5120, 0);
+                }
             }
             ActiveWeapon::Selected(Weapon::Missile) => {
                 let level = charge_index(state, Weapon::Missile);
@@ -189,17 +353,35 @@ impl Weapons {
         });
     }
 
-    /// Composite the live shots (window coordinates, like the ship).
+    /// Composite the live shots and the plasma orbs (window coordinates, like
+    /// the ship; the orbs only show while plasma is the firing weapon, drawn
+    /// furthest-back first like the original's `0xb952` pass).
     pub fn render(&self, sprites: &FireSprites, frame: &mut Framebuffer, camera: i32) {
         for shot in &self.shots {
             let sprite = match shot.kind {
                 ShotKind::Chaingun => &sprites.chaingun,
                 ShotKind::Multishot(level) => &sprites.multishot[level],
                 ShotKind::Burning(level) => &sprites.burning[level],
+                ShotKind::PlasmaBolt => &sprites.plasma_bolt,
+                ShotKind::PlasmaBall => &sprites.plasma_orbs[1][0],
                 ShotKind::Missile => &sprites.missile,
             };
 
             blit(frame, sprite, shot.x >> 4, (shot.y >> 4) - camera);
+        }
+
+        if self.firing == ActiveWeapon::Selected(Weapon::Plasma) {
+            let positions = self.orb_positions();
+
+            for orb in (0..self.orbs.min(ORBS.len())).rev() {
+                let (x, y) = positions[orb];
+                blit(
+                    frame,
+                    &sprites.plasma_orbs[orb][self.orb_anim],
+                    x,
+                    y - camera,
+                );
+            }
         }
     }
 
@@ -226,12 +408,6 @@ impl Weapons {
         let (x, y) = ship;
         blit(frame, sprite, x + 0x2b, y + barrel_a - camera);
         blit(frame, sprite, x + 0x2b, y + barrel_b - camera);
-    }
-}
-
-impl Default for Weapons {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -275,7 +451,7 @@ mod tests {
 
     #[test]
     fn the_chaingun_fires_two_barrel_shots_on_its_cooldown() {
-        let mut weapons = Weapons::new();
+        let mut weapons = Weapons::new(vec![0; 20]);
         let state = state(Weapon::Multishot, 0); // empty slot -> chaingun
 
         run(&mut weapons, true, &state, 6);
@@ -290,7 +466,7 @@ mod tests {
 
     #[test]
     fn shots_move_and_despawn_at_the_window_bounds() {
-        let mut weapons = Weapons::new();
+        let mut weapons = Weapons::new(vec![0; 20]);
         let state = state(Weapon::Multishot, 0);
 
         run(&mut weapons, true, &state, 6);
@@ -305,13 +481,13 @@ mod tests {
 
     #[test]
     fn max_level_multishot_adds_the_two_backward_shots() {
-        let mut weapons = Weapons::new();
+        let mut weapons = Weapons::new(vec![0; 20]);
         let low = state(Weapon::Multishot, 1);
         run(&mut weapons, false, &low, 1);
         run(&mut weapons, true, &low, 8);
         assert_eq!(weapons.shots.len(), 3);
 
-        let mut weapons = Weapons::new();
+        let mut weapons = Weapons::new(vec![0; 20]);
         let max = state(Weapon::Multishot, 4);
         run(&mut weapons, false, &max, 1);
         run(&mut weapons, true, &max, 8);
@@ -321,7 +497,7 @@ mod tests {
 
     #[test]
     fn the_firing_weapon_freezes_while_fire_is_held() {
-        let mut weapons = Weapons::new();
+        let mut weapons = Weapons::new(vec![0; 20]);
         let mut state = state(Weapon::Burning, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -339,8 +515,87 @@ mod tests {
     }
 
     #[test]
+    fn plasma_deploys_orbs_progressively_and_fires_a_bolt_per_orb() {
+        let mut weapons = Weapons::new(vec![0; 20]);
+        let state = state(Weapon::Plasma, 3);
+
+        // The first held tick brings out orb 1; one more joins every 2nd
+        // tick, capped at the charge level.
+        run(&mut weapons, false, &state, 1);
+        run(&mut weapons, true, &state, 1);
+        assert_eq!(weapons.orbs, 1);
+        assert_eq!(weapons.shots.len(), 1);
+
+        run(&mut weapons, true, &state, 2);
+        assert_eq!(weapons.orbs, 2);
+        run(&mut weapons, true, &state, 2);
+        assert_eq!(weapons.orbs, 3);
+        run(&mut weapons, true, &state, 10);
+        assert_eq!(weapons.orbs, 3);
+
+        // The bolts cross the window in one tick, so the pool holds exactly
+        // one volley while fire is held: plasma bypasses the cooldown.
+        assert_eq!(weapons.shots.len(), 3);
+    }
+
+    #[test]
+    fn releasing_fire_retracts_the_orbs_and_launches_the_ball() {
+        let mut weapons = Weapons::new(vec![0; 20]);
+        let state = state(Weapon::Plasma, 2);
+
+        run(&mut weapons, false, &state, 1);
+        run(&mut weapons, true, &state, 4);
+        assert_eq!(weapons.orbs, 2);
+
+        // Release: one orb retracts every 2nd tick, the last one launches.
+        run(&mut weapons, false, &state, 2);
+        assert_eq!(weapons.orbs, 1);
+        run(&mut weapons, false, &state, 3);
+        assert_eq!(weapons.orbs, 0);
+        assert_eq!(
+            weapons
+                .shots
+                .iter()
+                .filter(|shot| shot.kind == ShotKind::PlasmaBall)
+                .count(),
+            1
+        );
+
+        // The ball flies forward at 10 px/tick and nothing rearms until
+        // fire is held again.
+        run(&mut weapons, false, &state, 5);
+        assert_eq!(
+            weapons
+                .shots
+                .iter()
+                .filter(|shot| shot.kind == ShotKind::PlasmaBall)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn the_orbs_ride_the_ship_trail() {
+        let mut weapons = Weapons::new(vec![0; 20]);
+        let state = state(Weapon::Plasma, 4);
+        run(&mut weapons, false, &state, 1);
+
+        // Move the ship one pixel right per tick; the orbs' trail entries lag
+        // by their per-orb delays.
+        for tick in 0..20 {
+            weapons.update(true, &state, (100 + tick, 60), 0, &BARRELS);
+        }
+
+        let positions = weapons.orb_positions();
+        let lead = positions[0].0 - ORBS[0].x;
+        assert_eq!(positions[1].0 - ORBS[1].x, lead - 2);
+        assert_eq!(positions[2].0 - ORBS[2].x, lead - 5);
+        assert_eq!(positions[3].0 - ORBS[3].x, lead - 7);
+    }
+
+    #[test]
     fn the_missile_alternates_its_spawn_row_at_its_slow_rate() {
-        let mut weapons = Weapons::new();
+        let mut weapons = Weapons::new(vec![0; 20]);
         let state = state(Weapon::Missile, 1);
 
         // The rate variable still holds the previous weapon's period until the

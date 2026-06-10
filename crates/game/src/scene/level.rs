@@ -123,6 +123,7 @@ impl LevelScene {
         let scenery_scroll = assets.scenery.scroll();
         let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
         let ship = Ship::new(assets.ship);
+        let weapons = Weapons::new(assets.bob_wave.clone());
         let camera_y = assets.camera_min;
         let mut scene = Self {
             assets,
@@ -132,7 +133,7 @@ impl LevelScene {
             scenery_scroll,
             stars,
             ship,
-            weapons: Weapons::new(),
+            weapons,
             held: HeldKeys::default(),
             fire_held: false,
             camera_y,
