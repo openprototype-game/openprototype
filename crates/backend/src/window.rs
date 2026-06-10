@@ -247,6 +247,8 @@ fn translate_key(key: &Key) -> Option<CoreKey> {
         Key::Named(NamedKey::ArrowRight) => Some(CoreKey::Right),
         Key::Named(NamedKey::Enter) => Some(CoreKey::Enter),
         Key::Named(NamedKey::Escape) => Some(CoreKey::Esc),
+        Key::Named(NamedKey::Control) => Some(CoreKey::Ctrl),
+        Key::Named(NamedKey::Shift) => Some(CoreKey::Shift),
         Key::Character(text) => text.chars().next().map(CoreKey::Char),
         _ => None,
     }

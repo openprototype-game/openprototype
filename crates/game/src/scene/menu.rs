@@ -80,7 +80,7 @@ impl Scene for Menu {
                         output.transition = item.activate();
                     }
                 }
-                Key::Left | Key::Right | Key::Char(_) => {}
+                Key::Left | Key::Right | Key::Ctrl | Key::Shift | Key::Char(_) => {}
             }
         }
 

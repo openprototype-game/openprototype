@@ -19,6 +19,10 @@ pub enum Key {
     Right,
     Enter,
     Esc,
+    /// Fire, held with auto-repeat (the original's Ctrl, ISR flag `0x8157`).
+    Ctrl,
+    /// Weapon switch, edge-triggered (the original's Shift, flag `0x8158`).
+    Shift,
     Char(char),
 }
 

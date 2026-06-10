@@ -7,9 +7,10 @@
 //! checked against footage.
 //!
 //! All four weapons start fully charged. The arrow keys fly the ship (which
-//! drags the vertical camera, like the original), Enter cycles the selected
-//! weapon (replaying the pod and overlay animations), WASD nudge the overlay,
-//! Esc quits.
+//! drags the vertical camera, like the original), Shift cycles the selected
+//! weapon (the original's switch key, replaying the pod and overlay
+//! animations), WASD nudge the overlay, `[`/`]` adjust the selected weapon's
+//! charge level (dev keys, for testing the per-level fire modes), Esc quits.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -107,8 +108,9 @@ impl LevelScene {
         };
 
         eprintln!(
-            "level scene: arrows fly the ship, Enter cycles weapon, \
-             WASD nudge the overlay, P pauses the scroll, Esc quits"
+            "level scene: arrows fly the ship, Shift cycles weapon, \
+             WASD nudge the overlay, [/] adjust its level, P pauses the scroll, \
+             Esc quits"
         );
 
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
@@ -144,6 +146,15 @@ impl LevelScene {
         self.state.cycle_weapon();
         self.pod_frame = 0;
         self.pod_ticks = 0;
+    }
+
+    /// Report the selected weapon's charge after a dev-key adjustment.
+    fn report_level(&self) {
+        eprintln!(
+            "{:?} level = {}",
+            self.state.selected,
+            self.state.level(self.state.selected).get()
+        );
     }
 
     /// Move the overlay by `(dx, dy)` and report its position, to pin it live.
@@ -271,12 +282,13 @@ impl Scene for LevelScene {
         for event in input {
             match *event {
                 KeyEvent::Pressed(key) => match key {
-                    Key::Enter => self.cycle_weapon(),
+                    Key::Shift => self.cycle_weapon(),
                     Key::Up => self.held.up = true,
                     Key::Down => self.held.down = true,
                     Key::Left => self.held.left = true,
                     Key::Right => self.held.right = true,
                     Key::Esc => output.transition = Some(Transition::Quit),
+                    Key::Enter | Key::Ctrl => {}
                     Key::Char(c) => match c.to_ascii_lowercase() {
                         'a' => self.nudge_overlay(-1, 0),
                         'd' => self.nudge_overlay(1, 0),
@@ -285,6 +297,17 @@ impl Scene for LevelScene {
                         'p' => {
                             self.paused = !self.paused;
                             eprintln!("scroll {}", if self.paused { "paused" } else { "running" });
+                        }
+                        // Dev: adjust the selected weapon's charge level, to
+                        // test the per-level fire modes.
+                        ']' => {
+                            self.state.level_up();
+                            self.report_level();
+                        }
+                        '[' => {
+                            let level = self.state.weapons.get_mut(self.state.selected);
+                            *level = level.saturating_sub(1);
+                            self.report_level();
                         }
                         _ => {}
                     },
@@ -354,14 +377,14 @@ mod tests {
     }
 
     #[test]
-    fn enter_cycles_the_weapon_and_restarts_the_pod_animation() {
+    fn shift_cycles_the_weapon_and_restarts_the_pod_animation() {
         let mut scene = test_scene();
         assert_eq!(
             scene.state.active_weapon(),
             ActiveWeapon::Selected(Weapon::Multishot)
         );
 
-        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Shift)]);
 
         assert_eq!(
             scene.state.active_weapon(),
@@ -373,7 +396,7 @@ mod tests {
     #[test]
     fn the_pod_animation_advances_to_settled_then_stops() {
         let mut scene = test_scene();
-        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Shift)]);
         assert_eq!(scene.pod_frame, 0);
 
         // Enough ticks to carry frame 0 up to the settled frame and then hold.
