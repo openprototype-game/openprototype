@@ -9,9 +9,13 @@
 //! key (with `dt = 0`). When it reports [`is_animating`](Game::is_animating) the
 //! loop drives frames on a timer at the scene's own
 //! [`frame_interval`](Game::frame_interval), the VGA retrace rate of its mode
-//! (~70 Hz front-end, ~60 Hz level). Each timer frame steps once with that exact
-//! `dt`, so logic runs at the same rate on any host, like the vsync-locked
-//! original. Input/resize frames re-render with `dt = 0` and do not advance.
+//! (~70 Hz front-end, ~60 Hz level). Logic advances in whole periods with that
+//! exact `dt`, like the vsync-locked original. Deadlines advance from the
+//! previous deadline, not from when the timer happened to fire, and a late
+//! redraw runs every period it covers before presenting: logic time tracks wall
+//! clock, so the visuals stay aligned with the real-time CD audio even when
+//! vsync caps the redraw rate below the scene's frame rate. Input/resize frames
+//! re-render with `dt = 0` and do not advance.
 //!
 //! Alt+Enter toggles borderless fullscreen here (the OpenTyrian binding); it is
 //! handled in this layer and never reaches the core as a key.
@@ -38,6 +42,25 @@ use openprototype_core::input::{Key as CoreKey, KeyEvent};
 
 const INITIAL_SCALE: u32 = 4;
 
+/// The most logic time one redraw may catch up. A redraw that arrives late
+/// (vsync capping the rate, a busy compositor) runs every period it covers, but
+/// in bursts of at most this much; the rest stays in the backlog for the next
+/// redraws, so a stall amortizes instead of freezing the app.
+const MAX_CATCHUP_PER_FRAME: Duration = Duration::from_millis(250);
+
+/// A backlog longer than this (a suspend, a debugger pause) is abandoned
+/// rather than fast-forwarded through; the scene resumes at its normal rate.
+const BACKLOG_RESET: Duration = Duration::from_secs(1);
+
+/// How many whole `interval` periods a redraw arriving `behind` its deadline
+/// must run to keep logic time on wall clock, capped at
+/// [`MAX_CATCHUP_PER_FRAME`].
+fn backlog_steps(behind: Duration, interval: Duration) -> u32 {
+    let limit = (MAX_CATCHUP_PER_FRAME.as_nanos() / interval.as_nanos()).max(1) as u32;
+    let due = (behind.as_nanos() / interval.as_nanos() + 1) as u32;
+    due.min(limit)
+}
+
 /// Run the given scene until it quits or the window closes. `disc` is handed to
 /// the audio backend so it can stream the CD-DA tracks on demand.
 pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
@@ -49,7 +72,7 @@ pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
         renderer: None,
         pending_input: Vec::new(),
         modifiers: ModifiersState::empty(),
-        advance: false,
+        pending_steps: 0,
         next_frame: None,
         pending_error: None,
     };
@@ -73,29 +96,59 @@ struct App {
     pending_input: Vec<KeyEvent>,
     /// Held modifiers, tracked for the Alt+Enter fullscreen toggle.
     modifiers: ModifiersState,
-    /// Set when the animation timer fires, so the next frame advances one logic
-    /// tick. Input and resize frames leave it clear and re-render without ticking.
-    advance: bool,
+    /// Whole logic periods the next redraw must advance (usually one; more when
+    /// the timer fired late). Input and resize frames leave it at zero and
+    /// re-render without advancing.
+    pending_steps: u32,
     /// When the next animating frame is due (only meaningful while animating).
     next_frame: Option<Instant>,
     pending_error: Option<anyhow::Error>,
 }
 
 impl App {
-    /// Advance the core by the elapsed time and the queued input, execute its
-    /// audio, present, and exit on quit.
+    /// Advance the core by the pending logic periods (or re-render as is when
+    /// none are due) with the queued input, then present and exit on quit.
     fn frame(&mut self, event_loop: &ActiveEventLoop) {
-        // Fixed timestep: a timer frame advances one logic period; an input or
-        // resize frame just re-renders the current state.
-        let dt = if self.advance {
-            self.game.frame_interval()
-        } else {
-            Duration::ZERO
-        };
-        self.advance = false;
-
+        // Fixed timestep: a timer frame advances every logic period it covers
+        // (one, unless it arrived late); an input or resize frame just
+        // re-renders the current state.
+        let steps = mem::take(&mut self.pending_steps);
         let input = mem::take(&mut self.pending_input);
-        let output = self.game.step(dt, &input);
+
+        let mut quit = false;
+
+        if steps == 0 {
+            quit = self.advance_game(Duration::ZERO, &input);
+        } else {
+            for step in 0..steps {
+                // Re-read the interval per step: a step may switch scenes, and
+                // the new scene's rate applies from that point on.
+                let dt = self.game.frame_interval();
+                let input = if step == 0 { input.as_slice() } else { &[] };
+
+                if self.advance_game(dt, input) {
+                    quit = true;
+                    break;
+                }
+            }
+        }
+
+        if let Some(renderer) = self.renderer.as_mut()
+            && let Err(error) = renderer.render(self.game.framebuffer())
+        {
+            self.fail(event_loop, error);
+            return;
+        }
+
+        if quit {
+            event_loop.exit();
+        }
+    }
+
+    /// Step the core once, execute its audio commands, and report whether it
+    /// asked to quit.
+    fn advance_game(&mut self, dt: Duration, input: &[KeyEvent]) -> bool {
+        let output = self.game.step(dt, input);
 
         for command in &output.audio {
             match command {
@@ -109,16 +162,7 @@ impl App {
             }
         }
 
-        if let Some(renderer) = self.renderer.as_mut()
-            && let Err(error) = renderer.render(self.game.framebuffer())
-        {
-            self.fail(event_loop, error);
-            return;
-        }
-
-        if output.quit {
-            event_loop.exit();
-        }
+        output.quit
     }
 
     fn request_redraw(&self) {
@@ -213,13 +257,27 @@ impl ApplicationHandler for App {
         }
 
         // Animating: drive frames on the active scene's own retrace-rate timer.
+        // Deadlines advance by whole intervals from the previous deadline, not
+        // from `now`, so the timer's wakeup latency never accumulates into the
+        // logic clock.
         let interval = self.game.frame_interval();
         let now = Instant::now();
         let due = self.next_frame.unwrap_or(now);
 
         if now >= due {
-            self.next_frame = Some(now + interval);
-            self.advance = true;
+            let behind = now - due;
+
+            if behind >= BACKLOG_RESET {
+                self.pending_steps = self.pending_steps.saturating_add(1);
+                self.next_frame = Some(now + interval);
+            } else {
+                let steps = backlog_steps(behind, interval);
+                self.pending_steps = self.pending_steps.saturating_add(steps);
+                // A capped catch-up leaves this in the past on purpose: the
+                // next wakeup fires immediately and works off more backlog.
+                self.next_frame = Some(due + interval * steps);
+            }
+
             self.request_redraw();
         }
 
@@ -258,5 +316,32 @@ fn translate_key(key: &Key) -> Option<CoreKey> {
         Key::Named(NamedKey::Shift) => Some(CoreKey::Shift),
         Key::Character(text) => text.chars().next().map(CoreKey::Char),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const INTERVAL: Duration = Duration::from_micros(14_286);
+
+    #[test]
+    fn an_on_time_frame_runs_one_step() {
+        assert_eq!(backlog_steps(Duration::ZERO, INTERVAL), 1);
+        assert_eq!(backlog_steps(INTERVAL / 2, INTERVAL), 1);
+    }
+
+    #[test]
+    fn a_late_frame_runs_every_period_it_covers() {
+        // 1.5 periods late: the missed deadline plus the current one.
+        assert_eq!(backlog_steps(INTERVAL + INTERVAL / 2, INTERVAL), 2);
+        assert_eq!(backlog_steps(INTERVAL * 4, INTERVAL), 5);
+    }
+
+    #[test]
+    fn catch_up_is_capped_per_frame() {
+        let limit = (MAX_CATCHUP_PER_FRAME.as_nanos() / INTERVAL.as_nanos()) as u32;
+
+        assert_eq!(backlog_steps(Duration::from_secs(1), INTERVAL), limit);
     }
 }
