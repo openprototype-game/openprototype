@@ -50,8 +50,9 @@ const TICK: Duration = Duration::from_nanos(1_000_000_000 / 60);
 /// traced.
 const POD_FRAME_TICKS: u32 = 4;
 
-/// How far the camera can pan: the 160-tall background minus the ~128-row playfield
-/// window. Matches the original's vertical-scroll counter `cs:0x266e` (0..0x20).
+/// The camera's lower stop: the 160-tall background minus the ~128-row playfield
+/// window. The original clamps its vertical-scroll counter to this in every
+/// level; the upper stop is per-level ([`LevelAssets::camera_min`]).
 const CAMERA_MAX: i32 = 32;
 
 /// The overlay's x. Pinned against footage; it lands on the weapon pod's column
@@ -74,8 +75,8 @@ pub struct LevelScene {
     scenery_scroll: SceneryScroll,
     /// The level's star field, seeded from the wall clock like the original.
     stars: StarField,
-    /// Vertical camera, `0..=CAMERA_MAX`: which background row sits at the top of the
-    /// playfield. Nudged with Up/Down.
+    /// Vertical camera, `camera_min..=CAMERA_MAX`: which background row sits at
+    /// the top of the playfield. Nudged with Up/Down.
     camera_y: i32,
     /// The overlay's screen x, nudged with A/D.
     overlay_x: i32,
@@ -87,6 +88,9 @@ pub struct LevelScene {
     pod_ticks: u32,
     /// Real time accumulated toward the next logic tick.
     tick_elapsed: Duration,
+    /// Debug freeze: P stops every scroll so stills can be compared against
+    /// the original. Starts frozen-off; the scene begins at scroll zero anyway.
+    paused: bool,
 }
 
 impl LevelScene {
@@ -102,13 +106,14 @@ impl LevelScene {
 
         eprintln!(
             "level scene: Enter cycles weapon, Up/Down pan the camera, \
-             WASD nudge the overlay, Esc quits"
+             WASD nudge the overlay, P pauses the scroll, Esc quits"
         );
 
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
         let background_scroll = assets.background.scroll();
         let scenery_scroll = assets.scenery.scroll();
         let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
+        let camera_y = assets.camera_min;
         let mut scene = Self {
             assets,
             state,
@@ -116,12 +121,13 @@ impl LevelScene {
             background_scroll,
             scenery_scroll,
             stars,
-            camera_y: 0,
+            camera_y,
             overlay_x: OVERLAY_X,
             overlay_offset_y: OVERLAY_OFFSET_Y,
             pod_frame: POD_SETTLED_FRAME,
             pod_ticks: 0,
             tick_elapsed: Duration::ZERO,
+            paused: false,
         };
         scene.render();
 
@@ -135,9 +141,9 @@ impl LevelScene {
         self.pod_ticks = 0;
     }
 
-    /// Pan the camera by `delta` rows, clamped to `0..=CAMERA_MAX`.
+    /// Pan the camera by `delta` rows, clamped to the level's range.
     fn nudge_camera(&mut self, delta: i32) {
-        self.camera_y = (self.camera_y + delta).clamp(0, CAMERA_MAX);
+        self.camera_y = (self.camera_y + delta).clamp(self.assets.camera_min, CAMERA_MAX);
         eprintln!("camera_y = {}", self.camera_y);
     }
 
@@ -237,6 +243,10 @@ impl Scene for LevelScene {
                     'd' => self.nudge_overlay(1, 0),
                     'w' => self.nudge_overlay(0, -1),
                     's' => self.nudge_overlay(0, 1),
+                    'p' => {
+                        self.paused = !self.paused;
+                        eprintln!("scroll {}", if self.paused { "paused" } else { "running" });
+                    }
                     _ => {}
                 },
             }
@@ -248,7 +258,11 @@ impl Scene for LevelScene {
             self.tick_elapsed -= TICK;
             ticks += 1;
         }
-        self.advance(ticks);
+
+        if !self.paused {
+            self.advance(ticks);
+        }
+
         self.render();
 
         output
@@ -344,9 +358,10 @@ mod tests {
     #[test]
     fn one_tick_of_real_time_advances_the_scroll_by_one() {
         let mut scene = test_scene();
+        let start = scene.background_scroll.pixel_column(0);
         scene.update(TICK, &[]);
         // Strip 0 (rate 16 = 1px) moved one whole pixel after one tick.
-        assert_eq!(scene.background_scroll.pixel_column(0), 1);
+        assert_eq!(scene.background_scroll.pixel_column(0), start + 1);
     }
 
     #[test]

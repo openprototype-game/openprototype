@@ -6,16 +6,18 @@
 //! (L2/4/6) is a single full-height strip. On top of the horizontal scroll the
 //! whole image pans vertically (the camera) as the ship moves up and down.
 //!
-//! Scroll positions are 1/16-pixel fixed point so the slow far strips can move
-//! at fractional rates while keeping exact ratios; the displayed column is the
-//! position divided by 16. Positions accumulate one tick per VGA vertical
-//! refresh (~60Hz), wrapping at the image width so the two-screen-wide image
-//! loops seamlessly.
+//! Scroll positions are sub-pixel fixed point so the slow far strips can move
+//! at fractional rates while keeping exact ratios: 1/16 pixel for most levels,
+//! 1/256 for the lava background (see [`Sp::subpixel_shift`]). Positions
+//! accumulate one tick per VGA vertical refresh (~60Hz), wrapping at the image
+//! width so the two-screen-wide image loops seamlessly.
 //!
 //! The strip layout is a property of the SP image, not the level (see
-//! [`Sp::strips`]), so the race levels share one definition. Canyon heights are
-//! from `LEVEL_1.WAD` `cs:0x31ae`, rates `cs:0x261a`; RACEB2 is one strip
-//! `{160, rate 32}`.
+//! [`Sp::strips`]), so the race levels share one definition. Each WAD holds a
+//! strip table ({count, heights, first accumulator pointer}; accumulators are
+//! consecutive, their rates in the vsync ISR's rate table). Strips need not
+//! cover the playfield: the forest (120 rows) and alien (135 rows) backgrounds
+//! leave black rows above the panel.
 
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::IndexedImage;
@@ -23,13 +25,8 @@ use prototype_formats::IndexedImage;
 /// SP backgrounds are two screens wide; the scroll wraps at this width.
 const BACKGROUND_WIDTH: u32 = 640;
 
-/// Scroll positions are 1/16-pixel fixed point.
-const SUBPIXEL: u32 = 16;
-
-/// Positions wrap at the image width in sub-pixel units (the WAD's `0x2800`).
-const WRAP: u32 = BACKGROUND_WIDTH * SUBPIXEL;
-
-/// One horizontal strip: its height in rows and scroll rate (1/16-pixel per tick).
+/// One horizontal strip: its height in rows and scroll rate, in the
+/// background's sub-pixel units per tick (see [`Sp::subpixel_shift`]).
 struct Strip {
     height: i32,
     rate: u32,
@@ -63,9 +60,32 @@ impl Sp {
         match self {
             Sp::Canyon => &CANYON_STRIPS,
             Sp::Raceb2 => &RACEB2_STRIPS,
-            Sp::Wald | Sp::Alienbg | Sp::Lavah => {
-                todo!("strip layout for {self:?} is not yet reverse-engineered")
-            }
+            Sp::Wald => &WALD_STRIPS,
+            Sp::Alienbg => &ALIENBG_STRIPS,
+            Sp::Lavah => &LAVAH_STRIPS,
+        }
+    }
+
+    /// The fixed-point shift of this background's scroll positions. Most
+    /// compositors keep 1/16-pixel positions (`shr eax, 4`, wrap `0x2800`);
+    /// L7's lava keeps 1/256 (`shr eax, 8`, wrap `0x28000`) so its 65 wave
+    /// strips can creep at fractions the coarser scale can't hold.
+    fn subpixel_shift(self) -> u32 {
+        match self {
+            Sp::Lavah => 8,
+            _ => 4,
+        }
+    }
+
+    /// Every strip accumulator's initial value, straight from the WAD's data
+    /// image (no code ever writes them before the ISR starts adding). This is
+    /// load-bearing for the alien background: its bottom strip never moves, so
+    /// the initial 164 px is what centers the sun over the playfield.
+    fn initial_offset(self) -> u32 {
+        match self {
+            Sp::Canyon => 0x2770,
+            Sp::Alienbg => 0xa40,
+            Sp::Wald | Sp::Lavah | Sp::Raceb2 => 0,
         }
     }
 }
@@ -102,11 +122,311 @@ const RACEB2_STRIPS: [Strip; 1] = [Strip {
     rate: 32,
 }];
 
+/// L3's forest: one 120-row strip; the rows below it stay undrawn (black) above
+/// the panel. From `LEVEL_3.WAD` heights `cs:0x4e3c`, accum `cs:0x38d8`.
+const WALD_STRIPS: [Strip; 1] = [Strip {
+    height: 120,
+    rate: 4,
+}];
+
+/// L5's alien background: four strips covering 135 rows, fastest at the top and
+/// a static floor at the bottom; the rest stays undrawn. From `LEVEL_5.WAD`
+/// heights `cs:0x33ac`, accums `cs:0x2603`.
+const ALIENBG_STRIPS: [Strip; 4] = [
+    Strip {
+        height: 20,
+        rate: 8,
+    },
+    Strip {
+        height: 23,
+        rate: 4,
+    },
+    Strip {
+        height: 22,
+        rate: 1,
+    },
+    Strip {
+        height: 70,
+        rate: 0,
+    },
+];
+
+/// L7's lava background: a 65-strip perspective gradient. 32 two-row lines
+/// rush at the top (rates 256 down to 32), a 32-row horizon crawls in the
+/// middle, and the mirror rushes back out at the bottom. From `LEVEL_7.WAD`
+/// heights `cs:0x3e67`, accums `cs:0x2c64`, rates `cs:0x2d68`.
+const LAVAH_STRIPS: [Strip; 65] = [
+    Strip {
+        height: 2,
+        rate: 256,
+    },
+    Strip {
+        height: 2,
+        rate: 248,
+    },
+    Strip {
+        height: 2,
+        rate: 241,
+    },
+    Strip {
+        height: 2,
+        rate: 234,
+    },
+    Strip {
+        height: 2,
+        rate: 227,
+    },
+    Strip {
+        height: 2,
+        rate: 219,
+    },
+    Strip {
+        height: 2,
+        rate: 212,
+    },
+    Strip {
+        height: 2,
+        rate: 205,
+    },
+    Strip {
+        height: 2,
+        rate: 198,
+    },
+    Strip {
+        height: 2,
+        rate: 190,
+    },
+    Strip {
+        height: 2,
+        rate: 183,
+    },
+    Strip {
+        height: 2,
+        rate: 176,
+    },
+    Strip {
+        height: 2,
+        rate: 169,
+    },
+    Strip {
+        height: 2,
+        rate: 162,
+    },
+    Strip {
+        height: 2,
+        rate: 154,
+    },
+    Strip {
+        height: 2,
+        rate: 147,
+    },
+    Strip {
+        height: 2,
+        rate: 140,
+    },
+    Strip {
+        height: 2,
+        rate: 133,
+    },
+    Strip {
+        height: 2,
+        rate: 125,
+    },
+    Strip {
+        height: 2,
+        rate: 118,
+    },
+    Strip {
+        height: 2,
+        rate: 111,
+    },
+    Strip {
+        height: 2,
+        rate: 104,
+    },
+    Strip {
+        height: 2,
+        rate: 97,
+    },
+    Strip {
+        height: 2,
+        rate: 89,
+    },
+    Strip {
+        height: 2,
+        rate: 82,
+    },
+    Strip {
+        height: 2,
+        rate: 75,
+    },
+    Strip {
+        height: 2,
+        rate: 68,
+    },
+    Strip {
+        height: 2,
+        rate: 60,
+    },
+    Strip {
+        height: 2,
+        rate: 53,
+    },
+    Strip {
+        height: 2,
+        rate: 46,
+    },
+    Strip {
+        height: 2,
+        rate: 39,
+    },
+    Strip {
+        height: 2,
+        rate: 32,
+    },
+    Strip {
+        height: 32,
+        rate: 32,
+    },
+    Strip {
+        height: 2,
+        rate: 32,
+    },
+    Strip {
+        height: 2,
+        rate: 39,
+    },
+    Strip {
+        height: 2,
+        rate: 46,
+    },
+    Strip {
+        height: 2,
+        rate: 53,
+    },
+    Strip {
+        height: 2,
+        rate: 60,
+    },
+    Strip {
+        height: 2,
+        rate: 68,
+    },
+    Strip {
+        height: 2,
+        rate: 75,
+    },
+    Strip {
+        height: 2,
+        rate: 82,
+    },
+    Strip {
+        height: 2,
+        rate: 89,
+    },
+    Strip {
+        height: 2,
+        rate: 97,
+    },
+    Strip {
+        height: 2,
+        rate: 104,
+    },
+    Strip {
+        height: 2,
+        rate: 111,
+    },
+    Strip {
+        height: 2,
+        rate: 118,
+    },
+    Strip {
+        height: 2,
+        rate: 125,
+    },
+    Strip {
+        height: 2,
+        rate: 133,
+    },
+    Strip {
+        height: 2,
+        rate: 140,
+    },
+    Strip {
+        height: 2,
+        rate: 147,
+    },
+    Strip {
+        height: 2,
+        rate: 154,
+    },
+    Strip {
+        height: 2,
+        rate: 162,
+    },
+    Strip {
+        height: 2,
+        rate: 169,
+    },
+    Strip {
+        height: 2,
+        rate: 176,
+    },
+    Strip {
+        height: 2,
+        rate: 183,
+    },
+    Strip {
+        height: 2,
+        rate: 190,
+    },
+    Strip {
+        height: 2,
+        rate: 198,
+    },
+    Strip {
+        height: 2,
+        rate: 205,
+    },
+    Strip {
+        height: 2,
+        rate: 212,
+    },
+    Strip {
+        height: 2,
+        rate: 219,
+    },
+    Strip {
+        height: 2,
+        rate: 227,
+    },
+    Strip {
+        height: 2,
+        rate: 234,
+    },
+    Strip {
+        height: 2,
+        rate: 241,
+    },
+    Strip {
+        height: 2,
+        rate: 248,
+    },
+    Strip {
+        height: 2,
+        rate: 256,
+    },
+];
+
 /// A level's parallax background: the decoded SP image and its strip layout.
 /// Immutable; the scroll state lives in [`BackgroundScroll`].
 pub struct Background {
     image: IndexedImage,
     strips: &'static [Strip],
+    /// The scroll positions' fixed-point shift (see [`Sp::subpixel_shift`]).
+    subpixel_shift: u32,
+    /// Every strip's starting position (see [`Sp::initial_offset`]).
+    initial_offset: u32,
 }
 
 impl Background {
@@ -114,21 +434,26 @@ impl Background {
         Self {
             image,
             strips: sp.strips(),
+            subpixel_shift: sp.subpixel_shift(),
+            initial_offset: sp.initial_offset(),
         }
     }
 
-    /// A fresh scroll state for this background, every strip at zero.
+    /// A fresh scroll state for this background, every strip at its WAD-baked
+    /// starting position.
     pub fn scroll(&self) -> BackgroundScroll {
         BackgroundScroll {
-            offsets: vec![0; self.strips.len()],
+            offsets: vec![self.initial_offset; self.strips.len()],
+            subpixel_shift: self.subpixel_shift,
         }
     }
 
     /// Advance every strip by `ticks` of its own rate, wrapping at the image
     /// width. One tick is one ~60Hz vertical refresh.
     pub fn advance(&self, scroll: &mut BackgroundScroll, ticks: u32) {
+        let wrap = u64::from(BACKGROUND_WIDTH << self.subpixel_shift);
+
         for (strip, offset) in self.strips.iter().zip(&mut scroll.offsets) {
-            let wrap = u64::from(WRAP);
             let advanced = u64::from(*offset) + u64::from(strip.rate) * u64::from(ticks);
             *offset = (advanced % wrap) as u32;
         }
@@ -154,14 +479,22 @@ impl Background {
 
         for dest_y in 0..height {
             let image_y = dest_y + camera_y;
-
-            if image_y < 0 || image_y >= image_height {
-                continue;
-            }
-
-            let column = (scroll.offsets[strip_at(self.strips, image_y)] / SUBPIXEL) as i32;
-            let image_row = (image_y * image_width) as usize;
             let dest_row = (dest_y * frame_width) as usize;
+
+            // Rows past the strips are not composited by the original (the
+            // forest and alien strips cover less than the playfield); they
+            // show the cleared buffer.
+            let strip = (image_y >= 0 && image_y < image_height)
+                .then(|| strip_at(self.strips, image_y))
+                .flatten();
+
+            let Some(strip) = strip else {
+                frame.image.pixels[dest_row..dest_row + frame_width as usize].fill(0);
+                continue;
+            };
+
+            let column = (scroll.offsets[strip] >> self.subpixel_shift) as i32;
+            let image_row = (image_y * image_width) as usize;
 
             for dest_x in 0..frame_width {
                 let src_x = (column + dest_x).rem_euclid(image_width) as usize;
@@ -175,28 +508,31 @@ impl Background {
 /// The per-strip scroll positions for a [`Background`], advanced each tick.
 pub struct BackgroundScroll {
     offsets: Vec<u32>,
+    /// Copied from the background so position reads agree on the fixed point.
+    subpixel_shift: u32,
 }
 
 impl BackgroundScroll {
     /// The whole-pixel scroll column of strip `strip` (the sub-pixel dropped).
     pub fn pixel_column(&self, strip: usize) -> i32 {
-        (self.offsets[strip] / SUBPIXEL) as i32
+        (self.offsets[strip] >> self.subpixel_shift) as i32
     }
 }
 
-/// Which strip the image row `y` belongs to, by cumulative strip heights.
-fn strip_at(strips: &[Strip], y: i32) -> usize {
+/// Which strip the image row `y` belongs to, by cumulative strip heights, or
+/// `None` past the last strip (the original draws nothing there).
+fn strip_at(strips: &[Strip], y: i32) -> Option<usize> {
     let mut bottom = 0;
 
     for (index, strip) in strips.iter().enumerate() {
         bottom += strip.height;
 
         if y < bottom {
-            return index;
+            return Some(index);
         }
     }
 
-    strips.len() - 1
+    None
 }
 
 #[cfg(test)]
@@ -218,14 +554,18 @@ mod tests {
 
     #[test]
     fn advance_accumulates_each_strip_by_its_own_rate() {
+        // The canyon's accumulators all start at the WAD-baked 0x2770.
         let background = canyon(blank(640, 160));
         let mut scroll = background.scroll();
+        assert_eq!(scroll.offsets, [0x2770; 7]);
 
         background.advance(&mut scroll, 1);
-        assert_eq!(scroll.offsets, [16, 10, 6, 3, 6, 10, 16]);
+        let moved: Vec<u32> = scroll.offsets.iter().map(|o| o - 0x2770).collect();
+        assert_eq!(moved, [16, 10, 6, 3, 6, 10, 16]);
 
         background.advance(&mut scroll, 2);
-        assert_eq!(scroll.offsets, [48, 30, 18, 9, 18, 30, 48]);
+        let moved: Vec<u32> = scroll.offsets.iter().map(|o| o - 0x2770).collect();
+        assert_eq!(moved, [48, 30, 18, 9, 18, 30, 48]);
     }
 
     #[test]
@@ -233,25 +573,35 @@ mod tests {
         let background = canyon(blank(640, 160));
         let mut scroll = background.scroll();
 
-        // Strip 0 moves 16 sub-pixels (1 px) per tick; WRAP = 640*16 = 10240, so
-        // 640 ticks lands exactly on the wrap and resets to 0.
+        // Strip 0 moves 16 sub-pixels (1 px) per tick; the wrap is 640*16, so
+        // 640 ticks lands exactly back on the starting offset.
         background.advance(&mut scroll, 640);
-        assert_eq!(scroll.offsets[0], 0);
+        assert_eq!(scroll.offsets[0], 0x2770);
 
         background.advance(&mut scroll, 1);
-        assert_eq!(scroll.offsets[0], 16);
+        assert_eq!(scroll.offsets[0], 0x2770 + 16);
+    }
+
+    #[test]
+    fn alien_background_starts_sun_centered() {
+        // The static bottom strip never moves; its initial 164 px offset is
+        // what the playfield shows forever.
+        let background = Background::new(blank(640, 160), Sp::Alienbg);
+        let scroll = background.scroll();
+        assert_eq!(scroll.pixel_column(3), 164);
     }
 
     #[test]
     fn strip_at_maps_image_rows_to_strips() {
         let strips = Sp::Canyon.strips();
-        assert_eq!(strip_at(strips, 0), 0);
-        assert_eq!(strip_at(strips, 13), 0);
-        assert_eq!(strip_at(strips, 14), 1);
-        assert_eq!(strip_at(strips, 36), 3); // main band starts at 14+13+9
-        assert_eq!(strip_at(strips, 124), 3);
-        assert_eq!(strip_at(strips, 125), 4);
-        assert_eq!(strip_at(strips, 159), 6);
+        assert_eq!(strip_at(strips, 0), Some(0));
+        assert_eq!(strip_at(strips, 13), Some(0));
+        assert_eq!(strip_at(strips, 14), Some(1));
+        assert_eq!(strip_at(strips, 36), Some(3)); // main band starts at 14+13+9
+        assert_eq!(strip_at(strips, 124), Some(3));
+        assert_eq!(strip_at(strips, 125), Some(4));
+        assert_eq!(strip_at(strips, 159), Some(6));
+        assert_eq!(strip_at(strips, 160), None);
     }
 
     #[test]
@@ -260,8 +610,8 @@ mod tests {
         let background = Background::new(blank(640, 160), Sp::Raceb2);
         let scroll = background.scroll();
         assert_eq!(scroll.offsets.len(), 1);
-        assert_eq!(strip_at(Sp::Raceb2.strips(), 0), 0);
-        assert_eq!(strip_at(Sp::Raceb2.strips(), 159), 0);
+        assert_eq!(strip_at(Sp::Raceb2.strips(), 0), Some(0));
+        assert_eq!(strip_at(Sp::Raceb2.strips(), 159), Some(0));
     }
 
     #[test]
