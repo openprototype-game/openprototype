@@ -138,6 +138,11 @@ pub struct LevelData {
     /// content-matching L1's overlay sprites in each level's catalog. The
     /// chaingun has no overlay, so it has no entry.
     pub overlays: PerWeapon<Overlay>,
+    /// File offset of the overlay position table in the level's WAD (L1
+    /// `cs:0x9128`): per weapon, the overlay's `(x, y)` screen position for
+    /// each settle-animation frame. The table bytes are identical in all seven
+    /// WADs, located per level by byte-matching L1's.
+    pub overlay_positions: usize,
     /// The level's parallax scenery layers, back to front, all reverse-
     /// engineered from each level's WAD.
     pub scenery: SceneryData,
@@ -194,6 +199,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0xbb18,
                 scenery: SceneryData {
                     cs_base: 0x29F0,
                     cell_base: -1,
@@ -243,6 +249,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0x9683,
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 968,
@@ -283,6 +290,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0xf504,
                 scenery: SceneryData {
                     cs_base: 0x4710,
                     cell_base: 273,
@@ -330,6 +338,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0x96fb,
                 // The race levels' tilemap streams are byte-identical; the look
                 // differs through cell_base, which points the shared codes at a
                 // different window of RACE1.BIN per level.
@@ -368,6 +377,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0xd1e0,
                 scenery: SceneryData {
                     cs_base: 0x3f90,
                     cell_base: 273,
@@ -410,6 +420,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0x9bfb,
                 scenery: SceneryData {
                     cs_base: 0x09B0,
                     cell_base: 1106,
@@ -445,6 +456,7 @@ impl Level {
                         count: 2,
                     },
                 },
+                overlay_positions: 0xf75d,
                 // Both layers share row 1 and rate 16 on separate
                 // accumulators; the split is back-vs-front art, not depth.
                 scenery: SceneryData {

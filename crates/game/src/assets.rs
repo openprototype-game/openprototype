@@ -155,10 +155,6 @@ pub const OVERLAY_FRAMES: usize = 6;
 /// Width of one Mode X catalog cell, in pixels.
 const CELL_WIDTH: usize = 32;
 
-/// File offset of the overlay position table in `LEVEL_1.WAD` (`cs:0x9128`, with
-/// `file = cs + 0x29F0`). Per weapon: a block of [`OVERLAY_BLOCK_FRAMES`] `(x, y)`
-/// `u16` positions; the animation only uses the first [`OVERLAY_FRAMES`].
-const OVERLAY_POSITION_TABLE: usize = 0x9128 + 0x29F0;
 /// Positions stored per weapon block; frames 6 and 7 are unused padding.
 const OVERLAY_BLOCK_FRAMES: usize = 8;
 /// Frame index of the settled position, which the slide deltas are relative to.
@@ -254,7 +250,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let overlays = load_overlays(&overlay_catalog, data.overlays)?;
     let catalog = decode_banked_direct(&bin, &wad, data.catalog_offset)
         .with_context(|| format!("decoding {bin_name} for scenery"))?;
-    let overlay_slide = read_overlay_slide(&wad)?;
+    let overlay_slide = read_overlay_slide(&wad, data.overlay_positions)?;
     let scenery = decode_scenery(&wad, data.scenery);
 
     Ok(LevelAssets {
@@ -362,14 +358,17 @@ fn decode_scenery_tilemap(
     tiles
 }
 
-/// Read each weapon's overlay slide from the WAD's position table, as `(dx, dy)`
-/// per frame relative to the settled frame. Each weapon's profile differs, so
-/// this is read rather than assumed.
-fn read_overlay_slide(wad: &[u8]) -> Result<PerWeapon<[(i32, i32); OVERLAY_FRAMES]>> {
+/// Read each weapon's overlay slide from the WAD's position table at `table`
+/// (per-level, [`LevelData::overlay_positions`]), as `(dx, dy)` per frame
+/// relative to the settled frame. Each weapon's profile differs, so this is
+/// read rather than assumed. Per weapon: a block of [`OVERLAY_BLOCK_FRAMES`]
+/// `(x, y)` `u16` positions; the animation only uses the first
+/// [`OVERLAY_FRAMES`].
+fn read_overlay_slide(wad: &[u8], table: usize) -> Result<PerWeapon<[(i32, i32); OVERLAY_FRAMES]>> {
     // The WAD table holds one block per firing weapon: block 0 is the chaingun
     // (which has no overlay), then the four real weapons in selector order.
     const TABLE_BLOCKS: usize = 5;
-    let table_end = OVERLAY_POSITION_TABLE + TABLE_BLOCKS * OVERLAY_BLOCK_FRAMES * 4;
+    let table_end = table + TABLE_BLOCKS * OVERLAY_BLOCK_FRAMES * 4;
 
     if wad.len() < table_end {
         anyhow::bail!(
@@ -385,7 +384,7 @@ fn read_overlay_slide(wad: &[u8]) -> Result<PerWeapon<[(i32, i32); OVERLAY_FRAME
     };
 
     let slide_block = |table_index: usize| -> [(i32, i32); OVERLAY_FRAMES] {
-        let block = OVERLAY_POSITION_TABLE + table_index * OVERLAY_BLOCK_FRAMES * 4;
+        let block = table + table_index * OVERLAY_BLOCK_FRAMES * 4;
         let (settled_x, settled_y) = read_xy(block + OVERLAY_SETTLED_FRAME * 4);
 
         std::array::from_fn(|frame| {
