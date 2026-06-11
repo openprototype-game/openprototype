@@ -147,6 +147,12 @@ pub struct Spawns {
     /// The orb-drop countdown (`cs:0x2666`): every Nth killed enemy converts
     /// into the weapon-orb pickup.
     orb_drop_countdown: i32,
+    /// The boss/orbiter gate (`cs:0x269c`): while nonzero the parallax
+    /// scroll and the spawn clock hold until the gated enemies die.
+    pub gate: u8,
+    /// The level-end flag (`cs:0xcc2`): once set, the gate no longer holds
+    /// the clock (the original's ISR bypass).
+    pub level_end: bool,
     /// The boss's engine globals.
     boss: ai_l1::BossState,
     /// Sprites assembled from descriptors, cached by descriptor pointer
@@ -168,6 +174,8 @@ impl Spawns {
             ai,
             rng: EngineRng::new(clock_seed()),
             orb_drop_countdown: 0,
+            gate: 0,
+            level_end: false,
             boss: ai_l1::BossState::default(),
             sprites: HashMap::new(),
         }
@@ -182,7 +190,7 @@ impl Spawns {
     /// overflow spawns (the original treats overflow as a fatal error; the
     /// port degrades gracefully).
     pub fn tick(&mut self, rows: &[SpawnRow], wad: &[u8], cs_base: usize) {
-        if self.cursor >= self.records.len() {
+        if self.cursor >= self.records.len() || self.gate_holds() {
             return;
         }
 
@@ -243,6 +251,7 @@ impl Spawns {
                 player_y: player.1,
                 shots: &mut self.shots,
                 boss: &mut self.boss,
+                gate: &mut self.gate,
             };
 
             for entity in &mut self.entities {
@@ -279,6 +288,12 @@ impl Spawns {
 
         self.shots
             .retain(|shot| SHOT_X.contains(&shot.x) && SHOT_Y.contains(&shot.y));
+    }
+
+    /// Whether the boss/orbiter gate is holding the scroll and spawn clock
+    /// (the level-end flag bypasses it, the original's ISR check order).
+    pub fn gate_holds(&self) -> bool {
+        self.gate > 0 && !self.level_end
     }
 
     /// Decrements the orb-drop countdown (`cs:0x2666`); `true` means this

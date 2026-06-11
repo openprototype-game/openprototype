@@ -257,10 +257,19 @@ impl LevelScene {
             }
         }
 
-        self.assets
-            .background
-            .advance(&mut self.background_scroll, ticks);
-        self.assets.scenery.advance(&mut self.scenery_scroll, ticks);
+        // The boss/orbiter gate holds the parallax (the original's ISR skips
+        // the scroll block while cs:0x269c is up).
+        let gate_holds = self
+            .spawns
+            .as_ref()
+            .is_some_and(|spawns| spawns.gate_holds());
+
+        if !gate_holds {
+            self.assets
+                .background
+                .advance(&mut self.background_scroll, ticks);
+            self.assets.scenery.advance(&mut self.scenery_scroll, ticks);
+        }
         self.stars.advance(ticks);
         self.pod_ticks += ticks;
 

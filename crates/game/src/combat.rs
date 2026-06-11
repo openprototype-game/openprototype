@@ -147,12 +147,19 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             continue;
         }
 
-        let entity = &spawns.entities[index];
-        let kind = entity.kind;
+        let kind = spawns.entities[index].kind;
+        let sprite = spawns.entities[index].sprite;
 
-        // TODO: boss/orbiter gate decrement for kinds 0x392e..=0x399c.
-        if kind >= 0x3ae8 {
+        // The death handler keys these on the CURRENT sprite: a dying
+        // orbiter frame releases one gate count, the boss/station range
+        // flags the level end (which also bypasses the gate).
+        if (0x392e..=0x399c).contains(&sprite) {
+            spawns.gate = spawns.gate.saturating_sub(1);
+        }
+
+        if sprite >= 0x3ae8 {
             events.level_end = true;
+            spawns.level_end = true;
         }
 
         // TODO: per-type death SFX (0xad23, plus 0xad03/0xad43 specials) and

@@ -24,6 +24,8 @@ pub(super) struct AiContext<'a> {
     pub player_y: i32,
     pub shots: &'a mut Vec<Shot>,
     pub boss: &'a mut BossState,
+    /// The boss/orbiter gate counter (`cs:0x269c`).
+    pub gate: &'a mut u8,
 }
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
@@ -327,8 +329,7 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
         };
         entity.save_y = entity.y;
         entity.save_x = entity.x;
-        // TODO: cs:0x269c += 1 (the scroll/spawn gate) once combat can clear
-        // it again; see Spawns::gate.
+        *ctx.gate += 1;
     }
 
     let (table_y, table_x) = match shape {
@@ -515,7 +516,7 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
     let tick = entity.tick;
 
     if tick <= 0x1 {
-        // TODO: cs:0x269c += 1 (the scroll/spawn gate).
+        *ctx.gate += 1;
     } else if tick <= 0xaa {
         entity.x -= 0xc;
     } else if tick <= 0xab {
