@@ -1,4 +1,4 @@
-//! LEVEL_1 (CANYON) layout data: script, emitter constants, and depth table.
+//! LEVEL_1 (CANYON) layout data: script, emitter constants, and health table.
 //!
 //! Transcribed from the disassembly and validated byte-for-byte against the
 //! running game (seed `0x3b95` reproduces the GET-READY capture). See
@@ -6,12 +6,12 @@
 
 use super::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
-/// Per-sprite-type depth (draw layer), read by the original from a 9-entry
-/// table at `cs:[bf6d..]`.
-const DEPTHS: [u16; 9] = [100, 160, 500, 600, 200, 200, 1000, 14000, 10000];
+/// Per-sprite-type spawn health, read by the original from a 9-entry table
+/// at `cs:[bf6d..]`.
+const HEALTHS: [u16; 9] = [100, 160, 500, 600, 200, 200, 1000, 14000, 10000];
 
-/// The foreground depth the landmark emitters hardcode (`0xfa`).
-const FOREGROUND: u16 = 250;
+/// The health the landmark pickup emitters hardcode (`0xfa` = 250).
+const PICKUP_HEALTH: u16 = 250;
 
 // Fixed/repeat record blocks (the emitters with no count loop or a constant body).
 
@@ -20,15 +20,15 @@ const EB35: [Cell; 2] = [
         x_base: 0,
         x_start: XStart::Peek,
         sprite: 0x392e,
-        depth: DEPTHS[6],
-        y: 0x26,
+        health: HEALTHS[6],
+        spawn_row: 0x26,
     },
     Cell {
         x_base: 0x3c,
         x_start: XStart::None,
         sprite: 0x392e,
-        depth: DEPTHS[6],
-        y: 0x27,
+        health: HEALTHS[6],
+        spawn_row: 0x27,
     },
 ];
 
@@ -36,8 +36,8 @@ const EB72: [Cell; 1] = [Cell {
     x_base: 0,
     x_start: XStart::Peek,
     sprite: 0x3f8e,
-    depth: DEPTHS[7],
-    y: 0x45,
+    health: HEALTHS[7],
+    spawn_row: 0x45,
 }];
 
 const EB92: [Cell; 6] = [
@@ -45,43 +45,43 @@ const EB92: [Cell; 6] = [
         x_base: 0,
         x_start: XStart::Peek,
         sprite: 0x3f8e,
-        depth: DEPTHS[8],
-        y: 0x46,
+        health: HEALTHS[8],
+        spawn_row: 0x46,
     },
     Cell {
         x_base: 3,
         x_start: XStart::None,
         sprite: 0x36ea,
-        depth: FOREGROUND,
-        y: 0x47,
+        health: PICKUP_HEALTH,
+        spawn_row: 0x47,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: 0x36ea,
-        depth: FOREGROUND,
-        y: 0x48,
+        health: PICKUP_HEALTH,
+        spawn_row: 0x48,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: 0x36ea,
-        depth: FOREGROUND,
-        y: 0x49,
+        health: PICKUP_HEALTH,
+        spawn_row: 0x49,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: 0x36ea,
-        depth: FOREGROUND,
-        y: 0x4a,
+        health: PICKUP_HEALTH,
+        spawn_row: 0x4a,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: 0x36ea,
-        depth: FOREGROUND,
-        y: 0x4b,
+        health: PICKUP_HEALTH,
+        spawn_row: 0x4b,
     },
 ];
 
@@ -90,43 +90,43 @@ const ECBD: [Cell; 6] = [
         x_base: 0x64,
         x_start: XStart::Consume,
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: 0x21,
+        health: HEALTHS[5],
+        spawn_row: 0x21,
     },
     Cell {
         x_base: 0x28,
         x_start: XStart::None,
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: 0x20,
+        health: HEALTHS[5],
+        spawn_row: 0x20,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: 0x22,
+        health: HEALTHS[5],
+        spawn_row: 0x22,
     },
     Cell {
         x_base: 0x28,
         x_start: XStart::None,
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: 0x1f,
+        health: HEALTHS[5],
+        spawn_row: 0x1f,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: 0x23,
+        health: HEALTHS[5],
+        spawn_row: 0x23,
     },
     Cell {
         x_base: 0x64,
         x_start: XStart::None,
         sprite: 0x338e,
-        depth: DEPTHS[2],
-        y: 0x16,
+        health: HEALTHS[2],
+        spawn_row: 0x16,
     },
 ];
 
@@ -139,8 +139,8 @@ fn e776(count: Rand, x: Rand) -> Emitter {
         count,
         x,
         sprite: 0x3308,
-        depth: DEPTHS[0],
-        y: rand(0x12, 0),
+        health: HEALTHS[0],
+        spawn_row: rand(0x12, 0),
     }
 }
 
@@ -149,8 +149,8 @@ fn e7bb(count: Rand) -> Emitter {
         count,
         x: rand(0x1e, 0x1e),
         sprite: 0x38b0,
-        depth: DEPTHS[1],
-        y: rand(5, 0x1a),
+        health: HEALTHS[1],
+        spawn_row: rand(5, 0x1a),
     }
 }
 
@@ -159,8 +159,8 @@ fn e800(count: Rand) -> Emitter {
         count,
         x: rand(0x32, 0x50),
         sprite: 0x338e,
-        depth: DEPTHS[2],
-        y: rand(5, 0x15),
+        health: HEALTHS[2],
+        spawn_row: rand(5, 0x15),
     }
 }
 
@@ -169,8 +169,8 @@ fn e845(count: Rand) -> Emitter {
         count,
         x: rand(0x32, 0x78),
         sprite: 0x39a4,
-        depth: DEPTHS[3],
-        y: rand(6, 0x36),
+        health: HEALTHS[3],
+        spawn_row: rand(6, 0x36),
     }
 }
 
@@ -179,8 +179,8 @@ fn e920(count: Rand) -> Emitter {
         count,
         x: rand(0x1e, 0x14),
         sprite: 0x3a92,
-        depth: DEPTHS[4],
-        y: rand(6, 0x2c),
+        health: HEALTHS[4],
+        spawn_row: rand(6, 0x2c),
     }
 }
 
@@ -189,8 +189,8 @@ fn e965(count: Rand) -> Emitter {
         count,
         x: rand(0x1e, 0x28),
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: rand(6, 0x1f),
+        health: HEALTHS[5],
+        spawn_row: rand(6, 0x1f),
     }
 }
 
@@ -198,8 +198,8 @@ fn e88a(count: Rand) -> Emitter {
     Emitter::Row {
         count,
         sprite: 0x3a92,
-        depth: DEPTHS[4],
-        y: rand(4, 0x28),
+        health: HEALTHS[4],
+        spawn_row: rand(4, 0x28),
         style: RowStyle::Anchored {
             x_base: 0x14,
             extra: None,
@@ -211,8 +211,8 @@ fn e8d5(count: Rand) -> Emitter {
     Emitter::Row {
         count,
         sprite: 0x33f4,
-        depth: DEPTHS[5],
-        y: rand(4, 0x32),
+        health: HEALTHS[5],
+        spawn_row: rand(4, 0x32),
         style: RowStyle::Anchored {
             x_base: 0x14,
             extra: None,
@@ -226,14 +226,14 @@ fn e9aa(count: Rand) -> Emitter {
         lo: Arm {
             x: rand(0xa, 0x1e),
             sprite: 0x338e,
-            depth: DEPTHS[2],
-            y: rand(5, 0x15),
+            health: HEALTHS[2],
+            spawn_row: rand(5, 0x15),
         },
         hi: Arm {
             x: rand(0xa, 0x1e),
             sprite: 0x3308,
-            depth: DEPTHS[0],
-            y: rand(0x12, 0),
+            health: HEALTHS[0],
+            spawn_row: rand(0x12, 0),
         },
     }
 }
@@ -244,14 +244,14 @@ fn ea2d(count: Rand) -> Emitter {
         lo: Arm {
             x: rand(0xa, 0x1e),
             sprite: 0x38b0,
-            depth: DEPTHS[1],
-            y: rand(5, 0x1a),
+            health: HEALTHS[1],
+            spawn_row: rand(5, 0x1a),
         },
         hi: Arm {
             x: rand(0xa, 0x1e),
             sprite: 0x3308,
-            depth: DEPTHS[0],
-            y: rand(0x12, 0),
+            health: HEALTHS[0],
+            spawn_row: rand(0x12, 0),
         },
     }
 }
@@ -260,24 +260,24 @@ fn eab0(count: Rand) -> Emitter {
     Emitter::Row {
         count,
         sprite: 0x3a92,
-        depth: DEPTHS[4],
-        y: rand(4, 0x28),
+        health: HEALTHS[4],
+        spawn_row: rand(4, 0x28),
         style: RowStyle::Anchored {
             x_base: 0x14,
             extra: Some(Extra {
                 sprite: 0x3308,
-                depth: DEPTHS[0],
-                y: rand(0x12, 0),
+                health: HEALTHS[0],
+                spawn_row: rand(0x12, 0),
             }),
         },
     }
 }
 
-fn once(sprite: u16, y: Rand) -> Emitter {
+fn once(sprite: u16, spawn_row: Rand) -> Emitter {
     Emitter::Once {
         sprite,
-        depth: FOREGROUND,
-        y,
+        health: PICKUP_HEALTH,
+        spawn_row,
     }
 }
 

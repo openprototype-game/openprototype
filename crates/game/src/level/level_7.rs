@@ -6,68 +6,69 @@
 
 use super::slot::{Cell, Emitter, Insert, PostOp, Step, XStart, rand, step};
 
-/// The foreground depth the landmark `Once` emitters hardcode (`0xfa`).
-const FOREGROUND: u16 = 0xfa;
+/// The health the landmark pickup `Once` emitters hardcode (`0xfa` = 250).
+const PICKUP_HEALTH: u16 = 0xfa;
 
 /// Builds LEVEL_7's only scatter emitter, the L3-shape [`Grid`](Emitter::Grid).
 ///
-/// `outer = rng(dx) + cx` rows of `inner = rng(ax) + bx` records; the per-row y
-/// is `rng(0xa)` plus the row-y offset slot. sprite/depth/x-step/row-reset come
-/// from the slots.
+/// `outer = rng(dx) + cx` rows of `inner = rng(ax) + bx` records; the per-row
+/// spawn row is `rng(0xa)` plus the spawn-row offset slot. sprite/health/
+/// x-step/row-reset come from the slots.
 fn grid(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
     Emitter::Grid {
         outer: rand(dx, cx),
         inner: rand(ax, bx),
-        row_y: rand(0xa, 0),
-        row_y_uses_offset: true,
+        spawn_row: rand(0xa, 0),
+        spawn_row_uses_offset: true,
     }
 }
 
-// Landmark `Once` emitters: one record, x = x_start, foreground depth.
+// Landmark `Once` emitters: one record, delay = x_start, pickup health.
 
 fn once_41b5() -> Emitter {
     Emitter::Once {
         sprite: 0x41b5,
-        depth: FOREGROUND,
-        y: rand(3, 0),
+        health: PICKUP_HEALTH,
+        spawn_row: rand(3, 0),
     }
 }
 
 fn once_421b() -> Emitter {
     Emitter::Once {
         sprite: 0x421b,
-        depth: FOREGROUND,
-        y: rand(3, 3),
+        health: PICKUP_HEALTH,
+        spawn_row: rand(3, 3),
     }
 }
 
 fn once_4357() -> Emitter {
     Emitter::Once {
         sprite: 0x4357,
-        depth: FOREGROUND,
-        y: rand(2, 6),
+        health: PICKUP_HEALTH,
+        spawn_row: rand(2, 6),
     }
 }
 
-// Fixed `0x4959` landmark blocks (no PRNG). The lead x is x_start alone (no step).
+// Fixed `0x4959` landmark blocks (no PRNG). The lead delay is x_start alone
+// (no step).
 
-fn lead_4959(y: u16) -> Cell {
+fn lead_4959(spawn_row: u16) -> Cell {
     Cell {
         x_base: 0,
         x_start: XStart::Consume,
         sprite: 0x4959,
-        depth: 0xaf0,
-        y,
+        health: 0xaf0,
+        spawn_row,
     }
 }
 
-fn tail_4959(x_base: u16, y: u16) -> Cell {
+fn tail_4959(x_base: u16, spawn_row: u16) -> Cell {
     Cell {
         x_base,
         x_start: XStart::None,
         sprite: 0x4959,
-        depth: 0xaf0,
-        y,
+        health: 0xaf0,
+        spawn_row,
     }
 }
 
@@ -102,184 +103,184 @@ pub fn script() -> Vec<Step> {
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x45d1)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0x67)
+            .spawn_row_offset(0x67)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4a2f)
-            .depth(0xaa)
+            .health(0xaa)
             .row_reset(0x32)
-            .row_y_offset(0x3f)
+            .spawn_row_offset(0x3f)
             .emit(grid(0x0, 0x1, 0xf, 0x5)),
         step()
             .x_start(0x14)
             .x_step(0x0)
             .sprite(0x4559)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0x53)
+            .spawn_row_offset(0x53)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x45d1)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0x71)
+            .spawn_row_offset(0x71)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x14)
             .sprite(0x4a2f)
-            .depth(0xaa)
+            .health(0xaa)
             .row_reset(0x96)
-            .row_y_offset(0x3f)
+            .spawn_row_offset(0x3f)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
         step().emit(once_4357()),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x45d1)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0x67)
+            .spawn_row_offset(0x67)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step().x_start(0x64).emit(fixed_4959_1()),
         step()
             .x_start(0x64)
             .x_step(0x14)
             .sprite(0x4a2f)
-            .depth(0xaa)
+            .health(0xaa)
             .row_reset(0x96)
-            .row_y_offset(0x3f)
+            .spawn_row_offset(0x3f)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
         step().x_start(0x2).emit(once_421b()),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4559)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0x5d)
+            .spawn_row_offset(0x5d)
             .emit(grid(0x0, 0x1, 0x5, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x14)
             .sprite(0x4aa7)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x96)
-            .row_y_offset(0x35)
+            .spawn_row_offset(0x35)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
         step().x_start(0xc8).emit(fixed_4959_2()),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4b97)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x32)
-            .row_y_offset(0x17)
+            .spawn_row_offset(0x17)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step().x_start(0x2).emit(once_41b5()),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x45d1)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0x67)
+            .spawn_row_offset(0x67)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step().x_start(0xc8).emit(fixed_4959_3()),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4c87)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0xd)
+            .spawn_row_offset(0xd)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4aa7)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x32)
-            .row_y_offset(0x21)
+            .spawn_row_offset(0x21)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4a2f)
-            .depth(0xaa)
+            .health(0xaa)
             .row_reset(0x32)
-            .row_y_offset(0x49)
+            .spawn_row_offset(0x49)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step().x_start(0x2).emit(once_41b5()),
         step()
             .x_start(0x64)
             .x_step(0x14)
             .sprite(0x4aa7)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x96)
-            .row_y_offset(0x35)
+            .spawn_row_offset(0x35)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x14)
             .sprite(0x4b97)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x96)
-            .row_y_offset(0x2b)
+            .spawn_row_offset(0x2b)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4c87)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0xd)
+            .spawn_row_offset(0xd)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4aa7)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x32)
-            .row_y_offset(0x35)
+            .spawn_row_offset(0x35)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4a2f)
-            .depth(0xaa)
+            .health(0xaa)
             .row_reset(0x32)
-            .row_y_offset(0x3f)
+            .spawn_row_offset(0x3f)
             .emit(grid(0x0, 0x1, 0xf, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4b97)
-            .depth(0x96)
+            .health(0x96)
             .row_reset(0x32)
-            .row_y_offset(0x2b)
+            .spawn_row_offset(0x2b)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
         step()
             .x_start(0x64)
             .x_step(0x0)
             .sprite(0x4c87)
-            .depth(0xdc)
+            .health(0xdc)
             .row_reset(0x32)
-            .row_y_offset(0xd)
+            .spawn_row_offset(0xd)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
     ]
 }
 
-fn landmark(target_x: u16, y: u16) -> PostOp {
+fn landmark(target_tick: u16, spawn_row: u16) -> PostOp {
     PostOp::Insert(Insert {
-        target_x,
-        records: vec![(0x4689, 0x140, y)],
+        target_tick,
+        records: vec![(0x4689, 0x140, spawn_row)],
     })
 }
 
@@ -290,7 +291,7 @@ fn landmark(target_x: u16, y: u16) -> PostOp {
 pub fn post_pass() -> Vec<PostOp> {
     vec![
         PostOp::Insert(Insert {
-            target_x: 0x3cd2,
+            target_tick: 0x3cd2,
             records: vec![
                 (0x5893, 0x7d00, 0x8),
                 (0x4cbd, 0x7d00, 0x9),

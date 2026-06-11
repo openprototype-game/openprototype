@@ -26,7 +26,7 @@ pub(crate) fn golden_hash(records: &[slot::Record]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 
     for record in records {
-        for word in [record.x_step, record.sprite, record.depth, record.y] {
+        for word in [record.delay, record.sprite, record.health, record.spawn_row] {
             for byte in word.to_le_bytes() {
                 hash ^= u64::from(byte);
                 hash = hash.wrapping_mul(0x0000_0100_0000_01b3);

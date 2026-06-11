@@ -71,10 +71,10 @@ fn static_records(wad: &[u8], table: usize) -> Vec<Record> {
 
         let word = |k: usize| u16::from_le_bytes([bytes[k * 2], bytes[k * 2 + 1]]);
         out.push(Record {
-            x_step: word(0),
+            delay: word(0),
             sprite: word(1),
-            depth: word(2),
-            y: word(3),
+            health: word(2),
+            spawn_row: word(3),
         });
     }
 
@@ -133,7 +133,7 @@ mod tests {
             // Every run ends with the shared trailer record.
             let last = records.last().expect("populated run");
             assert_eq!(
-                (last.sprite, last.depth, last.y),
+                (last.sprite, last.health, last.spawn_row),
                 (20, 209, 20),
                 "{}",
                 data.wad
