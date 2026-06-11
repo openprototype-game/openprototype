@@ -182,6 +182,8 @@ pub struct Spawns {
     pub effects: Vec<Effect>,
     /// A boss explosion fired this step; `Some(form2)` picks its sound pair.
     pub boss_explosion: Option<bool>,
+    /// A carrier pod opened this step (the one-shot deploy sound).
+    pub pod_deployed: bool,
     /// Which per-level AI set drives mode-0 entities, when transcribed.
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
@@ -215,6 +217,7 @@ impl Spawns {
             shots: Vec::new(),
             effects: Vec::new(),
             boss_explosion: None,
+            pod_deployed: false,
             ai,
             rng: EngineRng::new(clock_seed()),
             orb_drop_countdown: 0,
@@ -299,6 +302,7 @@ impl Spawns {
                 boss: &mut self.boss,
                 gate: &mut self.gate,
                 boss_explosion: &mut self.boss_explosion,
+                pod_deployed: &mut self.pod_deployed,
             };
 
             for entity in &mut self.entities {

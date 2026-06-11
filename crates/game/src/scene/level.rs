@@ -338,6 +338,11 @@ impl LevelScene {
             self.sfx.boss_explosion(form2, &self.assets.sfx, audio);
         }
 
+        if spawns.pod_deployed {
+            spawns.pod_deployed = false;
+            self.sfx.pod_deployed(&self.assets.sfx, audio);
+        }
+
         // The per-kind death sounds restart the impact channel in death
         // order, so the last kill's sample wins the tick, like the original.
         for kind in &events.kills {

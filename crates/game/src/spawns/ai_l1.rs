@@ -29,6 +29,8 @@ pub(super) struct AiContext<'a> {
     pub gate: &'a mut u8,
     /// A boss explosion fired this step (`Some(form2)` picks its sounds).
     pub boss_explosion: &'a mut Option<bool>,
+    /// A carrier pod opened this step (the one-shot deploy sound).
+    pub pod_deployed: &'a mut bool,
 }
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
@@ -211,9 +213,10 @@ fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
         return;
     }
 
-    // Deployed: runs every call while on the final frame.
+    // Deployed: runs every call while on the final frame; the deploy sound
+    // (0xace3, the level's enemy voice) fires once.
     if entity.phase_a & 0xff != 0x11 {
-        // TODO: deploy SFX (0xace3).
+        *ctx.pod_deployed = true;
         entity.phase_a = (entity.phase_a & 0xff00) | 0x11;
     }
 
