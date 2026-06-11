@@ -13,6 +13,13 @@
 
 use crate::shots::Weapons;
 use crate::spawns::{Entity, Spawns, descriptor_hitboxes};
+use openprototype_core::game_state::{GameState, HitOutcome, Severity};
+
+/// The L1 WAD's ship hit-rect table (`cs:0x4771`), one pointer per roll band.
+///
+/// TODO: per-level offsets once the other levels' combat is wired (locate
+/// like the spawn tables).
+const SHIP_RECT_TABLE: usize = 0x4771;
 
 /// What a combat pass tells the scene.
 #[derive(Default)]
@@ -22,6 +29,8 @@ pub struct CombatEvents {
     /// A type at or past the level-end descriptor died (the original sets
     /// `cs:0xcc1/0xcc2`).
     pub level_end: bool,
+    /// The worst thing that happened to the ship this pass.
+    pub ship: Option<HitOutcome>,
 }
 
 /// Runs the player-shot pass: every live shot against every live entity.
@@ -203,6 +212,24 @@ fn center_offset(wad: &[u8], cs_base: usize, kind: u16) -> (i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openprototype_core::PerWeapon;
+    use openprototype_core::game_state::{Lives, SmartBombs, Weapon, WeaponLevel};
+
+    fn fresh_state() -> GameState {
+        GameState {
+            score: 0,
+            lives: Lives::new(3),
+            smart_bombs: SmartBombs::new(0),
+            weapons: PerWeapon::splat(WeaponLevel::new(2)),
+            selected: Weapon::Multishot,
+            invincible_ticks: 0,
+        }
+    }
+
+    /// Three rects all sitting on the ship at (100, 50).
+    fn rects_at(x: i32, y: i32) -> ShipRects {
+        [[x, y, x + 32, y + 24]; 3]
+    }
 
     fn entity(x: i32, y: i32, health: i32) -> Entity {
         Entity {
@@ -262,6 +289,51 @@ mod tests {
     }
 
     #[test]
+    fn touching_a_pickup_grants_and_removes_it() {
+        let mut spawns = Spawns::new(Vec::new(), None);
+        let mut orb = entity(100, 50, 350);
+        orb.kind = 0x36ea;
+        spawns.entities.push(orb);
+
+        let mut state = fresh_state();
+        let mut events = CombatEvents::default();
+        body_contact(
+            &mut spawns,
+            &rects_at(100, 50),
+            &mut state,
+            &[],
+            0,
+            &mut events,
+        );
+
+        assert!(spawns.entities.is_empty());
+        assert_eq!(state.level(Weapon::Multishot).get(), 3);
+        assert_eq!(events.ship, None);
+    }
+
+    #[test]
+    fn ramming_an_enemy_costs_the_bar_and_kills_it() {
+        let mut spawns = Spawns::new(Vec::new(), None);
+        spawns.entities.push(entity(100, 50, 100));
+
+        let mut state = fresh_state();
+        let mut events = CombatEvents::default();
+        body_contact(
+            &mut spawns,
+            &rects_at(100, 50),
+            &mut state,
+            &[],
+            0,
+            &mut events,
+        );
+
+        // The selected bar zeroes, the rammed enemy dies and is reaped.
+        assert_eq!(state.level(Weapon::Multishot).get(), 0);
+        assert_eq!(events.ship, Some(HitOutcome::Absorbed));
+        assert!(spawns.entities.is_empty() || spawns.entities[0].kind == 0x36ea);
+    }
+
+    #[test]
     fn an_exact_kill_is_absorbed_not_pierced() {
         // health == damage takes the >= branch: absorbed, health 0.
         let mut entities = vec![entity(100, 50, 12)];
@@ -271,5 +343,188 @@ mod tests {
             ShotOutcome::Absorbed
         );
         assert_eq!(entities[0].health, 0);
+    }
+}
+
+/// One ship hit rect in screen pixels: `[x_min, y_min, x_max, y_max]`.
+pub type ShipRects = [[i32; 4]; 3];
+
+/// Builds the ship's three hit rects for the current roll frame (file
+/// `0xda25`): the per-band block of byte offsets, anchored at the ship.
+///
+/// The original indexes the pointer table byte-granularly with `roll / 9`;
+/// the roll counts in 0x12 steps, so that is `frame * 2` over a table that
+/// duplicates each word. A `0xff` offset pushes the rect ~255 px away, which
+/// disables it with no explicit check.
+pub fn ship_rects(wad: &[u8], cs_base: usize, roll_frame: usize, x: i32, y: i32) -> ShipRects {
+    let entry = SHIP_RECT_TABLE + cs_base + roll_frame * 2;
+
+    if wad.len() < entry + 2 {
+        return [[i32::MAX, i32::MAX, i32::MAX, i32::MAX]; 3];
+    }
+
+    let block = usize::from(u16::from_le_bytes([wad[entry], wad[entry + 1]])) + cs_base;
+
+    std::array::from_fn(|rect| {
+        let at = block + rect * 4;
+
+        if wad.len() < at + 4 {
+            return [i32::MAX, i32::MAX, i32::MAX, i32::MAX];
+        }
+
+        [
+            x + i32::from(wad[at]),
+            y + i32::from(wad[at + 1]),
+            x + i32::from(wad[at + 2]),
+            y + i32::from(wad[at + 3]),
+        ]
+    })
+}
+
+/// Runs the enemy-shot pass against the ship (file `0xc3f1`): each shot's
+/// AABB against the three rects. Hits cull the shot regardless of
+/// invincibility (the original sparks and culls before the consequence);
+/// the returned count is how many hits the caller applies as
+/// [`Severity::Bullet`].
+pub fn enemy_shots_vs_ship(
+    spawns: &mut Spawns,
+    wad: &[u8],
+    cs_base: usize,
+    rects: &ShipRects,
+) -> u32 {
+    let mut hits = 0;
+
+    spawns.shots.retain(|shot| {
+        let x = shot.x >> 4;
+        let y = shot.y >> 4;
+
+        if y < 0 {
+            return true;
+        }
+
+        let (size_x, size_y) = shot_size(wad, cs_base, shot.sprite);
+        let hit = rects.iter().any(|rect| {
+            x + size_x > rect[0] && x <= rect[2] && y + size_y > rect[1] && y <= rect[3]
+        });
+
+        if hit {
+            // TODO: hit spark (0x34da) into the effects buffer.
+            hits += 1;
+        }
+
+        !hit
+    });
+
+    hits
+}
+
+/// An enemy shot's collision extent: the first two hitbox bytes of its
+/// sprite descriptor (what the original's `spawn_shot` copies into the
+/// record).
+fn shot_size(wad: &[u8], cs_base: usize, sprite: u16) -> (i32, i32) {
+    let at = usize::from(sprite) + cs_base + 8;
+
+    if wad.len() < at + 2 {
+        return (0, 0);
+    }
+
+    (i32::from(wad[at]), i32::from(wad[at + 1]))
+}
+
+/// Runs the body-contact pass (file `0xdae1`): every live entity's three
+/// boxes against the three ship rects; the first overlap resolves.
+///
+/// Pickups grant immediately (the original routes them through a sentinel
+/// health value and grants on the next update; the one-frame delay and its
+/// smart-bomb corruption edge case are not reproduced). A rammed enemy costs
+/// the ship a [`Severity::Collision`] hit and dies in place unless it is an
+/// orbiter or the boss; the deaths run through [`reap`] with the rest.
+pub fn body_contact(
+    spawns: &mut Spawns,
+    rects: &ShipRects,
+    state: &mut GameState,
+    wad: &[u8],
+    cs_base: usize,
+    events: &mut CombatEvents,
+) {
+    let mut rammed = false;
+    let mut index = 0;
+
+    while index < spawns.entities.len() {
+        let entity = &spawns.entities[index];
+
+        if entity.health <= 0 || !touches_ship(entity, rects) {
+            index += 1;
+            continue;
+        }
+
+        match entity.kind {
+            // TODO: pickup SFX (0xacc3) and the HUD bar effect.
+            0x36ea => {
+                state.level_up();
+                spawns.entities.swap_remove(index);
+            }
+            0x3750 => {
+                state.smart_bombs = state.smart_bombs.saturating_add(1);
+                spawns.entities.swap_remove(index);
+            }
+            0x37b6 => {
+                state.invincible_ticks = 600;
+                spawns.entities.swap_remove(index);
+            }
+            0x382c => {
+                state.lives = state.lives.saturating_add(1);
+                spawns.entities.swap_remove(index);
+            }
+            kind => {
+                match state.take_hit(Severity::Collision) {
+                    // Invincible: the ram has no effect on either side.
+                    HitOutcome::Shielded => {}
+                    outcome => {
+                        events.ship = merge_ship_outcome(events.ship, outcome);
+                        rammed = true;
+
+                        // The rammed enemy dies, except orbiters and the boss.
+                        if kind != 0x392e && kind < 0x3ae8 {
+                            spawns.entities[index].health = 0;
+                        }
+                    }
+                }
+
+                index += 1;
+            }
+        }
+    }
+
+    if rammed {
+        reap(spawns, wad, cs_base, events);
+    }
+}
+
+/// Tests an entity's three boxes against the three ship rects (9 overlap
+/// tests; the original has no 0xff disable check here, the unsigned byte
+/// offsets push disabled boxes out of reach instead).
+fn touches_ship(entity: &Entity, rects: &ShipRects) -> bool {
+    let ex = entity.x >> 4;
+    let ey = entity.y >> 4;
+
+    entity.hitboxes.iter().any(|hitbox| {
+        let x_min = ex + i32::from(hitbox[0]);
+        let y_min = ey + i32::from(hitbox[1]);
+        let x_max = ex + i32::from(hitbox[2]);
+        let y_max = ey + i32::from(hitbox[3]);
+
+        rects.iter().any(|rect| {
+            rect[2] >= x_min && rect[0] <= x_max && rect[3] >= y_min && rect[1] <= y_max
+        })
+    })
+}
+
+/// Keeps the worse of two ship outcomes across a pass.
+fn merge_ship_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<HitOutcome> {
+    match (current, new) {
+        (Some(HitOutcome::GameOver), _) | (_, HitOutcome::GameOver) => Some(HitOutcome::GameOver),
+        (Some(HitOutcome::Died), _) | (_, HitOutcome::Died) => Some(HitOutcome::Died),
+        (current, new) => current.or(Some(new)),
     }
 }

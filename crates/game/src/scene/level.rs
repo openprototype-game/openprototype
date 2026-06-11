@@ -32,6 +32,7 @@ use crate::spawns::Spawns;
 use crate::stars::StarField;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::game_state::{HitOutcome, Severity};
 use openprototype_core::input::{Key, KeyEvent};
 use openprototype_core::{
     ActiveWeapon, GameState, Lives, PerWeapon, SmartBombs, Weapon, WeaponLevel,
@@ -80,6 +81,9 @@ pub struct LevelScene {
     /// The enemy/pickup spawn schedule and live entities, when the level's
     /// spawn-position table is known.
     spawns: Option<Spawns>,
+    /// The smart bomb's delayed-damage countdown (`cs:0x2745`): armed at 15
+    /// on use, the field-wide damage lands when it reaches 1.
+    bomb_countdown: u8,
     /// The level's star field, seeded from the wall clock like the original.
     stars: StarField,
     /// The player ship, flown with the arrow keys.
@@ -155,6 +159,7 @@ impl LevelScene {
             background_scroll,
             scenery_scroll,
             spawns,
+            bomb_countdown: 0,
             stars,
             ship,
             weapons,
@@ -226,21 +231,8 @@ impl LevelScene {
     /// `audio`.
     fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
-            if let (Some(spawns), Some(rows)) = (&mut self.spawns, &self.assets.spawn_rows) {
-                spawns.tick(rows, &self.assets.wad, self.assets.cs_base);
-                spawns.step_movement(&self.assets.wad, self.ship.position());
-
-                let mut events = CombatEvents::default();
-                combat::player_shots(
-                    &mut self.weapons,
-                    spawns,
-                    &self.assets.wad,
-                    self.assets.cs_base,
-                    &mut events,
-                );
-                self.state.score += events.score;
-                // TODO: events.level_end ends the level once the flow exists.
-            }
+            self.state.tick();
+            self.run_combat();
 
             self.ship
                 .update(self.held, &mut self.camera_y, self.assets.camera_min);
@@ -275,6 +267,72 @@ impl LevelScene {
         while self.pod_frame < POD_SETTLED_FRAME && self.pod_ticks >= POD_FRAME_TICKS {
             self.pod_ticks -= POD_FRAME_TICKS;
             self.pod_frame += 1;
+        }
+    }
+
+    /// One tick of the spawn clock, enemy movement, and every combat pass.
+    fn run_combat(&mut self) {
+        let (Some(spawns), Some(rows)) = (&mut self.spawns, &self.assets.spawn_rows) else {
+            return;
+        };
+
+        let wad = &self.assets.wad;
+        let cs_base = self.assets.cs_base;
+
+        spawns.tick(rows, wad, cs_base);
+        spawns.step_movement(wad, self.ship.position());
+
+        let mut events = CombatEvents::default();
+
+        // The smart bomb's field-wide damage lands 14 ticks after use
+        // (`cs:0x2745` reaching 1 sets the one-frame 600 across the board).
+        if self.bomb_countdown > 0 {
+            self.bomb_countdown -= 1;
+
+            if self.bomb_countdown == 1 {
+                self.bomb_countdown = 0;
+
+                for entity in &mut spawns.entities {
+                    entity.health -= 600;
+                }
+
+                combat::reap(spawns, wad, cs_base, &mut events);
+            }
+        }
+
+        combat::player_shots(&mut self.weapons, spawns, wad, cs_base, &mut events);
+
+        let (ship_x, ship_y) = self.ship.position();
+        let rects = combat::ship_rects(wad, cs_base, self.ship.roll_frame(), ship_x, ship_y);
+
+        for _ in 0..combat::enemy_shots_vs_ship(spawns, wad, cs_base, &rects) {
+            let outcome = self.state.take_hit(Severity::Bullet);
+            events.ship = merge_outcome(events.ship, outcome);
+
+            // A drain to zero loses the weapon mid-hold (the original's
+            // immediate revert to the minigun).
+            if outcome == HitOutcome::Absorbed && self.state.level(self.state.selected).get() == 0 {
+                self.weapons.weapon_lost();
+            }
+        }
+
+        combat::body_contact(spawns, &rects, &mut self.state, wad, cs_base, &mut events);
+
+        self.state.add_score(events.score);
+        // TODO: events.level_end ends the level once the flow exists.
+
+        match events.ship {
+            Some(HitOutcome::Died) => {
+                // The original runs a death sequence and a GET READY; the
+                // port respawns with the fly-in directly.
+                self.ship = Ship::new(self.assets.ship);
+            }
+            Some(HitOutcome::GameOver) => {
+                // TODO: the game-over flow (exit to the front-end). The dev
+                // scene respawns regardless.
+                self.ship = Ship::new(self.assets.ship);
+            }
+            _ => {}
         }
     }
 
@@ -396,6 +454,12 @@ impl Scene for LevelScene {
             match *event {
                 KeyEvent::Pressed(key) => match key {
                     Key::Shift => self.cycle_weapon(),
+                    Key::Char(' ') => {
+                        if self.bomb_countdown == 0 && self.state.use_smart_bomb() {
+                            self.bomb_countdown = 15;
+                            // TODO: the 32-record expanding orb ring visual.
+                        }
+                    }
                     Key::Up => self.held.up = true,
                     Key::Down => self.held.down = true,
                     Key::Left => self.held.left = true,
@@ -471,6 +535,15 @@ impl Scene for LevelScene {
         // Driving frames at this rate makes the platform's fixed `dt` exactly one
         // [`TICK`], so the scroll advances one tick per frame with no beating.
         TICK
+    }
+}
+
+/// Keeps the worse of two ship outcomes across the tick's passes.
+fn merge_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<HitOutcome> {
+    match (current, new) {
+        (Some(HitOutcome::GameOver), _) | (_, HitOutcome::GameOver) => Some(HitOutcome::GameOver),
+        (Some(HitOutcome::Died), _) | (_, HitOutcome::Died) => Some(HitOutcome::Died),
+        (current, new) => current.or(Some(new)),
     }
 }
 

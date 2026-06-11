@@ -413,6 +413,13 @@ impl Weapons {
         }
     }
 
+    /// The firing weapon's bar hit zero mid-hold: revert to the chaingun
+    /// with the original's cooldown (the hit consequence at file 0xc52c).
+    pub fn weapon_lost(&mut self) {
+        self.firing = ActiveWeapon::Chaingun;
+        self.rate = 6;
+    }
+
     fn spawn(&mut self, kind: ShotKind, x: i32, y: i32, dx: i32, dy: i32) {
         if self.shots.len() >= MAX_SHOTS {
             return;
