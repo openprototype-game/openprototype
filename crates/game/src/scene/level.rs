@@ -122,14 +122,7 @@ pub struct LevelScene {
 
 impl LevelScene {
     pub fn new(assets: Rc<LevelAssets>) -> Self {
-        let state = GameState {
-            score: 0,
-            lives: Lives::new(3),
-            smart_bombs: SmartBombs::new(3),
-            weapons: PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX)),
-            selected: Weapon::Multishot,
-            invincible_ticks: 0,
-        };
+        let state = new_game_state();
 
         eprintln!(
             "level scene: arrows fly the ship, Shift cycles weapon, \
@@ -232,7 +225,7 @@ impl LevelScene {
     fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
             self.state.tick();
-            self.run_combat();
+            self.run_combat(audio);
 
             self.ship
                 .update(self.held, &mut self.camera_y, self.assets.camera_min);
@@ -280,7 +273,7 @@ impl LevelScene {
     }
 
     /// One tick of the spawn clock, enemy movement, and every combat pass.
-    fn run_combat(&mut self) {
+    fn run_combat(&mut self, audio: &mut Vec<AudioCommand>) {
         let (Some(spawns), Some(rows)) = (&mut self.spawns, &self.assets.spawn_rows) else {
             return;
         };
@@ -289,7 +282,13 @@ impl LevelScene {
         let cs_base = self.assets.cs_base;
 
         spawns.tick(rows, wad, cs_base);
+
+        let shots_before = spawns.shots.len();
         spawns.step_movement(wad, self.ship.position());
+
+        if spawns.shots.len() > shots_before {
+            self.sfx.enemy_fired(&self.assets.sfx, audio);
+        }
 
         let mut events = CombatEvents::default();
 
@@ -544,6 +543,19 @@ impl Scene for LevelScene {
         // Driving frames at this rate makes the platform's fixed `dt` exactly one
         // [`TICK`], so the scroll advances one tick per frame with no beating.
         TICK
+    }
+}
+
+/// The fresh-game player state (the original's new-game init is untraced;
+/// these are the dev scene's starting values).
+fn new_game_state() -> GameState {
+    GameState {
+        score: 0,
+        lives: Lives::new(3),
+        smart_bombs: SmartBombs::new(3),
+        weapons: PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX)),
+        selected: Weapon::Multishot,
+        invincible_ticks: 0,
     }
 }
 

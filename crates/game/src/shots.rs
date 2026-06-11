@@ -157,6 +157,16 @@ impl Shot {
     pub fn is_plasma(&self) -> bool {
         matches!(self.kind, ShotKind::PlasmaBolt | ShotKind::PlasmaBall)
     }
+
+    /// Whether a hit by this shot plays the chaingun impact (`0xad83`).
+    pub fn is_chaingun(&self) -> bool {
+        matches!(self.kind, ShotKind::Chaingun)
+    }
+
+    /// Whether a hit by this shot plays the missile impact (`0xad63`).
+    pub fn is_missile(&self) -> bool {
+        matches!(self.kind, ShotKind::Missile)
+    }
 }
 
 /// A shot's initial damage budget (the spawners' `+0xe` literals).

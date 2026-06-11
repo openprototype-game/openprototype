@@ -24,6 +24,8 @@ use std::sync::Arc;
 use openprototype_core::audio::{AudioCommand, PlaySfx};
 use openprototype_core::{ActiveWeapon, Weapon};
 
+/// The explosions/impacts mixer channel.
+const IMPACT_CHANNEL: usize = 0;
 /// The player-weapon mixer channel.
 const WEAPON_CHANNEL: usize = 1;
 /// The pickups/enemy/weapon-switch mixer channel.
@@ -31,9 +33,18 @@ const EVENT_CHANNEL: usize = 2;
 
 /// Sample slots in the WAD's filename table.
 const SLOT_CHAINGUN: usize = 0;
+const SLOT_CHAINHIT: usize = 1;
 const SLOT_CHANGEWE: usize = 2;
+const SLOT_POD_DEATH: usize = 3;
+const SLOT_EXPLOSION: usize = 4;
+const SLOT_ASTEROID_DEATH: usize = 5;
+const SLOT_PEBBLE: usize = 6;
+const SLOT_PICKUP: usize = 7;
+const SLOT_MISSILE_IMPACT: usize = 9;
 const SLOT_MISSILE: usize = 10;
 const SLOT_PLASMAGU: usize = 11;
+const SLOT_ENEMY_SHOT: usize = 12;
+const SLOT_DRAIN: usize = 13;
 const SLOT_BURNING2: usize = 14;
 const SLOT_MULTISHO: usize = 15;
 
@@ -99,6 +110,61 @@ impl Sfx {
     /// than on the switch key itself).
     pub fn weapon_switched(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, SLOT_CHANGEWE, EVENT_CHANNEL, false, audio);
+    }
+
+    /// An enemy died: the big explosion, except the asteroid and carrier-pod
+    /// types whose dedicated samples land on the same channel (the original
+    /// plays both back to back; the second write wins the channel).
+    pub fn enemy_died(&self, kind: u16, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        let slot = match kind {
+            0x3308 => SLOT_ASTEROID_DEATH,
+            0x38b0 => SLOT_POD_DEATH,
+            _ => SLOT_EXPLOSION,
+        };
+
+        play(bank, slot, IMPACT_CHANNEL, false, audio);
+    }
+
+    /// The ship died (the body-contact/shot consequence's `0xad23`).
+    pub fn ship_died(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_EXPLOSION, IMPACT_CHANNEL, false, audio);
+    }
+
+    /// A pickup was collected (`0xacc3`).
+    pub fn pickup_collected(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_PICKUP, EVENT_CHANNEL, false, audio);
+    }
+
+    /// A dying enemy converted into the weapon orb (`0xaca3`).
+    pub fn orb_dropped(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_PEBBLE, EVENT_CHANNEL, false, audio);
+    }
+
+    /// A hit drained the firing weapon one level (`0xadde`).
+    pub fn weapon_drained(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_DRAIN, EVENT_CHANNEL, false, audio);
+    }
+
+    /// The firing weapon's bar hit zero, or a ram zeroed it (`0xac83`).
+    pub fn weapon_lost(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_CHANGEWE, EVENT_CHANNEL, false, audio);
+    }
+
+    /// An enemy fired a shot (`0xae33`).
+    pub fn enemy_fired(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_ENEMY_SHOT, EVENT_CHANNEL, false, audio);
+    }
+
+    /// A chaingun round hit an enemy (`0xad83`; the original only plays it
+    /// while the minigun is the firing weapon and skips a busy channel —
+    /// TODO: the don't-interrupt guard).
+    pub fn chaingun_impact(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_CHAINHIT, IMPACT_CHANNEL, false, audio);
+    }
+
+    /// A missile hit an enemy (`0xad63`).
+    pub fn missile_impact(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_MISSILE_IMPACT, IMPACT_CHANNEL, false, audio);
     }
 }
 

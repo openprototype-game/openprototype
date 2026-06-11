@@ -149,6 +149,12 @@ impl Ship {
         self.roll as usize
     }
 
+    /// Arms the shield visual for `ticks` (the invincibility pickup relights
+    /// it; the original drives both off the same `cs:0x266a` counter).
+    pub fn arm_shield(&mut self, ticks: i32) {
+        self.shield_ticks = ticks;
+    }
+
     /// Advance one logic tick: animations, movement, and the camera coupling.
     pub fn update(&mut self, held: HeldKeys, camera: &mut i32, camera_min: i32) {
         self.idle_phase = (self.idle_phase + 1) % IDLE_PHASES;

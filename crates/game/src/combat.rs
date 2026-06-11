@@ -31,6 +31,20 @@ pub struct CombatEvents {
     pub level_end: bool,
     /// The worst thing that happened to the ship this pass.
     pub ship: Option<HitOutcome>,
+    /// The ram consequence alone (for its distinct sound).
+    pub ram: Option<HitOutcome>,
+    /// The kinds that died this pass, in death order (the per-type death
+    /// sounds share a channel, so the last one wins, like the original).
+    pub kills: Vec<u16>,
+    /// A kill converted into the weapon orb (`0xaca3`).
+    pub orb_dropped: bool,
+    /// A chaingun round / missile connected (`0xad83`/`0xad63`).
+    pub chaingun_impact: bool,
+    pub missile_impact: bool,
+    /// A pickup was collected (`0xacc3`).
+    pub pickup: bool,
+    /// The invincibility pickup specifically (arms the shield visual).
+    pub shield_pickup: bool,
 }
 
 /// Runs the player-shot pass: every live shot against every live entity.
@@ -48,14 +62,21 @@ pub fn player_shots(
         let (size_x, size_y) = shot.collision_size();
         let budget = shot.damage;
 
-        match apply_shot(
+        let outcome = apply_shot(
             &mut spawns.entities,
             shot.x >> 4,
             shot.y >> 4,
             size_x,
             size_y,
             budget,
-        ) {
+        );
+
+        if outcome != ShotOutcome::Missed {
+            events.chaingun_impact |= shot.is_chaingun();
+            events.missile_impact |= shot.is_missile();
+        }
+
+        match outcome {
             ShotOutcome::Missed => true,
             ShotOutcome::Absorbed => false,
             ShotOutcome::Pierced(remaining) => {
@@ -161,6 +182,8 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             events.level_end = true;
             spawns.level_end = true;
         }
+
+        events.kills.push(kind);
 
         // TODO: per-type death SFX (0xad23, plus 0xad03/0xad43 specials) and
         // the debris template (descriptor +0x14) into the effects buffer.
@@ -466,21 +489,26 @@ pub fn body_contact(
         }
 
         match entity.kind {
-            // TODO: pickup SFX (0xacc3) and the HUD bar effect.
+            // TODO: the HUD bar pickup effect.
             0x36ea => {
                 state.level_up();
+                events.pickup = true;
                 spawns.entities.swap_remove(index);
             }
             0x3750 => {
                 state.smart_bombs = state.smart_bombs.saturating_add(1);
+                events.pickup = true;
                 spawns.entities.swap_remove(index);
             }
             0x37b6 => {
                 state.invincible_ticks = 600;
+                events.pickup = true;
+                events.shield_pickup = true;
                 spawns.entities.swap_remove(index);
             }
             0x382c => {
                 state.lives = state.lives.saturating_add(1);
+                events.pickup = true;
                 spawns.entities.swap_remove(index);
             }
             kind => {
@@ -489,6 +517,7 @@ pub fn body_contact(
                     HitOutcome::Shielded => {}
                     outcome => {
                         events.ship = merge_ship_outcome(events.ship, outcome);
+                        events.ram = merge_ship_outcome(events.ram, outcome);
                         rammed = true;
 
                         // The rammed enemy dies, except orbiters and the boss.
