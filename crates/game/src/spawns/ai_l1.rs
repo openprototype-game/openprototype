@@ -12,7 +12,7 @@
 //! orbiter frame patch's hitbox/claw writes, and the firing-weapon gate bypass
 //! (`cs:0xcb5 == 3`).
 
-use super::{Entity, Shot, descriptor_hitboxes};
+use super::{Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
 
 /// Per-step context the AI functions read and write besides the entity.
@@ -23,9 +23,12 @@ pub(super) struct AiContext<'a> {
     pub player_x: i32,
     pub player_y: i32,
     pub shots: &'a mut Vec<Shot>,
+    pub effects: &'a mut Vec<Effect>,
     pub boss: &'a mut BossState,
     /// The boss/orbiter gate counter (`cs:0x269c`).
     pub gate: &'a mut u8,
+    /// A boss explosion fired this step (`Some(form2)` picks its sounds).
+    pub boss_explosion: &'a mut Option<bool>,
 }
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
@@ -215,8 +218,19 @@ fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
     }
 
     entity.x -= 0x80;
-    // TODO: push the 0x35e2 child onto the spawn/effects queue every call
-    // (the original's retreat speed bounds the count).
+
+    // The pod streams its child animation every call while deployed; the
+    // retreat speed bounds the count, like the original.
+    ctx.effects.push(Effect {
+        sprite: 0x35e2,
+        x: (entity.x >> 4) + 0x12,
+        y: (entity.y >> 4) + 4,
+        frames: 0xf,
+        rate: 1,
+        step: 8,
+        phase: 0,
+        delay: 0,
+    });
 }
 
 /// `random_aimed_shot` (file 0xc7d4): one `rng(0xe6)` draw per call, fires an
@@ -398,6 +412,14 @@ fn orbiter_frame_patch(entity: &mut Entity, wad: &[u8]) {
 
     if wad.len() >= at + 4 {
         entity.hitboxes[1] = [wad[at], wad[at + 1], wad[at + 2], wad[at + 3]];
+    }
+
+    // The pose's debris pointer (the claw-word table at file 0xc8c2): the
+    // death explosion matches the claw extension.
+    let claw = 0xc8c2 + index * 2;
+
+    if wad.len() >= claw + 2 {
+        entity.debris = u16::from_le_bytes([wad[claw], wad[claw + 1]]);
     }
 }
 
@@ -600,13 +622,36 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
         ctx.boss.explosion_timer -= 1;
 
         if ctx.boss.explosion_timer <= 0 {
-            // TODO: boss explosion spawner (0xd23b): SFX + an effects-queue
-            // record at a random offset; it also reloads the timer from
-            // rng(0x14)(+0xf in form 1). The rng draws are kept for stream
-            // shape once the effects queue exists.
-            ctx.boss.explosion_timer = 0x14;
+            boss_explosion(entity, ctx);
         }
     }
+}
+
+/// The boss explosion spawner (file 0xd23b): a staggered burst at a random
+/// offset, retimed from the PRNG (draw order 0x14, 0x28, 0x1e).
+fn boss_explosion(entity: &Entity, ctx: &mut AiContext) {
+    *ctx.boss_explosion = Some(ctx.boss.form2);
+
+    let mut timer = i32::from(ctx.rng.next(0x14));
+
+    if !ctx.boss.form2 {
+        timer += 0xf;
+    }
+
+    ctx.boss.explosion_timer = timer;
+    let dx = i32::from(ctx.rng.next(0x28)) + 0xf;
+    let dy = i32::from(ctx.rng.next(0x1e)) + 0xf;
+
+    ctx.effects.push(Effect {
+        sprite: if ctx.boss.form2 { 0x3442 } else { 0x34da },
+        x: (entity.x >> 4) + dx,
+        y: (entity.y >> 4) + dy,
+        frames: 9,
+        rate: 3,
+        step: 8,
+        phase: 0,
+        delay: 0,
+    });
 }
 
 /// Boss pattern 1 (`circle`): y from the 0x234-segment wave, x at 1/8 the

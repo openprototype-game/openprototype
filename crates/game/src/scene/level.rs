@@ -334,6 +334,10 @@ impl LevelScene {
         self.state.add_score(events.score);
         // TODO: events.level_end ends the level once the flow exists.
 
+        if let Some(form2) = spawns.boss_explosion.take() {
+            self.sfx.boss_explosion(form2, &self.assets.sfx, audio);
+        }
+
         // The per-kind death sounds restart the impact channel in death
         // order, so the last kill's sample wins the tick, like the original.
         for kind in &events.kills {

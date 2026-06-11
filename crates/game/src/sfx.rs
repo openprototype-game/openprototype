@@ -155,6 +155,15 @@ impl Sfx {
         play(bank, SLOT_ENEMY_SHOT, EVENT_CHANNEL, false, audio);
     }
 
+    /// A boss explosion burst (`0xad43`, plus the big `0xad23` in form 2).
+    pub fn boss_explosion(&self, form2: bool, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_ASTEROID_DEATH, IMPACT_CHANNEL, false, audio);
+
+        if form2 {
+            play(bank, SLOT_EXPLOSION, IMPACT_CHANNEL, false, audio);
+        }
+    }
+
     /// A chaingun round hit an enemy (`0xad83`; the original only plays it
     /// while the minigun is the firing weapon and skips a busy channel —
     /// TODO: the don't-interrupt guard).

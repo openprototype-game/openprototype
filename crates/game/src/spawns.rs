@@ -89,6 +89,9 @@ pub struct Entity {
     pub anim: u8,
     /// The per-life tick counter (entity +0x20).
     pub tick: u16,
+    /// The death-debris template cs-pointer (descriptor +0x14 at spawn; the
+    /// orbiter's pose patch rewrites it so the explosion matches the pose).
+    pub debris: u16,
     /// Three collision boxes (entity +0x8..0x13): unsigned byte offsets
     /// `{dx_min, dy_min, dx_max, dy_max}` from the entity's pixel position; a
     /// leading 0xff disables the box. Copied from the descriptor block at
@@ -112,6 +115,42 @@ pub(crate) fn descriptor_hitboxes(wad: &[u8], cs_base: usize, sprite: u16) -> [[
     }
 
     std::array::from_fn(|box_index| std::array::from_fn(|byte| wad[at + box_index * 4 + byte]))
+}
+
+/// One visual effect (the original's 16-byte buffer-E record): an animated
+/// sprite at a fixed pixel position (`re/l1-effects.md`).
+pub struct Effect {
+    /// The current sprite descriptor cs-pointer; advances by `step` as the
+    /// animation plays.
+    pub sprite: u16,
+    /// Pixel position (camera-inclusive buffer coordinates, not 12.4).
+    pub x: i32,
+    pub y: i32,
+    /// Remaining animation frames; the effect drops when this hits zero.
+    pub frames: u8,
+    /// Sub-steps per animation frame.
+    pub rate: u8,
+    /// Added to `sprite` per frame advance (always 8 in the originals).
+    pub step: u16,
+    /// Sub-steps into the current frame.
+    pub phase: u8,
+    /// Start delay in sub-steps; the effect neither draws nor animates until
+    /// it burns off (the staggered explosion bursts).
+    pub delay: u16,
+}
+
+/// The effects cap, the original's buffer bound.
+const MAX_EFFECTS: usize = 0x18f;
+
+/// Reads an entity's death-debris template pointer (descriptor +0x14).
+pub(crate) fn descriptor_debris(wad: &[u8], cs_base: usize, sprite: u16) -> u16 {
+    let at = usize::from(sprite) + cs_base + 0x14;
+
+    if wad.len() < at + 2 {
+        return 0;
+    }
+
+    u16::from_le_bytes([wad[at], wad[at + 1]])
 }
 
 /// One enemy shot (the original's 16-byte buffer-B record): position and
@@ -140,6 +179,9 @@ pub struct Spawns {
     countdown: i32,
     pub entities: Vec<Entity>,
     pub shots: Vec<Shot>,
+    pub effects: Vec<Effect>,
+    /// A boss explosion fired this step; `Some(form2)` picks its sound pair.
+    pub boss_explosion: Option<bool>,
     /// Which per-level AI set drives mode-0 entities, when transcribed.
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
@@ -171,6 +213,8 @@ impl Spawns {
             countdown,
             entities: Vec::new(),
             shots: Vec::new(),
+            effects: Vec::new(),
+            boss_explosion: None,
             ai,
             rng: EngineRng::new(clock_seed()),
             orb_drop_countdown: 0,
@@ -228,6 +272,7 @@ impl Spawns {
                 seen: false,
                 anim: 0,
                 tick: 0,
+                debris: descriptor_debris(wad, cs_base, record.sprite),
                 hitboxes: descriptor_hitboxes(wad, cs_base, record.sprite),
                 phase_a: 0,
                 phase_b: 0,
@@ -250,8 +295,10 @@ impl Spawns {
                 player_x: player.0,
                 player_y: player.1,
                 shots: &mut self.shots,
+                effects: &mut self.effects,
                 boss: &mut self.boss,
                 gate: &mut self.gate,
+                boss_explosion: &mut self.boss_explosion,
             };
 
             for entity in &mut self.entities {
@@ -288,12 +335,43 @@ impl Spawns {
 
         self.shots
             .retain(|shot| SHOT_X.contains(&shot.x) && SHOT_Y.contains(&shot.y));
+
+        // The effects pass: delayed records burn the step, live ones animate
+        // (every `rate`-th sub-step advances the sprite and spends a frame).
+        self.effects.retain_mut(|effect| {
+            if effect.delay > 0 {
+                effect.delay -= 1;
+                return true;
+            }
+
+            effect.phase += 1;
+
+            if effect.phase >= effect.rate {
+                effect.phase = 0;
+                effect.frames -= 1;
+
+                if effect.frames == 0 {
+                    return false;
+                }
+
+                effect.sprite = effect.sprite.wrapping_add(effect.step);
+            }
+
+            true
+        });
     }
 
     /// Whether the boss/orbiter gate is holding the scroll and spawn clock
     /// (the level-end flag bypasses it, the original's ISR check order).
     pub fn gate_holds(&self) -> bool {
         self.gate > 0 && !self.level_end
+    }
+
+    /// Appends an effect, dropping it past the original's buffer cap.
+    pub fn push_effect(&mut self, effect: Effect) {
+        if self.effects.len() < MAX_EFFECTS {
+            self.effects.push(effect);
+        }
     }
 
     /// Decrements the orb-drop countdown (`cs:0x2666`); `true` means this
@@ -358,6 +436,27 @@ impl Spawns {
                     sprite.size,
                     playfield::LEFT + (shot.x >> 4),
                     (shot.y >> 4) - camera,
+                );
+            }
+        }
+
+        // Effects last (the original's E pass; positions are pixels). Delayed
+        // records stay hidden until their stagger burns off.
+        for effect in &self.effects {
+            if effect.delay > 0 {
+                continue;
+            }
+
+            let sprite = self.sprites.entry(effect.sprite).or_insert_with(|| {
+                directory_sprite(wad, catalog, usize::from(effect.sprite) + cs_base).ok()
+            });
+
+            if let Some(sprite) = sprite {
+                frame.blit_transparent(
+                    &sprite.pixels,
+                    sprite.size,
+                    playfield::LEFT + effect.x,
+                    effect.y - camera,
                 );
             }
         }

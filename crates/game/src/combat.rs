@@ -12,7 +12,7 @@
 //! buffer), death SFX triggers, and the boss/orbiter gate release.
 
 use crate::shots::Weapons;
-use crate::spawns::{Entity, Spawns, descriptor_hitboxes};
+use crate::spawns::{Effect, Entity, Spawns, descriptor_debris, descriptor_hitboxes};
 use openprototype_core::game_state::{GameState, HitOutcome, Severity};
 
 /// The L1 WAD's ship hit-rect table (`cs:0x4771`), one pointer per roll band.
@@ -58,6 +58,8 @@ pub fn player_shots(
     cs_base: usize,
     events: &mut CombatEvents,
 ) {
+    let mut sparks = Vec::new();
+
     weapons.shots.retain_mut(|shot| {
         let (size_x, size_y) = shot.collision_size();
         let budget = shot.damage;
@@ -74,6 +76,32 @@ pub fn player_shots(
         if outcome != ShotOutcome::Missed {
             events.chaingun_impact |= shot.is_chaingun();
             events.missile_impact |= shot.is_missile();
+
+            // The hit spark by shot family (plasma sparks nothing).
+            let x = shot.x >> 4;
+            let y = shot.y >> 4;
+            let spark = if shot.is_chaingun() {
+                Some((0x356a, x - 0x20, y - 3, 6))
+            } else if shot.is_missile() {
+                Some((0x3522, x, y, 9))
+            } else if shot.is_plasma() {
+                None
+            } else {
+                Some((0x359a, x + 0x37, y - 3, 8))
+            };
+
+            if let Some((sprite, x, y, frames)) = spark {
+                sparks.push(Effect {
+                    sprite,
+                    x,
+                    y,
+                    frames,
+                    rate: 3,
+                    step: 8,
+                    phase: 0,
+                    delay: 0,
+                });
+            }
         }
 
         match outcome {
@@ -85,6 +113,10 @@ pub fn player_shots(
             }
         }
     });
+
+    for spark in sparks {
+        spawns.push_effect(spark);
+    }
 
     reap(spawns, wad, cs_base, events);
 }
@@ -184,10 +216,14 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
         }
 
         events.kills.push(kind);
-
-        // TODO: per-type death SFX (0xad23, plus 0xad03/0xad43 specials) and
-        // the debris template (descriptor +0x14) into the effects buffer.
         events.score += score_value(wad, cs_base, kind);
+
+        // The death debris: the entity's template rows burst at its pixel
+        // position with their staggered delays.
+        let px = spawns.entities[index].x >> 4;
+        let py = spawns.entities[index].y >> 4;
+        let debris = spawns.entities[index].debris;
+        spawn_debris(spawns, wad, cs_base, debris, px, py);
 
         // A dying orb pickup is simply removed; everything else feeds the
         // every-Nth orb-drop countdown and may convert in place.
@@ -199,6 +235,7 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             entity.x += center.0;
             entity.y += center.1;
             entity.hitboxes = descriptor_hitboxes(wad, cs_base, 0x36ea);
+            entity.debris = descriptor_debris(wad, cs_base, 0x36ea);
             entity.mode = 0;
             entity.arg = 5;
             entity.health = 0x15e;
@@ -212,6 +249,38 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
         }
 
         spawns.entities.swap_remove(index);
+    }
+}
+
+/// Bursts a death-debris template (a count byte, then 13-byte rows of
+/// effect fields with position offsets) at the death's pixel position.
+fn spawn_debris(spawns: &mut Spawns, wad: &[u8], cs_base: usize, template: u16, x: i32, y: i32) {
+    let at = usize::from(template) + cs_base;
+
+    if template == 0 || wad.len() < at + 1 {
+        return;
+    }
+
+    let count = usize::from(wad[at]);
+
+    for row in 0..count {
+        let at = at + 1 + row * 13;
+
+        if wad.len() < at + 13 {
+            return;
+        }
+
+        let word = |k: usize| i32::from(i16::from_le_bytes([wad[at + k], wad[at + k + 1]]));
+        spawns.push_effect(Effect {
+            sprite: word(0) as u16,
+            x: x + word(2),
+            y: y + word(4),
+            frames: wad[at + 6],
+            rate: wad[at + 7],
+            step: u16::from_le_bytes([wad[at + 8], wad[at + 9]]),
+            phase: wad[at + 10],
+            delay: u16::from_le_bytes([wad[at + 11], wad[at + 12]]),
+        });
     }
 }
 
@@ -273,6 +342,7 @@ mod tests {
             seen: false,
             anim: 0,
             tick: 0,
+            debris: 0,
             // One box covering 0..32 x 0..30 around the entity position.
             hitboxes: [[0, 0, 32, 30], [0xff, 0, 0, 0], [0xff, 0, 0, 0]],
             phase_a: 0,
@@ -423,6 +493,7 @@ pub fn enemy_shots_vs_ship(
     rects: &ShipRects,
 ) -> u32 {
     let mut hits = 0;
+    let mut sparks = Vec::new();
 
     spawns.shots.retain(|shot| {
         let x = shot.x >> 4;
@@ -438,12 +509,25 @@ pub fn enemy_shots_vs_ship(
         });
 
         if hit {
-            // TODO: hit spark (0x34da) into the effects buffer.
+            sparks.push(Effect {
+                sprite: 0x34da,
+                x: x - 5,
+                y: y - 3,
+                frames: 9,
+                rate: 5,
+                step: 8,
+                phase: 0,
+                delay: 0,
+            });
             hits += 1;
         }
 
         !hit
     });
+
+    for spark in sparks {
+        spawns.push_effect(spark);
+    }
 
     hits
 }
