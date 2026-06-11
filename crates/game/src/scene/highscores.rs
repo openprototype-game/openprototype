@@ -5,14 +5,21 @@
 //! menu. From the menu there is never a qualifying score, so this is the
 //! read-only path; name entry (a won game) needs the level engine.
 //!
-//! Each entry flies in with a zoom (`0x2670`): it starts large near the bottom
-//! and shrinks to its row. The size follows the original's ramp exactly,
-//! `size = 25 / (step + 1)` over 25 steps (`K = 1000`, the counter `cs:[0x2643]`
-//! 960→0 by 40, so `K - counter = 40·(step + 1)`). The fast-then-slow look comes
-//! entirely from that size ramp, not the pacing: the scaler's inner loop runs a
-//! fixed 195 rows per step (`0x26ed`) regardless of zoom, so every step is the
-//! same constant work and the timing is uniform. There is no retrace or timer
-//! wait. The absolute per-step pace is set from a recording (see `STEP_DURATION`).
+//! Each entry flies in with a zoom (`0x2670`): the line, at its final
+//! position, is scaled about the screen center (160, 100) by
+//! `25 / (step + 1)` over 25 steps (`K = 1000`, the counter `cs:[0x2643]`
+//! 960→0 by 40, so `K - counter = 40·(step + 1)`). Rows above mid-screen fly
+//! down from above, rows below fly up, and the middle rows mostly just
+//! shrink in place; the composite touches rows 0..194 only. The fast-then-slow
+//! look comes entirely from that hyperbolic ramp, not the pacing: the scaler's
+//! inner loop runs a fixed 195 rows per step regardless of zoom, so every step
+//! is the same constant work and the timing is uniform. There is no retrace or
+//! timer wait. The absolute per-step pace is set from a recording (see
+//! `STEP_DURATION`).
+//!
+//! The fly-in cannot be interrupted. A key aborts the FLI playback and stays
+//! pending until the final blocking key read consumes it, so a key pressed
+//! any time before the table settles exits the moment the last entry lands.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -42,8 +49,12 @@ const FLY_STEPS: usize = 25;
 /// Per-step duration. Steps advance at a uniform rate; a recording of the
 /// original runs the eight-entry fly-in over ~25s, so `8 * 25` steps ≈ 125ms each.
 const STEP_DURATION: Duration = Duration::from_millis(125);
-/// Where the entry's center starts before it shrinks up to its row.
-const START_CENTER_Y: f32 = 188.0;
+/// The zoom's fixed point: the in-flight line scales about the screen center,
+/// so its apparent center is `100 + (final_y - 100) * scale`.
+const SCREEN_CENTER_Y: f32 = 100.0;
+/// The original's scaler composites output rows 0..194 only; the zoomed text
+/// never touches the bottom five rows.
+const COMPOSITE_ROWS: f32 = 195.0;
 
 enum Phase {
     /// `HIGHSCOR.FLI` is playing.
@@ -69,6 +80,9 @@ pub struct HighscoreScreen {
     scores: Highscores,
     framebuffer: Framebuffer,
     phase: Phase,
+    /// A key arrived before the table settled. It stays pending, like the
+    /// original's key flag, and exits the screen once the last entry lands.
+    exit_when_landed: bool,
 }
 
 impl HighscoreScreen {
@@ -78,6 +92,7 @@ impl HighscoreScreen {
             scores,
             framebuffer: Framebuffer::new(Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT), black()),
             phase: Phase::Resting,
+            exit_when_landed: false,
         };
 
         match FlicPlayer::decode_at(&screen.assets.fli, FLI_FRAME_DELAY) {
@@ -148,17 +163,14 @@ impl HighscoreScreen {
         self.framebuffer.palette = fly.backdrop.palette.clone();
 
         if fly.entry < fly.strips.len() {
-            let scale = step_scale(fly.step);
-            let progress = fly.step as f32 / (FLY_STEPS - 1) as f32;
-            let resting_center = resting_center_y(fly.entry);
-            let center_y = START_CENTER_Y + (resting_center - START_CENTER_Y) * progress;
-
+            // The strip spans the full width, so scaling it about the screen's
+            // center column equals the original's zoom about (160, 100).
             blit_scaled(
                 &mut self.framebuffer.image,
                 &fly.strips[fly.entry],
-                scale,
+                step_scale(fly.step),
                 SCREEN_WIDTH as f32 / 2.0,
-                center_y,
+                fly_in_center_y(fly.entry, fly.step),
             );
         }
     }
@@ -170,9 +182,14 @@ impl Scene for HighscoreScreen {
 
         if input.iter().any(|event| event.pressed().is_some()) {
             match self.phase {
-                // A key skips the FLI, then the fly-in, then exits.
-                Phase::Playing(_) => self.start_fly_in(),
-                Phase::FlyingIn(_) => self.land_all_entries(),
+                // A key aborts the FLI playback; the fly-in itself cannot be
+                // interrupted. Either way the key stays pending and exits the
+                // screen once the table settles.
+                Phase::Playing(_) => {
+                    self.exit_when_landed = true;
+                    self.start_fly_in();
+                }
+                Phase::FlyingIn(_) => self.exit_when_landed = true,
                 Phase::Resting => output.transition = Some(Transition::To(SceneId::MainMenu)),
             }
 
@@ -192,6 +209,12 @@ impl Scene for HighscoreScreen {
             }
             Phase::FlyingIn(_) => self.advance_fly_in(dt),
             Phase::Resting => {}
+        }
+
+        // The final blocking key read consumes a key pressed earlier the
+        // moment the table settles.
+        if self.exit_when_landed && matches!(self.phase, Phase::Resting) {
+            output.transition = Some(Transition::To(SceneId::MainMenu));
         }
 
         output
@@ -245,7 +268,8 @@ impl HighscoreScreen {
         }
     }
 
-    /// Skip the fly-in: bake every remaining entry into the backdrop and rest.
+    /// Settle the table: bake any entries still in flight into the backdrop
+    /// at full size and rest.
     fn land_all_entries(&mut self) {
         if let Phase::FlyingIn(fly) = &mut self.phase {
             while fly.entry < fly.strips.len() {
@@ -284,6 +308,13 @@ fn step_scale(step: usize) -> f32 {
     FLY_STEPS as f32 / (step + 1) as f32
 }
 
+/// The in-flight entry's apparent center: its resting center pushed away from
+/// the screen center by the zoom, collapsing onto its row as the scale reaches
+/// one. Entries above mid-screen fly down from above, those below fly up.
+fn fly_in_center_y(entry: usize, step: usize) -> f32 {
+    SCREEN_CENTER_Y + (resting_center_y(entry) - SCREEN_CENTER_Y) * step_scale(step)
+}
+
 /// Composite `strip` onto `target`, scaled by `scale` and centered at
 /// (`center_x`, `center_y`). Nearest-neighbor, inverse-mapped so large scales
 /// clip to the screen. Source index 0 is transparent.
@@ -302,7 +333,9 @@ fn blit_scaled(
     let x0 = left.floor().max(0.0) as i32;
     let x1 = (left + dest_w).ceil().min(SCREEN_WIDTH as f32) as i32;
     let y0 = top.floor().max(0.0) as i32;
-    let y1 = (top + dest_h).ceil().min(SCREEN_HEIGHT as f32) as i32;
+    // The composite stops at row 194, like the original's fixed 195-row scaler
+    // loop; the landed rows all sit above it, so only in-flight frames clip.
+    let y1 = (top + dest_h).ceil().min(COMPOSITE_ROWS) as i32;
 
     for dy in y0..y1 {
         let source_y = ((dy as f32 + 0.5 - top) / scale) as i32;
@@ -371,18 +404,49 @@ mod tests {
     }
 
     #[test]
-    fn a_key_during_the_fly_in_lands_everything() {
+    fn a_key_during_the_fly_in_stays_pending_and_exits_once_landed() {
         let mut screen = test_screen();
 
-        screen.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
-        assert!(matches!(screen.phase, Phase::Resting));
+        // The key does not interrupt the fly-in.
+        let output = screen.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        assert!(matches!(screen.phase, Phase::FlyingIn(_)));
+        assert_eq!(output.transition, None);
 
-        // A further key then returns to the menu.
-        assert_eq!(
-            screen
-                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
-                .transition,
-            Some(Transition::To(SceneId::MainMenu))
-        );
+        // Once the last entry lands, the pending key exits to the menu on the
+        // same update.
+        let mut transition = None;
+
+        for _ in 0..4000 {
+            let output = screen.update(Duration::from_millis(16), &[]);
+
+            if output.transition.is_some() {
+                transition = output.transition;
+                break;
+            }
+
+            assert!(
+                matches!(screen.phase, Phase::FlyingIn(_)),
+                "must not rest without transitioning"
+            );
+        }
+
+        assert_eq!(transition, Some(Transition::To(SceneId::MainMenu)));
+        assert!(matches!(screen.phase, Phase::Resting));
+    }
+
+    #[test]
+    fn the_fly_in_zooms_about_the_screen_center() {
+        // The last step is scale 1: the entry sits exactly on its row.
+        assert_eq!(fly_in_center_y(0, FLY_STEPS - 1), resting_center_y(0));
+        assert_eq!(fly_in_center_y(7, FLY_STEPS - 1), resting_center_y(7));
+
+        // At full zoom, entries above mid-screen start far off the top and
+        // entries below start far off the bottom.
+        assert!(fly_in_center_y(0, 0) < -500.0);
+        assert!(fly_in_center_y(7, 0) > 2000.0);
+
+        // An entry whose row straddles the center barely moves.
+        let near_center = fly_in_center_y(2, 0);
+        assert!((near_center - SCREEN_CENTER_Y).abs() < 200.0);
     }
 }
