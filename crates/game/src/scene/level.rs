@@ -636,7 +636,9 @@ fn new_game_state() -> GameState {
         smart_bombs: SmartBombs::new(3),
         weapons: PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX)),
         selected: Weapon::Multishot,
-        invincible_ticks: 0,
+        // The level-start GET READY arms the same 300-tick shield as a
+        // respawn (the original's `0x266a = 0x12c` init).
+        invincible_ticks: 300,
     }
 }
 

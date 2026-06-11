@@ -434,6 +434,22 @@ mod tests {
     }
 
     #[test]
+    fn the_first_orb_drops_on_the_third_kill() {
+        let mut spawns = Spawns::new(Vec::new(), None);
+        let mut events = CombatEvents::default();
+
+        for kill in 1..=3 {
+            spawns.entities.push(entity(100, 50, 0));
+            reap(&mut spawns, &[], 0, &mut events);
+
+            let converted = spawns.entities.first().is_some_and(|e| e.kind == 0x36ea);
+            assert_eq!(converted, kill == 3, "kill {kill}");
+
+            spawns.entities.clear();
+        }
+    }
+
+    #[test]
     fn an_exact_kill_is_absorbed_not_pierced() {
         // health == damage takes the >= branch: absorbed, health 0.
         let mut entities = vec![entity(100, 50, 12)];

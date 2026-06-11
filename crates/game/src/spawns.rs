@@ -220,7 +220,9 @@ impl Spawns {
             pod_deployed: false,
             ai,
             rng: EngineRng::new(clock_seed()),
-            orb_drop_countdown: 0,
+            // The WAD's data image initializes the countdown to 3, so the
+            // first orb drops on the third kill; rng(4)+5 reseeds after.
+            orb_drop_countdown: 3,
             gate: 0,
             level_end: false,
             boss: ai_l1::BossState::default(),
