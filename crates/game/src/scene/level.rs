@@ -27,6 +27,7 @@ use crate::scenery::SceneryScroll;
 use crate::sfx::Sfx;
 use crate::ship::{HeldKeys, Ship};
 use crate::shots::Weapons;
+use crate::spawns::Spawns;
 use crate::stars::StarField;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
@@ -75,6 +76,9 @@ pub struct LevelScene {
     background_scroll: BackgroundScroll,
     /// Per-layer scroll positions for the level's scenery, advanced each tick.
     scenery_scroll: SceneryScroll,
+    /// The enemy/pickup spawn schedule and live entities, when the level's
+    /// spawn-position table is known.
+    spawns: Option<Spawns>,
     /// The level's star field, seeded from the wall clock like the original.
     stars: StarField,
     /// The player ship, flown with the arrow keys.
@@ -132,6 +136,12 @@ impl LevelScene {
         let background_scroll = assets.background.scroll();
         let scenery_scroll = assets.scenery.scroll();
         let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
+        // The original seeds the layout PRNG from the wall clock at level
+        // init, so the scatter varies every play.
+        let spawns = assets
+            .spawn_rows
+            .is_some()
+            .then(|| Spawns::new(assets.spawns.records(&assets.wad, clock_seed())));
         let ship = Ship::new(assets.ship);
         let weapons = Weapons::new(assets.bob_wave.clone(), state.active_weapon());
         let camera_y = assets.camera_min;
@@ -141,6 +151,7 @@ impl LevelScene {
             frame,
             background_scroll,
             scenery_scroll,
+            spawns,
             stars,
             ship,
             weapons,
@@ -207,10 +218,16 @@ impl LevelScene {
         }
     }
 
-    /// Advance the ship, the parallax scroll, and the pod animation by `ticks`,
-    /// collecting the fire pass's sound triggers into `audio`.
+    /// Advance the ship, the parallax scroll, the spawn clock, and the pod
+    /// animation by `ticks`, collecting the fire pass's sound triggers into
+    /// `audio`.
     fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
+            if let (Some(spawns), Some(rows)) = (&mut self.spawns, &self.assets.spawn_rows) {
+                spawns.tick(rows);
+                spawns.step_movement();
+            }
+
             self.ship
                 .update(self.held, &mut self.camera_y, self.assets.camera_min);
             let sounds = self.weapons.update(
@@ -273,6 +290,16 @@ impl LevelScene {
             &mut self.frame,
             self.camera_y,
         );
+
+        if let Some(spawns) = &mut self.spawns {
+            spawns.render(
+                &self.assets.wad,
+                self.assets.cs_base,
+                &self.assets.clip_catalog,
+                &mut self.frame,
+                self.camera_y,
+            );
+        }
 
         self.weapons
             .render(&self.assets.fire_sprites, &mut self.frame, self.camera_y);
