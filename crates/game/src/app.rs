@@ -128,7 +128,10 @@ mod tests {
     /// Skip the intro to land on the main menu. The intro emits the title theme
     /// on its first update, then the key transitions to the menu.
     fn skip_intro(app: &mut App) {
+        // A key aborts the script onto the closing menu fade-in (40 ticks);
+        // one generous step finishes the fade and hands over to the menu.
         app.step(FRAME, &[KeyEvent::Pressed(Key::Enter)]);
+        app.step(Duration::from_secs(1), &[]);
     }
 
     #[test]

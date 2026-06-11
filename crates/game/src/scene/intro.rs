@@ -4,9 +4,9 @@
 //! still fades in over the starting title theme, then `intro.fli` plays, then
 //! the publisher still, then `fly.fli`, and finally the credits (`credz.fli`
 //! under the dev-team text pages) before the menu. The original's beat
-//! durations are in 70 Hz ticks; they live here as data. Any key skips the
-//! whole intro straight to the menu, as the original lets a keypress abort each
-//! primitive.
+//! durations are in 70 Hz ticks; they live here as data. Any key skips to the
+//! closing menu fade-in: the original's waits all longjmp to the menu setup on
+//! a key, so the whole intro aborts but the 40-tick fade still runs.
 //!
 //! The scene drives one primitive at a time off the elapsed time and reports
 //! [`is_animating`](Scene::is_animating), so the platform pumps it on the
@@ -317,6 +317,19 @@ impl Intro {
         matches!(self.active, Active::Done)
     }
 
+    /// Skip the rest of the intro the way the original does: any key during a
+    /// wait longjmps to the menu setup (the skip exit at `0x3044` jumps to
+    /// `0x4a54`, restoring the stack pointer saved at `0x4772`), which still
+    /// runs the 40-tick menu fade-in. Keys during that final fade do nothing
+    /// (the longjmp target clears the skip gate before it).
+    fn skip_to_menu_fade(&mut self) {
+        let menu_fade = self.script.len() - 1;
+
+        if self.index < menu_fade && !matches!(self.active, Active::Done) {
+            self.start_from(menu_fade);
+        }
+    }
+
     fn render(&mut self) {
         match &self.active {
             Active::Flic(player) => {
@@ -343,8 +356,7 @@ impl Scene for Intro {
         }
 
         if input.iter().any(|event| event.pressed().is_some()) {
-            output.transition = Some(Transition::To(SceneId::MainMenu));
-            return output;
+            self.skip_to_menu_fade();
         }
 
         self.advance(dt);
@@ -547,14 +559,24 @@ mod tests {
     }
 
     #[test]
-    fn any_key_skips_to_the_menu() {
+    fn a_key_skips_to_the_menu_fade_in() {
         let mut intro = test_intro();
         intro.update(Duration::ZERO, &[]); // consume the boot frame
 
+        // The key aborts the script but lands on the closing menu fade-in,
+        // which still runs its 40 ticks before the menu takes over.
+        let output = intro.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        assert_eq!(output.transition, None);
+        assert!(matches!(intro.active, Active::Fade(_)), "menu fade-in runs");
+
+        // A further key during the fade does nothing (the original clears the
+        // skip gate before the fade).
+        let output = intro.update(ticks(10), &[KeyEvent::Pressed(Key::Enter)]);
+        assert_eq!(output.transition, None);
+
+        // The fade completing hands over to the menu.
         assert_eq!(
-            intro
-                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
-                .transition,
+            intro.update(ticks(40), &[]).transition,
             Some(Transition::To(SceneId::MainMenu))
         );
     }
