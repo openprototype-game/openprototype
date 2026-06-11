@@ -583,21 +583,24 @@ impl LevelScene {
             );
         }
 
-        self.weapons
-            .render(&self.assets.fire_sprites, &mut self.frame, self.camera_y);
+        // While the ship is dying, its whole draw block is skipped (the
+        // `cs:0x46b2` gate at file 0xb952): no orbs, no pose, no muzzle
+        // flash, no shield. Only the explosion draws at the ship position
+        // (the gate's target, file 0xbafd). Live shots keep drawing in
+        // their own ungated pass.
+        let dying_frame = match self.flow {
+            Flow::Dying { ticks_left } => Some(((DEATH_TICKS - ticks_left) / 4) as usize),
+            _ => None,
+        };
 
-        self.ship.render(
-            &self.assets.ship_frames,
-            &self.assets.shield_frames,
+        self.weapons.render(
+            &self.assets.fire_sprites,
             &mut self.frame,
             self.camera_y,
+            dying_frame.is_none(),
         );
 
-        // The death explosion draws over the ship at its position (the dying
-        // branch of the ship draw, file 0xbafd).
-        if let Flow::Dying { ticks_left, .. } = self.flow {
-            let frame_index = ((DEATH_TICKS - ticks_left) / 4) as usize;
-
+        if let Some(frame_index) = dying_frame {
             if let Some(sprite) = self.assets.ship_explosion.get(frame_index) {
                 let (x, y) = self.ship.position();
                 self.frame.blit_transparent(
@@ -607,16 +610,23 @@ impl LevelScene {
                     y - self.camera_y,
                 );
             }
-        }
+        } else {
+            self.ship.render(
+                &self.assets.ship_frames,
+                &self.assets.shield_frames,
+                &mut self.frame,
+                self.camera_y,
+            );
 
-        self.weapons.render_flash(
-            &self.assets.fire_sprites,
-            &mut self.frame,
-            self.ship.position(),
-            self.ship.roll_frame(),
-            &self.assets.barrel_offsets,
-            self.camera_y,
-        );
+            self.weapons.render_flash(
+                &self.assets.fire_sprites,
+                &mut self.frame,
+                self.ship.position(),
+                self.ship.roll_frame(),
+                &self.assets.barrel_offsets,
+                self.camera_y,
+            );
+        }
 
         self.assets.scenery.render_front(
             &self.scenery_scroll,

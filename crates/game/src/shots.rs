@@ -658,7 +658,17 @@ impl Weapons {
     /// Composite the live shots and the plasma orbs (window coordinates, like
     /// the ship; the orbs only show while plasma is the firing weapon, drawn
     /// furthest-back first like the original's `0xb952` pass).
-    pub fn render(&self, sprites: &FireSprites, frame: &mut Framebuffer, camera: i32) {
+    ///
+    /// `show_orbs` is off while the ship is dying: the original's draw block
+    /// skips the orbs together with the ship (the `0x46b2` gate at `0xb952`),
+    /// while live shots draw in their own ungated pass.
+    pub fn render(
+        &self,
+        sprites: &FireSprites,
+        frame: &mut Framebuffer,
+        camera: i32,
+        show_orbs: bool,
+    ) {
         for shot in &self.shots {
             // The missile draws offset from its record position, per facing
             // octant (the shot draw at file 0xbc2d): the record anchors the
@@ -686,7 +696,7 @@ impl Weapons {
             );
         }
 
-        if self.firing == ActiveWeapon::Selected(Weapon::Plasma) {
+        if show_orbs && self.firing == ActiveWeapon::Selected(Weapon::Plasma) {
             let positions = self.orb_positions();
 
             for orb in (0..self.orbs.min(ORBS.len())).rev() {
