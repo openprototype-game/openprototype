@@ -25,15 +25,18 @@
 //! last one forward as a slow orb projectile (`cs:[0xce3]`, the launch shot
 //! bypasses the fire-held gate).
 //!
-//! Not ported yet: the missile's homing steer (needs enemies to target).
-//! The spawners' sound triggers are reported through [`FireSounds`] and
-//! mapped to samples by [`crate::sfx`].
+//! The missile homes: each fired missile locks the round-robin's next live
+//! entity and steers toward it once per tick ([`Weapons::steer_missiles`],
+//! file `0xc114`), refacing its sprite to the velocity octant and leaving a
+//! trail puff every step. The spawners' sound triggers are reported through
+//! [`FireSounds`] and mapped to samples by [`crate::sfx`].
 
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::{ActiveWeapon, GameState, Weapon};
 
 use crate::assets::{FireSprites, OverlaySprite};
 use crate::playfield;
+use crate::spawns::{Effect, Entity};
 
 /// The shot pool's record cap (the original errors past `0x5f`).
 const MAX_SHOTS: usize = 95;
@@ -136,6 +139,13 @@ pub struct Shot {
     dx: i32,
     dy: i32,
     pub damage: i32,
+    /// The missile's homing lock (record byte `+0xc`): a 1-based index into
+    /// the live entities, `0` for none. Steering drops a stale lock.
+    target: u16,
+    /// The missile's facing octant, `0` = right counting clockwise; picks
+    /// the render sprite (the original rewrites the record's descriptor
+    /// pointer to `0x32c8 + octant*8`).
+    pub octant: usize,
 }
 
 impl Shot {
@@ -169,6 +179,94 @@ impl Shot {
     }
 }
 
+/// The missile trail puff's sprite descriptor (`0x365a`).
+const MISSILE_TRAIL: u16 = 0x365a;
+
+/// One homing step (the locked branch of file `0xc114`).
+fn steer(shot: &mut Shot, enemy: &Entity, wad: &[u8], cs_base: usize) {
+    let descriptor = usize::from(enemy.kind) + cs_base;
+    let diff_x = enemy.x + read_word(wad, descriptor + 0x1a) - shot.x;
+    let diff_y = enemy.y + read_word(wad, descriptor + 0x1c) - shot.y;
+
+    // Inverse-squared-distance weighting: the closer the target, the harder
+    // the turn. A zero weight means point blank; the lock drops.
+    let weight = (diff_x * diff_x + diff_y * diff_y) / 3;
+
+    if weight == 0 {
+        shot.target = 0;
+        return;
+    }
+
+    let new_dx = shot.dx + diff_x * 0x1800 / weight;
+    let new_dy = shot.dy + diff_y * 0x1800 / weight;
+
+    // Renormalize to a constant speed of 0x30 (3 px) per step.
+    let length = (i64::from(new_dx) * i64::from(new_dx) + i64::from(new_dy) * i64::from(new_dy))
+        .isqrt() as i32;
+    let scale = length / 3;
+
+    if scale == 0 {
+        shot.target = 0;
+        return;
+    }
+
+    shot.dx = (new_dx << 4) / scale;
+    shot.dy = (new_dy << 4) / scale;
+    shot.octant = octant(shot.dx, shot.dy);
+}
+
+/// Classify a velocity into a facing octant, `0` = right counting clockwise
+/// (file `0xc1bd..`). The diagonal band is `major/4 < |minor| <= major`.
+fn octant(dx: i32, dy: i32) -> usize {
+    match (dx >= 0, dy >= 0) {
+        (true, true) => {
+            if dy > dx {
+                2
+            } else if dx / 4 < dy {
+                1
+            } else {
+                0
+            }
+        }
+        (true, false) => {
+            if -dy > dx {
+                6
+            } else if dx / 4 < -dy {
+                7
+            } else {
+                0
+            }
+        }
+        (false, true) => {
+            if dy > -dx {
+                2
+            } else if -dx / 4 < dy {
+                3
+            } else {
+                4
+            }
+        }
+        (false, false) => {
+            if -dy > -dx {
+                6
+            } else if -dx / 4 < -dy {
+                5
+            } else {
+                4
+            }
+        }
+    }
+}
+
+/// Reads a sign-extended word from the WAD image (zero out of bounds).
+fn read_word(wad: &[u8], at: usize) -> i32 {
+    if wad.len() < at + 2 {
+        return 0;
+    }
+
+    i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
+}
+
 /// A shot's initial damage budget (the spawners' `+0xe` literals).
 fn initial_damage(kind: ShotKind) -> i32 {
     match kind {
@@ -191,6 +289,10 @@ pub struct Weapons {
     firing: ActiveWeapon,
     /// The missile's alternating spawn-offset toggle (`cs:[0x267e]`).
     missile_toggle: bool,
+    /// The missile lock's round-robin counter (`cs:[0x267f]`): each fired
+    /// missile takes the current value as its target, then the counter
+    /// advances and wraps into `1..=live entities` (`0` while none live).
+    missile_target: u16,
     /// Muzzle-flash animation offset (`cs:[0xccb]`), `>= FLASH_END` = idle.
     flash_offset: i32,
     /// How many plasma orbs are deployed (`cs:[0xcde]` stage and the
@@ -228,6 +330,7 @@ impl Weapons {
             rate: 6,
             firing,
             missile_toggle: false,
+            missile_target: 0,
             flash_offset: FLASH_END,
             orbs: 0,
             launch_armed: false,
@@ -259,6 +362,9 @@ impl Weapons {
     /// held fire), run the cooldown, spawn due shots from the ship at `(x, y)`
     /// with roll frame `roll` (for the barrel offsets), move the live shots,
     /// and advance the flash. Returns what fired, for the sound triggers.
+    ///
+    /// `enemy_count` is the live entity count, for the missile lock's
+    /// round-robin counter.
     pub fn update(
         &mut self,
         fire_held: bool,
@@ -266,6 +372,7 @@ impl Weapons {
         ship: (i32, i32),
         roll: usize,
         barrels: &[(i32, i32)],
+        enemy_count: usize,
     ) -> FireSounds {
         let mut switched = false;
 
@@ -315,7 +422,7 @@ impl Weapons {
         let mut fired = None;
 
         if fire_held && (due || plasma) {
-            self.fire(state, ship, roll, barrels);
+            self.fire(state, ship, roll, barrels, enemy_count);
             self.cooldown = 0;
             fired = Some(self.firing);
         }
@@ -375,7 +482,14 @@ impl Weapons {
 
     /// Spawn the firing weapon's shots from ship position `(x, y)` (window
     /// pixels) and set its auto-repeat rate. Restarts the muzzle flash.
-    fn fire(&mut self, state: &GameState, (x, y): (i32, i32), roll: usize, barrels: &[(i32, i32)]) {
+    fn fire(
+        &mut self,
+        state: &GameState,
+        (x, y): (i32, i32),
+        roll: usize,
+        barrels: &[(i32, i32)],
+        enemy_count: usize,
+    ) {
         let (barrel_a, barrel_b) = barrels.get(roll).copied().unwrap_or((0, 0));
         self.flash_offset = 0;
 
@@ -417,7 +531,28 @@ impl Weapons {
                 let level = charge_index(state, Weapon::Missile);
                 let dy = if self.missile_toggle { 7 } else { 0 };
                 self.missile_toggle = !self.missile_toggle;
+                let target = self.missile_target;
+                let before = self.shots.len();
                 self.spawn(ShotKind::Missile, x + 35, y + 11 + dy, 48, 0);
+
+                if self.shots.len() > before
+                    && let Some(missile) = self.shots.last_mut()
+                {
+                    missile.target = target;
+                }
+
+                // Advance the lock counter and wrap it into the live entities
+                // (file 0x9cc2: 1-based, 0 while nothing lives).
+                self.missile_target += 1;
+
+                if enemy_count == 0 {
+                    self.missile_target = 0;
+                } else {
+                    while usize::from(self.missile_target) > enemy_count {
+                        self.missile_target -= enemy_count as u16;
+                    }
+                }
+
                 self.rate = [45, 35, 25, 15][level];
             }
         }
@@ -428,6 +563,49 @@ impl Weapons {
     pub fn weapon_lost(&mut self) {
         self.firing = ActiveWeapon::Chaingun;
         self.rate = 6;
+    }
+
+    /// One steering step for every live missile (file `0xc114`, run per
+    /// movement sub-step in the original's shot pass, between the hit test
+    /// and the velocity add).
+    ///
+    /// A locked missile accelerates toward its target's center (descriptor
+    /// `+0x1a`/`+0x1c` offsets) weighted by inverse squared distance, then
+    /// renormalizes to a constant 3 px/step and refaces to the octant of the
+    /// new velocity. Locks drop when stale (index past the live entities) or
+    /// at point blank. Every missile leaves a trail puff every step, locked
+    /// or not.
+    pub fn steer_missiles(
+        &mut self,
+        entities: &[Entity],
+        wad: &[u8],
+        cs_base: usize,
+        effects: &mut Vec<Effect>,
+    ) {
+        for shot in &mut self.shots {
+            if !shot.is_missile() {
+                continue;
+            }
+
+            if shot.target > 0 {
+                if usize::from(shot.target) > entities.len() {
+                    shot.target = 0;
+                } else {
+                    steer(shot, &entities[usize::from(shot.target) - 1], wad, cs_base);
+                }
+            }
+
+            effects.push(Effect {
+                sprite: MISSILE_TRAIL,
+                x: shot.x >> 4,
+                y: (shot.y >> 4) + 4,
+                frames: 0x12,
+                rate: 1,
+                step: 8,
+                phase: 0,
+                delay: 0,
+            });
+        }
     }
 
     fn spawn(&mut self, kind: ShotKind, x: i32, y: i32, dx: i32, dy: i32) {
@@ -442,6 +620,8 @@ impl Weapons {
             dx,
             dy,
             damage: initial_damage(kind),
+            target: 0,
+            octant: 0,
         });
     }
 
@@ -456,7 +636,7 @@ impl Weapons {
                 ShotKind::Burning(level) => &sprites.burning[level],
                 ShotKind::PlasmaBolt => &sprites.plasma_bolt,
                 ShotKind::PlasmaBall => &sprites.plasma_orbs[1][0],
-                ShotKind::Missile => &sprites.missile,
+                ShotKind::Missile => &sprites.missile[shot.octant],
             };
 
             blit(frame, sprite, shot.x >> 4, (shot.y >> 4) - camera);
@@ -537,7 +717,7 @@ mod tests {
 
     fn run(weapons: &mut Weapons, fire: bool, state: &GameState, ticks: u32) {
         for _ in 0..ticks {
-            weapons.update(fire, state, (100, 60), 0, &BARRELS);
+            weapons.update(fire, state, (100, 60), 0, &BARRELS, 0);
         }
     }
 
@@ -675,7 +855,7 @@ mod tests {
         // Move the ship one pixel right per tick; the orbs' trail entries lag
         // by their per-orb delays.
         for tick in 0..20 {
-            weapons.update(true, &state, (100 + tick, 60), 0, &BARRELS);
+            weapons.update(true, &state, (100 + tick, 60), 0, &BARRELS, 0);
         }
 
         let positions = weapons.orb_positions();
@@ -692,25 +872,25 @@ mod tests {
         *state.weapons.get_mut(Weapon::Burning) = WeaponLevel::new(2);
 
         // Chaingun -> multishot reports once, then settles.
-        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(sounds.switched);
-        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(!sounds.switched);
 
         // While fire is held the resolve freezes, so changing the selection
         // stays silent until release.
         state.selected = Weapon::Burning;
-        let sounds = weapons.update(true, &state, (100, 60), 0, &BARRELS);
+        let sounds = weapons.update(true, &state, (100, 60), 0, &BARRELS, 0);
         assert!(!sounds.switched);
-        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(sounds.switched);
 
         // Selecting an uncharged slot resolves back to the chaingun: one
         // switch, then silence again.
         state.selected = Weapon::Missile;
-        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(sounds.switched);
-        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS);
+        let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(!sounds.switched);
     }
 

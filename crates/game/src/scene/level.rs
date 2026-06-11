@@ -368,12 +368,17 @@ impl LevelScene {
                     .update(self.held, &mut self.camera_y, self.assets.camera_min);
             }
 
+            let enemy_count = self
+                .spawns
+                .as_ref()
+                .map_or(0, |spawns| spawns.entities.len());
             let sounds = self.weapons.update(
                 self.fire_held && running,
                 &self.state,
                 self.ship.position(),
                 self.ship.roll_frame(),
                 &self.assets.barrel_offsets,
+                enemy_count,
             );
 
             if sounds.switched {
@@ -448,6 +453,11 @@ impl LevelScene {
         }
 
         combat::player_shots(&mut self.weapons, spawns, wad, cs_base, &mut events);
+
+        // The missiles steer between the hit test and their move (the
+        // original runs file 0xc114 per movement sub-step in the shot pass).
+        self.weapons
+            .steer_missiles(&spawns.entities, wad, cs_base, &mut spawns.effects);
 
         // While the death explosion plays, the ship has no presence: the
         // original gates the ship hit test and body contact off the dying

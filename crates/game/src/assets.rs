@@ -206,7 +206,9 @@ pub struct FireSprites {
     pub multishot: [OverlaySprite; 4],
     pub burning: [OverlaySprite; 4],
     pub plasma_bolt: OverlaySprite,
-    pub missile: OverlaySprite,
+    /// The missile per facing octant (`0` = right, counting clockwise): 8
+    /// consecutive directory records, steering picks the frame.
+    pub missile: [OverlaySprite; 8],
     /// The chaingun muzzle flash's 6 animation frames.
     pub muzzle_flash: Vec<OverlaySprite>,
     /// The four plasma orbs, 4 animation frames each.
@@ -609,7 +611,16 @@ fn load_fire(
             multishot: leveled(fire.multishot)?,
             burning: leveled(fire.burning)?,
             plasma_bolt: sprite(fire.plasma_bolt)?,
-            missile: sprite(fire.missile)?,
+            missile: [
+                sprite(fire.missile)?,
+                sprite(fire.missile + 8)?,
+                sprite(fire.missile + 16)?,
+                sprite(fire.missile + 24)?,
+                sprite(fire.missile + 32)?,
+                sprite(fire.missile + 40)?,
+                sprite(fire.missile + 48)?,
+                sprite(fire.missile + 56)?,
+            ],
             muzzle_flash,
             plasma_orbs: [
                 orb(fire.plasma_orbs[0])?,
@@ -1097,7 +1108,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
                 blank_overlay(),
             ],
             plasma_bolt: blank_overlay(),
-            missile: blank_overlay(),
+            missile: std::array::from_fn(|_| blank_overlay()),
             muzzle_flash: Vec::new(),
             plasma_orbs: std::array::from_fn(|_| std::array::from_fn(|_| blank_overlay())),
         },
