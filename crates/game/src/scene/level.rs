@@ -138,10 +138,12 @@ impl LevelScene {
         let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
         // The original seeds the layout PRNG from the wall clock at level
         // init, so the scatter varies every play.
-        let spawns = assets
-            .spawn_rows
-            .is_some()
-            .then(|| Spawns::new(assets.spawns.records(&assets.wad, clock_seed())));
+        let spawns = assets.spawn_rows.is_some().then(|| {
+            Spawns::new(
+                assets.spawns.records(&assets.wad, clock_seed()),
+                assets.spawn_ai,
+            )
+        });
         let ship = Ship::new(assets.ship);
         let weapons = Weapons::new(assets.bob_wave.clone(), state.active_weapon());
         let camera_y = assets.camera_min;
@@ -225,7 +227,7 @@ impl LevelScene {
         for _ in 0..ticks {
             if let (Some(spawns), Some(rows)) = (&mut self.spawns, &self.assets.spawn_rows) {
                 spawns.tick(rows);
-                spawns.step_movement();
+                spawns.step_movement(&self.assets.wad, self.ship.position());
             }
 
             self.ship

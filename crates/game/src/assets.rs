@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::background::{Background, Sp};
 use crate::level::spawn::SpawnSource;
-use crate::levels::{Level, Overlay, SceneryData, SfxData, ShipData, StarPlaneData};
+use crate::levels::{Level, Overlay, SceneryData, SfxData, ShipData, SpawnAi, StarPlaneData};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use crate::sfx::SfxBank;
@@ -178,6 +178,8 @@ pub struct LevelAssets {
     pub spawn_rows: Option<Vec<SpawnRow>>,
     /// The level's spawn source, straight from the registry.
     pub spawns: SpawnSource,
+    /// The level's transcribed AI set, if any.
+    pub spawn_ai: Option<SpawnAi>,
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -341,6 +343,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         cs_base: data.scenery.cs_base,
         spawn_rows,
         spawns: data.spawns,
+        spawn_ai: data.spawn_positions.and_then(|positions| positions.ai),
     })
 }
 
@@ -1044,6 +1047,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         cs_base: 0,
         spawn_rows: None,
         spawns: SpawnSource::StaticTable { table: 0 },
+        spawn_ai: None,
     }
 }
 

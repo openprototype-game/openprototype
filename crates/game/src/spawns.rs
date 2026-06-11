@@ -8,10 +8,14 @@
 //! port assembles each sprite from its descriptor over the clip-header catalog
 //! and blits it whole.
 
+mod ai_l1;
+
 use std::collections::HashMap;
 
 use crate::assets::{OverlaySprite, directory_sprite};
+use crate::level::prng::{EngineRng, clock_seed};
 use crate::level::slot::Record;
+use crate::levels::SpawnAi;
 use crate::playfield;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
@@ -63,7 +67,7 @@ pub fn decode_rows(wad: &[u8], table: usize, rows: usize) -> anyhow::Result<Vec<
 }
 
 /// One live enemy or pickup, the port's view of the original's 0x40-byte
-/// entity.
+/// entity (field offsets per `re/l1-ai-functions.md`).
 pub struct Entity {
     /// The current sprite descriptor cs-pointer (the animation frame).
     pub sprite: u16,
@@ -75,14 +79,40 @@ pub struct Entity {
     /// Movement source from the spawn row: mode 0 = AI function `arg`.
     pub mode: u16,
     pub arg: u16,
-    /// The animation tick counter (entity byte +0x17).
-    pub anim_tick: u8,
-    /// The health / per-type state word (entity word +0x18; several AI
-    /// functions reuse it as a timer).
-    pub state: i32,
+    /// Hit points (entity +0x18); a negative value removes the entity (the
+    /// boss's form-2 self-destruct writes -1).
+    pub health: i32,
+    /// Set once the entity has been on screen; the off-screen cull only
+    /// applies after that (entity +0x1a).
+    pub seen: bool,
+    /// The animation tick counter (entity +0x1f).
+    pub anim: u8,
+    /// The per-life tick counter (entity +0x20).
+    pub tick: u16,
+    /// Orbit/path phase words (entity +0x22/+0x24).
+    pub phase_a: u16,
+    pub phase_b: u16,
+    /// Stored orbit-center position (entity +0x26/+0x28).
+    pub save_y: i32,
+    pub save_x: i32,
 }
 
-/// The spawn schedule and live-entity list for a running level.
+/// One enemy shot (the original's 16-byte buffer-B record): position and
+/// velocity in 12.4 per sub-step.
+pub struct Shot {
+    pub sprite: u16,
+    pub x: i32,
+    pub y: i32,
+    pub vx: i32,
+    pub vy: i32,
+}
+
+/// The enemy shots' cull bounds (the move loop's signed compares, both
+/// exclusive): x in (-0x200, 0x1200), y in (0, 0xa00).
+const SHOT_X: std::ops::Range<i32> = -0x1ff..0x1200;
+const SHOT_Y: std::ops::Range<i32> = 1..0xa00;
+
+/// The spawn schedule, live entities, and enemy shots for a running level.
 pub struct Spawns {
     /// The level's spawn records, in spawn order.
     records: Vec<Record>,
@@ -92,6 +122,13 @@ pub struct Spawns {
     /// word in place; the port keeps the buffer pristine and counts here).
     countdown: i32,
     pub entities: Vec<Entity>,
+    pub shots: Vec<Shot>,
+    /// Which per-level AI set drives mode-0 entities, when transcribed.
+    ai: Option<SpawnAi>,
+    /// The engine PRNG the AI functions draw from (shooter fire chances).
+    rng: EngineRng,
+    /// The boss's engine globals.
+    boss: ai_l1::BossState,
     /// Sprites assembled from descriptors, cached by descriptor pointer
     /// (`None` caches an unresolvable descriptor).
     sprites: HashMap<u16, Option<OverlaySprite>>,
@@ -99,7 +136,7 @@ pub struct Spawns {
 
 impl Spawns {
     /// Builds the schedule over a generated (or static) record buffer.
-    pub fn new(records: Vec<Record>) -> Self {
+    pub fn new(records: Vec<Record>, ai: Option<SpawnAi>) -> Self {
         let countdown = records.first().map_or(0, |record| i32::from(record.delay));
 
         Self {
@@ -107,6 +144,10 @@ impl Spawns {
             cursor: 0,
             countdown,
             entities: Vec::new(),
+            shots: Vec::new(),
+            ai,
+            rng: EngineRng::new(clock_seed()),
+            boss: ai_l1::BossState::default(),
             sprites: HashMap::new(),
         }
     }
@@ -154,23 +195,68 @@ impl Spawns {
                 y: row.y << 4,
                 mode: row.mode,
                 arg: row.arg,
-                anim_tick: 0,
-                state: i32::from(record.health),
+                health: i32::from(record.health),
+                seen: false,
+                anim: 0,
+                tick: 0,
+                phase_a: 0,
+                phase_b: 0,
+                save_y: 0,
+                save_x: 0,
             });
         }
     }
 
-    /// One movement sub-step for every entity, then the off-screen cull.
+    /// One movement sub-step for every entity and shot, then the culls.
     ///
     /// The original runs this `elapsed_ticks` times per rendered frame (the
-    /// catch-up stepping); the caller loops accordingly.
-    pub fn step_movement(&mut self) {
-        // TODO: per-type AI functions (mode 0) and path tables (mode != 0);
-        // transcription in progress (re/l1-ai-functions.md). Until then the
-        // entities hold their spawn positions.
+    /// catch-up stepping); the caller loops accordingly. `player` is the
+    /// ship's pixel position (the aimed shooters lead on it).
+    pub fn step_movement(&mut self, wad: &[u8], player: (i32, i32)) {
+        if let Some(SpawnAi::L1) = self.ai {
+            let mut context = ai_l1::AiContext {
+                wad,
+                rng: &mut self.rng,
+                player_x: player.0,
+                player_y: player.1,
+                shots: &mut self.shots,
+                boss: &mut self.boss,
+            };
 
-        self.entities
-            .retain(|entity| CULL_X.contains(&entity.x) && CULL_Y.contains(&entity.y));
+            for entity in &mut self.entities {
+                if entity.mode == 0 {
+                    ai_l1::step(entity, &mut context);
+                }
+                // TODO: mode != 0 follows a {dx, dy, dsprite} path table at
+                // the mode segment; no LEVEL_1 row uses it.
+            }
+        }
+
+        // The cull only removes entities that have already been on screen
+        // (the original's seen flag), so right-edge spawns survive their
+        // off-screen entry. A negative health is the boss's removal sentinel
+        // (combat damage is not wired yet).
+        self.entities.retain_mut(|entity| {
+            if entity.health < 0 {
+                return false;
+            }
+
+            let in_bounds = CULL_X.contains(&entity.x) && CULL_Y.contains(&entity.y);
+
+            if in_bounds {
+                entity.seen = true;
+            }
+
+            in_bounds || !entity.seen
+        });
+
+        for shot in &mut self.shots {
+            shot.x += shot.vx;
+            shot.y += shot.vy;
+        }
+
+        self.shots
+            .retain(|shot| SHOT_X.contains(&shot.x) && SHOT_Y.contains(&shot.y));
     }
 
     /// The schedule position, for tests: `(next record index, head countdown)`.
@@ -205,6 +291,22 @@ impl Spawns {
                     sprite.size,
                     playfield::LEFT + (entity.x >> 4),
                     (entity.y >> 4) - camera,
+                );
+            }
+        }
+
+        // Enemy shots draw after the entities (the original's buffer order).
+        for shot in &self.shots {
+            let sprite = self.sprites.entry(shot.sprite).or_insert_with(|| {
+                directory_sprite(wad, catalog, usize::from(shot.sprite) + cs_base).ok()
+            });
+
+            if let Some(sprite) = sprite {
+                frame.blit_transparent(
+                    &sprite.pixels,
+                    sprite.size,
+                    playfield::LEFT + (shot.x >> 4),
+                    (shot.y >> 4) - camera,
                 );
             }
         }
@@ -245,7 +347,7 @@ mod tests {
     fn pulls_due_records_and_chains_zero_delays() {
         // Delays 3, 0, 2: the first two spawn together on tick 3, the third
         // two ticks later.
-        let mut spawns = Spawns::new(vec![record(3, 0), record(0, 1), record(2, 0)]);
+        let mut spawns = Spawns::new(vec![record(3, 0), record(0, 1), record(2, 0)], None);
         let rows = rows();
 
         spawns.tick(&rows);
@@ -272,7 +374,7 @@ mod tests {
     #[test]
     fn caps_the_entity_list() {
         let records = (0..30).map(|_| record(0, 0)).collect();
-        let mut spawns = Spawns::new(records);
+        let mut spawns = Spawns::new(records, None);
 
         spawns.tick(&rows());
         assert_eq!(spawns.entities.len(), MAX_ENTITIES);
@@ -280,18 +382,18 @@ mod tests {
 
     #[test]
     fn culls_out_of_bounds_entities() {
-        let mut spawns = Spawns::new(vec![record(1, 0)]);
+        let mut spawns = Spawns::new(vec![record(1, 0)], None);
 
         spawns.tick(&rows());
         assert_eq!(spawns.entities.len(), 1);
 
         // The bounds are inclusive: -0x500 survives, one step past it culls.
         spawns.entities[0].x = -0x500;
-        spawns.step_movement();
+        spawns.step_movement(&[], (0, 0));
         assert_eq!(spawns.entities.len(), 1);
 
         spawns.entities[0].x = -0x501;
-        spawns.step_movement();
+        spawns.step_movement(&[], (0, 0));
         assert!(spawns.entities.is_empty());
     }
 

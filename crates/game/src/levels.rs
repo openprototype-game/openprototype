@@ -304,12 +304,24 @@ pub struct LevelData {
     pub spawn_positions: Option<SpawnPositionsData>,
 }
 
-/// Where a WAD keeps its spawn-position table: the file offset and the row
-/// count (the level's highest `spawn_row` + 1).
+/// Where a WAD keeps its spawn-position table: the file offset, the row
+/// count (the level's highest `spawn_row` + 1), and which AI set drives its
+/// mode-0 rows.
 #[derive(Clone, Copy)]
 pub struct SpawnPositionsData {
     pub table: usize,
     pub rows: usize,
+    /// The level's transcribed AI-function set; `None` leaves entities at
+    /// their spawn positions until that level's functions are transcribed.
+    pub ai: Option<SpawnAi>,
+}
+
+/// A level's transcribed enemy AI-function set (the per-level pointer-table
+/// functions mode-0 spawn rows select by `arg`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SpawnAi {
+    /// LEVEL_1's 24 functions (`re/l1-ai-functions.md`).
+    L1,
 }
 
 impl Level {
@@ -413,6 +425,7 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x5678,
                     rows: 76,
+                    ai: Some(SpawnAi::L1),
                 }),
             },
             Level::L2 => LevelData {
@@ -564,6 +577,7 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x85df,
                     rows: 113,
+                    ai: None,
                 }),
             },
             Level::L4 => LevelData {
@@ -708,6 +722,7 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x6bb6,
                     rows: 99,
+                    ai: None,
                 }),
             },
             Level::L6 => LevelData {
@@ -851,6 +866,7 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x8635,
                     rows: 136,
+                    ai: None,
                 }),
             },
         }
