@@ -112,7 +112,7 @@ enum ShotKind {
     Missile,
     /// One record of the smart bomb's expanding ring: inert (zero size and
     /// damage, the hit test's zero-size pre-check skips it), drawn with the
-    /// multishot sprite its `0x3210` descriptor aliases.
+    /// level's ring-shot sprite.
     BombWave,
 }
 
@@ -691,9 +691,7 @@ impl Weapons {
                     &sprites.missile[shot.octant],
                     MISSILE_DRAW_OFFSETS[shot.octant],
                 ),
-                // The wave records carry descriptor 0x3210, the multishot
-                // level-3 shot sprite.
-                ShotKind::BombWave => (&sprites.multishot[2], (0, 0)),
+                ShotKind::BombWave => (&sprites.bomb_ring, (0, 0)),
             };
 
             blit(

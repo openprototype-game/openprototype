@@ -162,6 +162,10 @@ pub struct FireData {
     /// `(vx, vy)` 12.4 pairs around a circle, one per ring record. The bytes
     /// are identical in all seven WADs, at different offsets.
     pub bomb_wave: usize,
+    /// The smart-bomb ring shot's directory record (the spawner's sprite
+    /// literal + cs_base): every WAD names its own (only L1's aliases the
+    /// multishot sprite); verified by the `ba 20 00 c7 07` spawner scan.
+    pub bomb_sprite: usize,
     /// The chaingun muzzle flash: 6 records (3 cells, 2 frames each).
     pub muzzle_flash: usize,
     /// The four plasma orbs' sprite bases, each 4 animation-frame records.
@@ -465,6 +469,7 @@ impl Level {
                     plasma_bolt: 0x5cb0,
                     missile: 0x5cb8,
                     bomb_wave: 0x50af,
+                    bomb_sprite: 0x5c00,
                     muzzle_flash: 0x6266,
                     plasma_orbs: [0x5c30, 0x5c50, 0x5c70, 0x5c90],
                     bob_table: 0x55e8,
@@ -554,6 +559,7 @@ impl Level {
                     plasma_bolt: 0x3f90,
                     missile: 0x4088,
                     bomb_wave: 0x3247,
+                    bomb_sprite: 0x3fd4,
                     muzzle_flash: 0x4188,
                     plasma_orbs: [0x4008, 0x4028, 0x4048, 0x4068],
                     bob_table: 0x3782,
@@ -641,6 +647,7 @@ impl Level {
                     plasma_bolt: 0x9564,
                     missile: 0x965c,
                     bomb_wave: 0x8075,
+                    bomb_sprite: 0x95a8,
                     muzzle_flash: 0x975c,
                     plasma_orbs: [0x95dc, 0x95fc, 0x961c, 0x963c],
                     bob_table: 0x85af,
@@ -728,6 +735,7 @@ impl Level {
                     plasma_bolt: 0x4008,
                     missile: 0x4100,
                     bomb_wave: 0x32bf,
+                    bomb_sprite: 0x404c,
                     muzzle_flash: 0x4200,
                     plasma_orbs: [0x4080, 0x40a0, 0x40c0, 0x40e0],
                     bob_table: 0x37fa,
@@ -813,6 +821,7 @@ impl Level {
                     plasma_bolt: 0x7360,
                     missile: 0x7458,
                     bomb_wave: 0x6630,
+                    bomb_sprite: 0x73a4,
                     muzzle_flash: 0x7558,
                     plasma_orbs: [0x73d8, 0x73f8, 0x7418, 0x7438],
                     bob_table: 0x6b86,
@@ -895,6 +904,7 @@ impl Level {
                     plasma_bolt: 0x4508,
                     missile: 0x4600,
                     bomb_wave: 0x37bf,
+                    bomb_sprite: 0x454c,
                     muzzle_flash: 0x4700,
                     plasma_orbs: [0x4580, 0x45a0, 0x45c0, 0x45e0],
                     bob_table: 0x3cfa,
@@ -986,6 +996,7 @@ impl Level {
                     plasma_bolt: 0x90dd,
                     missile: 0x91d5,
                     bomb_wave: 0x80cb,
+                    bomb_sprite: 0x9121,
                     muzzle_flash: 0x92d5,
                     plasma_orbs: [0x9155, 0x9175, 0x9195, 0x91b5],
                     bob_table: 0x8605,

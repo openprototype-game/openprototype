@@ -213,6 +213,8 @@ pub struct FireSprites {
     /// The missile per facing octant (`0` = right, counting clockwise): 8
     /// consecutive directory records, steering picks the frame.
     pub missile: [OverlaySprite; 8],
+    /// The smart-bomb ring shot (per level; only L1's aliases the multishot).
+    pub bomb_ring: OverlaySprite,
     /// The chaingun muzzle flash's 6 animation frames.
     pub muzzle_flash: Vec<OverlaySprite>,
     /// The four plasma orbs, 4 animation frames each.
@@ -647,6 +649,7 @@ fn load_fire(
                 sprite(fire.missile + 48)?,
                 sprite(fire.missile + 56)?,
             ],
+            bomb_ring: sprite(fire.bomb_sprite)?,
             muzzle_flash,
             plasma_orbs: [
                 orb(fire.plasma_orbs[0])?,
@@ -1148,6 +1151,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             ],
             plasma_bolt: blank_overlay(),
             missile: std::array::from_fn(|_| blank_overlay()),
+            bomb_ring: blank_overlay(),
             muzzle_flash: Vec::new(),
             plasma_orbs: std::array::from_fn(|_| std::array::from_fn(|_| blank_overlay())),
         },
