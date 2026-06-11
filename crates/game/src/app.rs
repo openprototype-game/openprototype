@@ -143,12 +143,21 @@ mod tests {
     }
 
     #[test]
-    fn esc_on_the_menu_quits() {
+    fn quitting_is_the_quit_item_not_esc() {
         let mut app = test_app();
         skip_intro(&mut app);
 
         assert!(!app.is_animating(), "the menu is static");
-        assert!(app.step(FRAME, &[KeyEvent::Pressed(Key::Esc)]).quit);
+        // The original's menu loop ignores Esc; QUIT is the last item (Up
+        // wraps to it).
+        assert!(!app.step(FRAME, &[KeyEvent::Pressed(Key::Esc)]).quit);
+        assert!(
+            app.step(
+                FRAME,
+                &[KeyEvent::Pressed(Key::Up), KeyEvent::Pressed(Key::Enter)]
+            )
+            .quit
+        );
     }
 
     #[test]

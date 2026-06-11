@@ -2,9 +2,11 @@
 //!
 //! Mirrors `START.EXE`'s menu loop: a [`ListMenu`] over NEW GAME, LOAD GAME,
 //! HIGHSCORES, MUSIC MENU, QUIT. Up/Down move the cursor (wrapping); Enter
-//! dispatches; Esc quits. Only MUSIC MENU and QUIT do something so far; the rest
-//! get their scenes later. The menu emits no audio. The title theme is started
-//! once at boot, and the original never restarts it from the menu.
+//! dispatches; every other key, Esc included, is ignored (the original's loop
+//! only handles those three scancodes, so quitting is the QUIT item). Only
+//! MUSIC MENU and QUIT do something so far; the rest get their scenes later.
+//! The menu emits no audio. The title theme is started once at boot, and the
+//! original never restarts it from the menu.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -12,10 +14,18 @@ use std::time::Duration;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::assets::MenuAssets;
-use crate::scene::list_menu::ListMenu;
+use crate::scene::list_menu::{ListMenu, MenuLayout};
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::{Key, KeyEvent};
+
+/// The main menu's positions: labels at x=90 (`di = 0x4b5a`, ... in the setup
+/// at `0x413e`), the `>` cursor at x=70 (`0x4b46`), first row at y=60.
+const LAYOUT: MenuLayout = MenuLayout {
+    label_x: 90,
+    cursor_x: 70,
+    first_row_y: 60,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, EnumIter, Display)]
 enum MenuItem {
@@ -54,7 +64,7 @@ impl Menu {
         let labels = MenuItem::iter().map(|item| item.to_string()).collect();
 
         Self {
-            list: ListMenu::new(assets, labels),
+            list: ListMenu::new(assets, labels, LAYOUT),
         }
     }
 
@@ -74,13 +84,12 @@ impl Scene for Menu {
             match key {
                 Key::Up => self.list.move_up(),
                 Key::Down => self.list.move_down(),
-                Key::Esc => output.transition = Some(Transition::Quit),
                 Key::Enter => {
                     if let Some(item) = MenuItem::iter().nth(self.list.selected()) {
                         output.transition = item.activate();
                     }
                 }
-                Key::Left | Key::Right | Key::Ctrl | Key::Shift | Key::Char(_) => {}
+                Key::Esc | Key::Left | Key::Right | Key::Ctrl | Key::Shift | Key::Char(_) => {}
             }
         }
 
@@ -157,13 +166,13 @@ mod tests {
     }
 
     #[test]
-    fn esc_requests_exit() {
+    fn esc_is_ignored_like_every_unmapped_key() {
         let mut menu = test_menu();
 
         assert_eq!(
             menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Esc)])
                 .transition,
-            Some(Transition::Quit)
+            None
         );
     }
 
