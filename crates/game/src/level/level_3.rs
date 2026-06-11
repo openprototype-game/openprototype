@@ -190,7 +190,7 @@ pub fn script() -> Vec<Step> {
             .x_step(0xf)
             .sprite(0x54b0)
             .depth(DEPTHS[0])
-            .emit(s123de(6, 0xf)),
+            .emit(s123de(6, 0xa)),
         step()
             .x_start(0x96)
             .x_step(0x14)
@@ -380,7 +380,7 @@ mod tests {
     /// FNV-1a over the full 508-record buffer (post-pass included) for the
     /// validated seed. Locks the layout byte-for-byte against refactors;
     /// regenerate and re-verify against the capture if it ever changes.
-    const GOLDEN: &str = "106fd7cea5770a65";
+    const GOLDEN: &str = "79e4215aa84d2327";
 
     #[test]
     fn reproduces_the_validated_capture() {
