@@ -28,7 +28,7 @@ use crate::scenery::SceneryScroll;
 use crate::sfx::Sfx;
 use crate::ship::{HeldKeys, Ship};
 use crate::shots::Weapons;
-use crate::spawns::Spawns;
+use crate::spawns::{PlayerInput, Spawns};
 use crate::stars::StarField;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
@@ -446,8 +446,16 @@ impl LevelScene {
         spawns.tick(rows, wad, cs_base);
 
         let shots_before = spawns.shots.len();
-        let firing_plasma = self.weapons.firing() == ActiveWeapon::Selected(Weapon::Plasma);
-        spawns.step_movement(wad, self.ship.position(), firing_plasma);
+        let (ship_x, ship_y) = self.ship.position();
+        spawns.step_movement(
+            wad,
+            PlayerInput {
+                x: ship_x,
+                y: ship_y,
+                firing_plasma: self.weapons.firing() == ActiveWeapon::Selected(Weapon::Plasma),
+                steering: self.held.left || self.held.right,
+            },
+        );
 
         if spawns.shots.len() > shots_before {
             self.sfx.enemy_fired(&self.assets.sfx, audio);
@@ -524,9 +532,8 @@ impl LevelScene {
             self.sfx.boss_explosion(sound, &self.assets.sfx, audio);
         }
 
-        if spawns.enemy_voice {
-            spawns.enemy_voice = false;
-            self.sfx.enemy_voice(&self.assets.sfx, audio);
+        for slot in spawns.ai_sounds.drain(..) {
+            self.sfx.ai_sound(slot, &self.assets.sfx, audio);
         }
 
         // Impact sounds first, then the death sounds: the original's frame

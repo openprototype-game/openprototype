@@ -10,11 +10,14 @@
 //! Positions are 12.4 fixed point; data tables are read from the WAD image
 //! at their file offsets.
 
-use super::{BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
+use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
 
 /// LEVEL_3's cs-pointer to file-offset base.
 const CS_BASE: usize = 0x4710;
+
+/// The boss volley's sample (lgegshot, the per-level slot 8).
+const SLOT_VOLLEY: usize = 8;
 
 /// Per-step context the AI functions read and write besides the entity.
 pub(super) struct AiContext<'a> {
@@ -30,8 +33,8 @@ pub(super) struct AiContext<'a> {
     pub gate: &'a mut u8,
     /// A boss explosion burst fired this step.
     pub boss_explosion: &'a mut Option<BossExplosionSound>,
-    /// The level's enemy-voice sample fired this step (the boss volley).
-    pub enemy_voice: &'a mut bool,
+    /// Sample slots the AI triggered this step (event channel).
+    pub sounds: &'a mut AiSounds,
     /// Whether the firing weapon is the plasma (`cs:0xcb5 == 3`); it bypasses
     /// the orbiters' attack-animation proximity gate.
     pub firing_plasma: bool,
@@ -759,7 +762,7 @@ fn fire_volley(entity: &mut Entity, ctx: &mut AiContext, facing: VolleyFacing) {
         }
     }
 
-    *ctx.enemy_voice = true;
+    ctx.sounds.push(SLOT_VOLLEY);
 }
 
 /// The aimed-shot helper (file `0x117a7`): a velocity toward the player's

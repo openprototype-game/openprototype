@@ -12,7 +12,7 @@
 //! orbiter frame patch's hitbox/claw writes, and the firing-weapon gate bypass
 //! (`cs:0xcb5 == 3`).
 
-use super::{BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
+use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
 
 /// Per-step context the AI functions read and write besides the entity.
@@ -29,9 +29,8 @@ pub(super) struct AiContext<'a> {
     pub gate: &'a mut u8,
     /// A boss explosion fired this step (the form picks its sounds).
     pub boss_explosion: &'a mut Option<BossExplosionSound>,
-    /// The level's enemy-voice sample fired this step (the carrier pod's
-    /// one-shot deploy sound).
-    pub enemy_voice: &'a mut bool,
+    /// Sample slots the AI triggered this step (event channel).
+    pub sounds: &'a mut AiSounds,
 }
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
@@ -47,6 +46,9 @@ pub(super) struct BossState {
     form2: bool,
     dying: bool,
 }
+
+/// The carrier pod's deploy sample (gegrocke, the per-level slot 8).
+const SLOT_ENEMY_VOICE: usize = 8;
 
 /// Reads an i16 word from the WAD image.
 fn word(wad: &[u8], at: usize) -> i32 {
@@ -217,7 +219,7 @@ fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
     // Deployed: runs every call while on the final frame; the deploy sound
     // (0xace3, the level's enemy voice) fires once.
     if entity.phase_a & 0xff != 0x11 {
-        *ctx.enemy_voice = true;
+        ctx.sounds.push(SLOT_ENEMY_VOICE);
         entity.phase_a = (entity.phase_a & 0xff00) | 0x11;
     }
 

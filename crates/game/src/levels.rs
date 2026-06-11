@@ -316,6 +316,10 @@ pub struct LevelData {
     pub wad: &'static str,
     /// The level's combat constants (kinds, bounds, gate sprites).
     pub combat: CombatData,
+    /// The GET READY dim table's brightness divisor: every level builds the
+    /// nearest-color table over `rgb / divisor`; L5 divides by 2 (half
+    /// brightness), the others by 3.
+    pub dim_divisor: i32,
     /// The level's SP parallax background (which carries its own strip layout).
     pub background: Sp,
     /// The level's sprite-catalog BIN file (per-theme; 2/4/6 share Race1).
@@ -390,6 +394,8 @@ pub enum SpawnAi {
     L1,
     /// LEVEL_3's 56 functions (`re/l3-ai-functions.md`).
     L3,
+    /// LEVEL_5's 44 functions (`re/l5-ai-functions.md`).
+    L5,
 }
 
 impl Level {
@@ -413,6 +419,7 @@ impl Level {
         match self {
             Level::L1 => LevelData {
                 wad: "LEVEL_1.WAD",
+                dim_divisor: 3,
                 combat: L1_COMBAT,
                 background: Sp::Canyon,
                 catalog: Bin::Out,
@@ -501,6 +508,7 @@ impl Level {
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
+                dim_divisor: 3,
                 combat: L1_COMBAT,
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
@@ -573,6 +581,7 @@ impl Level {
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
+                dim_divisor: 3,
                 combat: CombatData {
                     ship_rect_table: 0x63ef,
                     pickups: [0x51e8, 0x510c, 0x5172, 0x52ae],
@@ -672,6 +681,7 @@ impl Level {
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
+                dim_divisor: 3,
                 combat: L1_COMBAT,
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
@@ -742,7 +752,21 @@ impl Level {
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
-                combat: L1_COMBAT,
+                dim_divisor: 2,
+                combat: CombatData {
+                    ship_rect_table: 0x47e5,
+                    pickups: [0x3764, 0x3688, 0x36ee, 0x382a],
+                    orb_arg: 0,
+                    gate_release: (0x3b70, 0x3c3e),
+                    level_end_sprite: 0x426e,
+                    level_end_clears_gate: true,
+                    ram_survivors: &[(0x3b70, 0x3c3e), (0x426e, 0xffff)],
+                    entity_cap: 24,
+                    cull_x_min: -0x780,
+                    respawn_invincibility: 300,
+                    asteroid_kind: None,
+                    pod_kind: None,
+                },
                 background: Sp::Alienbg,
                 catalog: Bin::Techno,
                 catalog_offset: 0x10e10,
@@ -767,7 +791,7 @@ impl Level {
                 overlay_positions: 0xd1e0,
                 ship: ShipData {
                     catalog: 0x84d0,
-                    explosion: None,
+                    explosion: Some(0x7808),
                     y_min: -12,
                     y_max: 113,
                     spawn_shield_ticks: 300,
@@ -818,11 +842,12 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x6bb6,
                     rows: 99,
-                    ai: None,
+                    ai: Some(SpawnAi::L5),
                 }),
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
+                dim_divisor: 3,
                 combat: L1_COMBAT,
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
@@ -890,6 +915,7 @@ impl Level {
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
+                dim_divisor: 3,
                 combat: L1_COMBAT,
                 background: Sp::Lavah,
                 catalog: Bin::Lava,

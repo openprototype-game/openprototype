@@ -41,7 +41,6 @@ const SLOT_EXPLOSION: usize = 4;
 const SLOT_ASTEROID_DEATH: usize = 5;
 const SLOT_PEBBLE: usize = 6;
 const SLOT_PICKUP: usize = 7;
-const SLOT_ENEMY_VOICE: usize = 8;
 const SLOT_MISSILE_IMPACT: usize = 9;
 const SLOT_MISSILE: usize = 10;
 const SLOT_PLASMAGU: usize = 11;
@@ -152,10 +151,10 @@ impl Sfx {
         play(bank, SLOT_CHANGEWE, EVENT_CHANNEL, false, audio);
     }
 
-    /// The level's enemy-voice sample (slot 8 is per-level themed): L1's
-    /// carrier-pod deploy (`0xace3`, gegrocke), L3's boss volley (lgegshot).
-    pub fn enemy_voice(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
-        play(bank, SLOT_ENEMY_VOICE, EVENT_CHANNEL, false, audio);
+    /// An AI-triggered sample by slot (the per-level enemy voices, volleys
+    /// and phase changes; the AI modules name their level's slots).
+    pub fn ai_sound(&self, slot: usize, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, slot, EVENT_CHANNEL, false, audio);
     }
 
     /// An enemy fired a shot (`0xae33`).

@@ -10,6 +10,7 @@
 
 mod ai_l1;
 mod ai_l3;
+mod ai_l5;
 
 use std::collections::HashMap;
 
@@ -151,6 +152,11 @@ pub(crate) fn descriptor_debris(wad: &[u8], cs_base: usize, sprite: u16) -> u16 
     u16::from_le_bytes([wad[at], wad[at + 1]])
 }
 
+/// Sample slots the AI triggered this step, played on the event channel
+/// (volleys, the boss phase change, the carrier-pod deploy: each level's
+/// AI knows its own slot numbers from its RE doc).
+pub type AiSounds = Vec<usize>;
+
 /// Which samples a boss explosion burst plays (the levels differ: L1 bursts
 /// the asteroid sample, adding the big explosion for form 2; L3 bursts the
 /// big explosion alone).
@@ -175,6 +181,18 @@ pub struct Shot {
 const SHOT_X: std::ops::Range<i32> = -0x1ff..0x1200;
 const SHOT_Y: std::ops::Range<i32> = 1..0xa00;
 
+/// The player state the AI functions read: position in pixels plus the
+/// input facts the bosses key on.
+#[derive(Clone, Copy, Default)]
+pub struct PlayerInput {
+    pub x: i32,
+    pub y: i32,
+    /// The firing weapon is the plasma (`cs:0xcb5 == 3`).
+    pub firing_plasma: bool,
+    /// A left/right arrow is held (the L5 boss's facing hold).
+    pub steering: bool,
+}
+
 /// The spawn schedule, live entities, and enemy shots for a running level.
 pub struct Spawns {
     /// The level's combat constants (kinds, bounds, gate sprites).
@@ -191,9 +209,8 @@ pub struct Spawns {
     pub effects: Vec<Effect>,
     /// A boss explosion fired this step, with its level's sound.
     pub boss_explosion: Option<BossExplosionSound>,
-    /// The level's enemy-voice sample fired this step (L1's carrier-pod
-    /// deploy, L3's boss volley).
-    pub enemy_voice: bool,
+    /// Sample slots the AI triggered this step (event channel).
+    pub ai_sounds: AiSounds,
     /// Which per-level AI set drives mode-0 entities, when transcribed.
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
@@ -211,6 +228,8 @@ pub struct Spawns {
     boss: ai_l1::BossState,
     /// The L3 boss's engine globals.
     boss_l3: ai_l3::BossState,
+    /// The L5 boss's engine globals.
+    boss_l5: ai_l5::BossState,
     /// Sprites assembled from descriptors, cached by descriptor pointer
     /// (`None` caches an unresolvable descriptor).
     sprites: HashMap<u16, Option<OverlaySprite>>,
@@ -232,7 +251,7 @@ impl Spawns {
             shots: Vec::new(),
             effects: Vec::new(),
             boss_explosion: None,
-            enemy_voice: false,
+            ai_sounds: Vec::new(),
             ai,
             rng: EngineRng::new(clock_seed()),
             // The WAD's data image initializes the countdown to 3, so the
@@ -242,6 +261,7 @@ impl Spawns {
             level_end: false,
             boss: ai_l1::BossState::default(),
             boss_l3: ai_l3::BossState::default(),
+            boss_l5: ai_l5::BossState::default(),
             sprites: HashMap::new(),
         }
     }
@@ -308,20 +328,20 @@ impl Spawns {
     /// The original runs this `elapsed_ticks` times per rendered frame (the
     /// catch-up stepping); the caller loops accordingly. `player` is the
     /// ship's pixel position (the aimed shooters lead on it).
-    pub fn step_movement(&mut self, wad: &[u8], player: (i32, i32), firing_plasma: bool) {
+    pub fn step_movement(&mut self, wad: &[u8], player: PlayerInput) {
         match self.ai {
             Some(SpawnAi::L1) => {
                 let mut context = ai_l1::AiContext {
                     wad,
                     rng: &mut self.rng,
-                    player_x: player.0,
-                    player_y: player.1,
+                    player_x: player.x,
+                    player_y: player.y,
                     shots: &mut self.shots,
                     effects: &mut self.effects,
                     boss: &mut self.boss,
                     gate: &mut self.gate,
                     boss_explosion: &mut self.boss_explosion,
-                    enemy_voice: &mut self.enemy_voice,
+                    sounds: &mut self.ai_sounds,
                 };
 
                 for entity in &mut self.entities {
@@ -336,20 +356,42 @@ impl Spawns {
                 let mut context = ai_l3::AiContext {
                     wad,
                     rng: &mut self.rng,
-                    player_x: player.0,
-                    player_y: player.1,
+                    player_x: player.x,
+                    player_y: player.y,
                     shots: &mut self.shots,
                     effects: &mut self.effects,
                     boss: &mut self.boss_l3,
                     gate: &mut self.gate,
                     boss_explosion: &mut self.boss_explosion,
-                    enemy_voice: &mut self.enemy_voice,
-                    firing_plasma,
+                    sounds: &mut self.ai_sounds,
+                    firing_plasma: player.firing_plasma,
                 };
 
                 for entity in &mut self.entities {
                     if entity.mode == 0 {
                         ai_l3::step(entity, &mut context);
+                    }
+                }
+            }
+            Some(SpawnAi::L5) => {
+                let mut context = ai_l5::AiContext {
+                    wad,
+                    rng: &mut self.rng,
+                    player_x: player.x,
+                    player_y: player.y,
+                    shots: &mut self.shots,
+                    effects: &mut self.effects,
+                    boss: &mut self.boss_l5,
+                    gate: &mut self.gate,
+                    boss_explosion: &mut self.boss_explosion,
+                    sounds: &mut self.ai_sounds,
+                    firing_plasma: player.firing_plasma,
+                    steering: player.steering,
+                };
+
+                for entity in &mut self.entities {
+                    if entity.mode == 0 {
+                        ai_l5::step(entity, &mut context);
                     }
                 }
             }
@@ -597,11 +639,11 @@ mod tests {
 
         // The bounds are inclusive: -0x500 survives, one step past it culls.
         spawns.entities[0].x = -0x500;
-        spawns.step_movement(&[], (0, 0), false);
+        spawns.step_movement(&[], PlayerInput::default());
         assert_eq!(spawns.entities.len(), 1);
 
         spawns.entities[0].x = -0x501;
-        spawns.step_movement(&[], (0, 0), false);
+        spawns.step_movement(&[], PlayerInput::default());
         assert!(spawns.entities.is_empty());
     }
 

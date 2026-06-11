@@ -303,12 +303,12 @@ pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets>
 const SHIP_EXPLOSION_FRAMES: usize = 23;
 
 /// Build the playfield-dimming remap (the level init's table builder at file
-/// `0xe4be`): for each palette index, the target is its color at one-third
-/// brightness (6-bit channels, integer division), and the entry is the
-/// palette index nearest that target by L1 distance, earliest index winning
-/// ties. The GET READY freeze (file `0xe60f`) remaps every playfield pixel
-/// through the table.
-fn darken_table(palette: &Palette) -> [u8; 256] {
+/// `0xe4be`): for each palette index, the target is its color divided by the
+/// level's brightness divisor (6-bit channels, integer division), and the
+/// entry is the palette index nearest that target by L1 distance, earliest
+/// index winning ties. The GET READY freeze (file `0xe60f`) remaps every
+/// playfield pixel through the table.
+fn darken_table(palette: &Palette, divisor: i32) -> [u8; 256] {
     // The palette stores bit-replicated 8-bit channels; `>> 2` recovers the
     // 6-bit DAC values the original works in.
     let dac: Vec<[i32; 3]> = palette
@@ -324,7 +324,7 @@ fn darken_table(palette: &Palette) -> [u8; 256] {
         .collect();
 
     std::array::from_fn(|index| {
-        let target = dac[index].map(|channel| channel / 3);
+        let target = dac[index].map(|channel| channel / divisor);
         let mut best_distance = i32::MAX;
         let mut best_index = 0u8;
 
@@ -377,7 +377,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let music = load_music(disc, data.music_track)?;
     let font_bytes = disc.read("FONT.RAW").context("reading FONT.RAW")?;
     let font = Font::decode(&font_bytes).context("decoding FONT.RAW")?;
-    let dim_table = darken_table(&hud.palette);
+    let dim_table = darken_table(&hud.palette, data.dim_divisor);
     let bomb_wave = read_bomb_wave(&wad, data.fire.bomb_wave)?;
     let ship_explosion = data
         .ship
