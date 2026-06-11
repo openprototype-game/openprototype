@@ -20,30 +20,80 @@ palette, asset strings) is in `wad.md`; this doc is only the layout system.
 All four run through one interpreter (`slot.rs`); the per-level data is in
 `level_<n>.rs`.
 
-## The object record
+## The spawn record
 
-8 bytes, 4 words: `{word0 = x-step, word1 = sprite ptr, word2 = depth, word3 = y}`.
-Authoritative from the generator's write trace (`cs:[bp+0..6]`).
+8 bytes, 4 words: `{word0 = delay, word1 = sprite ptr, word2 = health,
+word3 = spawn row}`. The field semantics are proven by the consumer (the spawn
+pull at file `0xd9bb` and the entity builder at `0xdfa8`, LEVEL_1; full scratch
+notes in `re/spawn-consumer.md`):
 
-- **word0 (x-step)** is a horizontal *step*, not an absolute x. The consumer
-  running-sums the steps to the absolute x along the scroll (CANYON totals
-  ~11,800 px, ~37 screens).
-- **word1 (sprite ptr)** is a pointer into a descriptor region. The target is a
-  4-word descriptor `(0x0008, 0x7d00, 0x3308, 0x000a)` whose second word `0x7d00`
-  is a sprite-data / OUT.BIN offset. Some descriptors (`0x392e`, `0x3f8e`) point at
-  other `0x3308`-style values (nested). Pointer-vs-index resolution is a render-side
-  detail to pin when wiring sprites.
-- **word2 (depth)** is a per-sprite-type draw layer (z-order among the objects),
-  fixed per sprite type. It picks the layer the object draws in; it does *not* lock
-  the object to a background strip's scroll speed (a spawned enemy moves under its
-  own AI).
-- **word3 (y)** is the vertical position.
+- **word0 (delay)** is the spawn countdown in PIT ticks, relative to the
+  previous record's spawn. The timer ISR decrements the *head* record's word0
+  in place once per tick (`0x9518`: `bx = cs:0x25ec; decw cs:(bx)`); when it
+  reaches <= 0 the update-loop tail pulls the record and advances the cursor.
+  Records with delay 0 spawn on the same frame as their predecessor, which is
+  why Row tails and grid fills carry 0. The generator's "x axis" (its
+  `x_start`/`x_step` slots, the post-pass target positions) is this spawn
+  timeline in ticks.
+- **word1 (sprite ptr)** is a cs-pointer to the sprite descriptor block:
+  `{cell_count, width_px, height_px, catalog_index}` for the renderer, followed
+  by per-type gameplay data (hitboxes at +8, debris-template ptr at +0x14,
+  score dword at +0x16, pickup-drop velocity at +0x1a). `catalog_index` indexes
+  the level BIN's `decode_banked` catalog; the sprite spans `cell_count`
+  consecutive 32-px cells (see `bin.md`).
+- **word2 (health)** seeds the spawned entity's hit points (entity field
+  +0x18). The per-sprite tables the emitters read (`cs:[bf6d..]` in LEVEL_1:
+  100, 160, 500, 600, 200, 200, 1000, 14000, 10000) are health tables; the
+  landmark pickups hardcode 250.
+- **word3 (spawn row)** indexes the level's spawn-position table (LEVEL_1
+  `cs:0x2c88`, file `0x5678`, 76 rows of 8 bytes): `{spawn_x, spawn_y,
+  movement mode, movement arg}`. Nearly every LEVEL_1 row spawns at x = 288
+  (the playfield window's right edge) with a per-row y; rows 71-75 place the
+  landmark pickups mid-screen (x 160..230). It is not a screen coordinate
+  itself.
 
-The same 8-byte shape appears in the race levels' static `0x1690` table, so both
-level kinds share one object-record format.
+The same 8-byte shape appears in the race levels' static `0x1690` table, but
+the race consumer is unread and its field mapping is provisional (race word0
+values ~15500..17700 look like BIN references, not tick deltas).
 
-Runtime buffer base: the records start at the C-runtime marker + `0x48`. Read there,
-the runtime records are exactly `{x, sprite, depth, y}`, matching the write trace.
+Runtime buffer base: the records start at the C-runtime marker + `0x48`. Read
+there, the runtime records match the generator's write trace, except that the
+head record's delay decays in place as the level runs.
+
+## The spawn consumer (LEVEL_1)
+
+How the buffer becomes live objects, from the disassembly (details and exact
+offsets in `re/spawn-consumer.md`):
+
+- **Spawn pull.** Cursor `cs:0x25ec` starts at the buffer base. Per frame, the
+  update-loop tail pulls every due record (delay <= 0, sprite != 0) into a
+  0x40-byte entity in buffer C (`cs:0x29f3/f5`, double-buffered, cap 24
+  entities). The entity takes `{x, y}` from the spawn-position row (<< 4 into
+  12.4 fixed point), health from word2, hitboxes from the descriptor block,
+  and movement from the row's `{mode, arg}`.
+- **Movement.** Mode 0 calls a per-type AI function (`cs:0xacd3` table, 24
+  entries in LEVEL_1) each step; a nonzero mode is the segment of a path table
+  of `{dx, dy, danim}` triplets with an `0xff9c` loop marker (MZ-relocated
+  segment constants; LEVEL_1 uses mode 0 exclusively). Movement runs
+  `cs:0xcd1` sub-steps per rendered frame, the elapsed PIT ticks (`cs:0x69ca`)
+  — the engine's catch-up stepping.
+- **Boss gate.** While `cs:0x269c` is nonzero (set by big-ship spawns,
+  decremented by their deaths), the ISR skips the parallax scroll, the spawn
+  countdown, and the elapsed counter together: the level holds until those
+  enemies die.
+- **Pickups.** The landmark sprites are pickups, identified on body contact by
+  sentinel health values: `0x3750` smart bomb, `0x37b6` invincibility,
+  `0x382c` extra life. The weapon orb `0x36ea` is dropped by every Nth killed
+  enemy (countdown `rng(4) + 5`): the dying entity converts in place, with a
+  velocity kick from its descriptor block.
+- **Death.** The handler adds the descriptor block's score dword to the score
+  (`cs:0x268f`, u32; +1 life per 10,000), plays the per-type death sound, and
+  spawns the type's debris template into the effects buffer E.
+- **Draw.** Entities blit in buffer order (no depth sort) via the `0x8df8`
+  blitter: `cell_count` 32-px catalog cells, x-clipped to -32..288, y-clipped
+  against the 160-row buffer with the vertical-scroll split. The playfield
+  compose order is: background strips, scenery back/mid, enemies (C), enemy
+  shots (B), effects (E), player ordnance (A), front scenery, weapon overlay.
 
 ## Level architecture (parallax strips)
 
@@ -59,16 +109,16 @@ The level's background and parallax architecture:
   the Stage 1 combined render (`re/canyon_*`), where it gets cut.
 - The **background** strips are the SP planes; their scroll is the parallax. The
   placed **objects** (the generated buffer at vaddr `0x34dc`) are enemies and
-  pickups, not background scenery. They do not ride the strips: `word2` (depth) is a
-  draw layer, and a spawned enemy moves under its own AI. The per-frame display list
-  the blitters read is built at runtime from this buffer as the scroll brings each
-  spawn-x into view.
+  pickups, not background scenery. They do not ride the strips: each record is a
+  timed spawn (see [The spawn consumer](#the-spawn-consumer-level_1)), and a
+  spawned enemy moves under its own AI from its spawn point at the window's
+  right edge.
 - The non-race levels **generate** their spawn placement at load (PRNG scatter,
   reseeded from the wall clock, so the layout varies every play); the race levels
   bake an exact table. Randomised placement suits enemy waves; the race obstacle
   courses need it fixed.
 
-Data-strategy note: decoded design data (layout scripts, depth tables) is the
+Data-strategy note: decoded design data (layout scripts, health tables) is the
 recreated game's own content, not the creative assets (sprite pixels, audio,
 palettes) we read from the original disc. For the generated levels there is nothing to
 extract anyway: we port the generator and its small per-layer config.
@@ -159,7 +209,7 @@ running game (debugger trace, see Validation).
 runtime the WAD's code/data segment sits `0x27F0` higher, so a code operand `cs:[X]`
 resolves to **vaddr `X + 0x27F0`** (file `X + 0x29F0`). This matters twice: the
 dispatcher's buffer base `bp = 0xcec` is the obstacle buffer at vaddr `0x34dc`, and
-the emitters' config reads `cs:[bf6d..bf7b]` hit the depth table at vaddr `0xe75d`.
+the emitters' config reads `cs:[bf6d..bf7b]` hit the health table at vaddr `0xe75d`.
 Everything below is in the file-relative `vaddr` convention.
 
 ### The engine PRNG (additive lagged-Fibonacci)
@@ -212,7 +262,7 @@ seed: call 0x8161
 So LEVEL_1's scatter is **seeded from the wall clock and varies every play**.
 Confirmed by diffing two GET-READY captures taken at different times: the fixed
 landmark (record 0) is identical, every rng-driven field differs. The level
-*structure* (which sprites, their bands, depths, order) is seed-independent; only the
+*structure* (which sprites, their bands, healths, order) is seed-independent; only the
 per-object position scatter changes, which is why the opening looks the same to the
 eye. The `0x3039` (12345) reseed value is *not* the initial seed.
 
@@ -244,10 +294,10 @@ call <band-emitter>                      ; emit that band into the buffer at bp
 
 `bp` is set once to `0xcec` at the top and is the persistent write cursor; every
 emitter does `add bp, 8` per record and none resets it, so the bands append into one
-growing buffer. `cs:[0xbf6b]` is the running screen-x; an emitter adds it to the first
+growing buffer. `cs:[0xbf6b]` is the running spawn-timeline x (ticks); an emitter adds it to the first
 record's x then zeroes it. `word3` (`y`) is a small per-band vertical jitter,
-`rng() % m + base`. `word2` (depth) the emitter reads from `cs:[bf6d..bf7b]` (the
-depth table at vaddr `0xe75d`): `100, 160, 500, 600, 200, 200, 1000, 14000, 10000`,
+`rng() % m + base`. `word2` (health) the emitter reads from `cs:[bf6d..bf7b]` (the
+health table at vaddr `0xe75d`): `100, 160, 500, 600, 200, 200, 1000, 14000, 10000`,
 one per sprite type.
 
 ### Emitter kinds
@@ -270,7 +320,7 @@ LEVEL_3 and LEVEL_7 add a **Grid** composition: an inner row wrapped in an outer
 count loop that repeats the row N times and resets xstart between rows (see the
 LEVEL_3 section for the exact draw order).
 
-**Emitter catalog (LEVEL_1)**: vaddr, kind, sprite ptr (`word1`), depth slot, and the
+**Emitter catalog (LEVEL_1)**: vaddr, kind, sprite ptr (`word1`), health slot, and the
 x / y formulas. `xacc` = `cs:[0xbf6b]` (x-start, added once):
 
 | vaddr | kind | sprite | cfg | x | y |
@@ -348,7 +398,7 @@ later steps leave the last-set values in place. Decode reproducible via
   with a `BPM` write-breakpoint on the obstacle buffer stopped on emitter `0xe776`
   building a record: `mov word cs:[bp+2],3308; mov ax,cs:[bf6d] (=0x64); mov
   cs:[bp+4],ax; mov ax,0x12; call <rng>; mov cs:[bp+6],ax; add bp,8`, byte-for-byte
-  this catalog, with `bp` walking the buffer and `cs:[bf6d]=0x64` the live depth.
+  this catalog, with `bp` walking the buffer and `cs:[bf6d]=0x64` the live health.
 - **GET-READY savestate.** Captured by running `LEVEL_1.WAD` renamed to `.EXE`
   standalone under DOSBox-X (it crashes on the gameplay transition, but GET-READY is
   a stable state with the level data loaded), then saving a state. The `.sav` is a
@@ -356,28 +406,28 @@ later steps leave the last-set values in place. Decode reproducible via
   marker `0123456789ABCDEF` (WAD file `0x3694`); the `0x36DA` buffer follows at
   marker + 0x46. The 812 live records match the emitter formulas (the `0x3308` band
   has `x ∈ [0x32,0x50)` = `rng(0x1e)+0x32`, `y ∈ [0,0x12)` = `rng(0x12)`), the
-  dispatcher order, and the depths (`0x3308`→100, `0x38b0`→160, `0x338e`→500,
+  dispatcher order, and the healths (`0x3308`→100, `0x38b0`→160, `0x338e`→500,
   `0x39a4`→600, `0x33f4`/`0x3a92`→200, `0x392e`→1000, `0x3f8e`→14000). Scripts in
   `re/` (gitignored).
 
 ### LEVEL_3: slot-driven emitters and a find-by-position post-pass
 
 LEVEL_3 (WALD) uses the same PRNG and the same x-start-added-once trick, but its
-emitters are **generic**: instead of baking a sprite/depth, the dispatcher writes a
+emitters are **generic**: instead of baking a sprite/health, the dispatcher writes a
 set of engine slots before each call and the emitters read them. The slots, at
-`cs:[dab7..dac3]`, are x-start (`dab7`), x-step (`dab9`), sprite (`dabb`), depth
+`cs:[dab7..dac3]`, are x-start (`dab7`), x-step (`dab9`), sprite (`dabb`), health
 (`dabd`), row-reset-x (`dabf`), and row-y offset (`dac3`); some persist across steps
-(e.g. the fixed-block emitter reuses the previous step's x-step). The depth table
+(e.g. the fixed-block emitter reuses the previous step's x-step). The health table
 moves to `cs:[dac5..dad5]`: `[0x82, 0x47e, 0x15e, 0x64, 0x8c, 0x50, 0xbe, 0xc8,
 0x3a98]`, one per sprite type.
 
 Emitter kinds (file offsets):
 
-- **Once** (`0x121e7`/`12213`/`1223f`): one record, `x = xstart` (no step), depth
+- **Once** (`0x121e7`/`12213`/`1223f`): one record, `x = xstart` (no step), health
   `0xfa`, `y = rng(3) + base`.
 - **Single** (`0x1226b`/`122ab`): `count = rng(a) + b`; per record `x = xstart +
-  step` (no x draw), hardcoded sprite + a fixed depth slot, `y = rng(7) + base`.
-- **SlotSingle** (`0x123de`/`12434`): like Single but sprite/depth come from the
+  step` (no x draw), hardcoded sprite + a fixed health slot, `y = rng(7) + base`.
+- **SlotSingle** (`0x123de`/`12434`): like Single but sprite/health come from the
   slots, and one **dead `rng(0xa)` row-y draw** is burned before the loop (computed
   into `dac1`, unused here, but it advances the stream).
 - **Grid** (`0x122eb`/`12367`): `outer = rng(dx) + cx` rows of `inner = rng(ax) + b`
@@ -387,22 +437,22 @@ Emitter kinds (file offsets):
 - **FixedRun** (`0x1248a`): no PRNG. A 2-record lead (rec0 `x = xstart + step`, rec1
   `x = 0x32`) then `count` records at `x = 0xf`, all sprite `0x54d6`.
 
-After the 38-step append phase, a **find-by-position post-pass** (`0x12c26` plus a
+After the 38-step append phase, a **find-by-time post-pass** (`0x12c26` plus a
 half-emitter) stamps landmark sprites. Each call walks the built buffer summing
-x-steps, finds the record covering a target absolute-x, rewrites that record's x-step,
-and overwrites its sprite/depth/y in place. It uses no PRNG. The 28 calls place 6
-`0x58b0` near the start (target-x `0x34`..`0x37e`), 21 `0x5ac4` across the mid scroll
+delays, finds the record covering a target tick, rewrites that record's delay,
+and overwrites its sprite/health/row in place. It uses no PRNG. The 28 calls place 6
+`0x58b0` near the start (target tick `0x34`..`0x37e`), 21 `0x5ac4` across the mid scroll
 (`0x21c0`..`0x39a0`), and one `0x5c20` at the far end (`0x4300`).
 
 Validated the same way as LEVEL_1: the GET-READY buffer is 508 records at the
 C-runtime marker + `0x62`, and seed **`0x1a94`** reproduces every one (record 0's x
 differs by 1, the 1px scroll). Ported in `crates/game/src/level/slot.rs` (the
-slot-model interpreter) and `level_3.rs` (the script, depth table, and post-pass).
+slot-model interpreter) and `level_3.rs` (the script, health table, and post-pass).
 
 ### LEVEL_5: shared-row and branch-grid emitters
 
 LEVEL_5 (TECHNO) uses the same slot engine as LEVEL_3, adding three emitter shapes
-LEVEL_3 doesn't and no post-pass. Its depths sit in runtime slots `cs:[bd9e..bdae]`,
+LEVEL_3 doesn't and no post-pass. Its healths sit in runtime slots `cs:[bd9e..bdae]`,
 one per sprite type (`0x3a2c`→`0xfa`/`0x96`, `0x3ac2`→`0x708`, `0x3b70`→`0x10e7`,
 `0x3c4e`/`0x3c84`→`0x32`, `0x3cf0`→`0x96`, `0x3d46`→`0x140`/`0x5aa`, `0x426e`→
 `0x3a98`); x-start is `cs:[bd16]`, x-step `cs:[bd9c]`, shared row-y `cs:[bdb0]`. The
@@ -427,7 +477,7 @@ offset is `target & 0xffff`.
 Validated like the others: the GET-READY buffer is 521 records at the C-runtime
 marker + `0x4d`, and seed **`0x2d93`** reproduces every one (record 0's x differs by
 1, the 1px scroll). Ported in `slot.rs` (the Row/BranchRows/Fixed variants and the
-step-repeat) and `level_5.rs` (the 48-step script and depth constants).
+step-repeat) and `level_5.rs` (the 48-step script and health constants).
 
 ### LEVEL_7: one grid and an inserting post-pass
 
@@ -435,7 +485,7 @@ LEVEL_7 (CITY) has the simplest scatter and the most elaborate post-pass. Its on
 PRNG emitter is the L3-shape **Grid** (`0x121bd`): `outer = rng(dx) + cx` rows of
 `inner = rng(ax) + bx` records (`ax = 0` skips the inner draw, as in L3 — here
 `rng(0)` returns 0 with no state advance), one row-y `rng(0xa) + [cfd9]` per row,
-sprite/depth/x-step/row-reset from config slots `cfd1`/`cfd5`/`cfd7`/`cfd3`. The
+sprite/health/x-step/row-reset from config slots `cfd1`/`cfd5`/`cfd7`/`cfd3`. The
 dispatcher (one straight-line script, file `0x123be`..`0x129b0`) calls it 21 times
 between 7 fixed `Once`/landmark emitters (`0x41b5`/`0x421b`/`0x4357` foreground,
 `0x4959` blocks).
@@ -444,11 +494,11 @@ Two things needed care. First, **x-start (`cs:[0xcf4b]`) is persistent runtime
 state**: a Grid leaves it at its row-reset, and a landmark called right after (with
 no intervening write) reads that residual, not the dispatcher's last literal.
 Second, the post-pass **inserts** rather than overwrites. `0x12381` walks the buffer
-summing x-steps, finds the record covering a target absolute-x, and a `rep movsb`
-opens a one-record gap there, splitting that record's x-step into
+summing delays, finds the record covering a target tick, and a `rep movsb`
+opens a one-record gap there, splitting that record's delay into
 `target - before` / `after - target`. The dispatcher then fills the gap: one op
 writes a 5-record `0x7d00` template (overwriting the four shifted records after it),
-then eight ops each insert a single `0x4689` landmark (depth `0x140`).
+then eight ops each insert a single `0x4689` landmark (health `0x140`).
 
 Validated like the others: the GET-READY buffer is 496 records at the C-runtime
 marker + `0x5e` (buffer segment offset `0xd02`), and seed **`0x3e94`** reproduces
@@ -468,7 +518,7 @@ and emitters. Only data and link addresses differ; the code shape is one engine:
 | LEVEL_7 | `0x1bd52` | `0xcf4b` (x), `0xcfd1`..`0xcfd9` (cfg) | 9 (+ insert post-pass) |
 
 Every emitter is the same body: `count = rng() + bx`, then a loop writing
-`cs:[bp+0..6] = {x-step, sprite ptr, depth, y}` and `add bp, 8`, with the same
+`cs:[bp+0..6] = {delay, sprite ptr, health, row}` and `add bp, 8`, with the same
 xstart-added-once trick and the same 4-word `0x7d00` descriptor. The dispatcher is the
 same straight-line script in all four. The PRNG is the same routine at a relinked
 address (the `0x7ab7` multiplier appears exactly once in every WAD). The emitters
@@ -497,7 +547,7 @@ image). The race arm's field mapping is provisional until the render validation.
 ## Open
 
 - Static landmark records at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
-  `{0xfa,0x3f8e,0x1770,0x46}` in `{x,spr,depth,y}` form, then the default template
+  `{0xfa,0x3f8e,0x1770,0x46}` in record form, then the default template
   `(8,0x7d00,0x3308,10)`.
 - Sprite resolution is solved: `word1` is a cs-offset to an 8-byte descriptor
   `{cell_count, width, height, catalog_index}`; `catalog_index` indexes the OUT.BIN
