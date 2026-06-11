@@ -9,6 +9,7 @@
 //! and blits it whole.
 
 mod ai_l1;
+mod ai_l3;
 
 use std::collections::HashMap;
 
@@ -150,6 +151,15 @@ pub(crate) fn descriptor_debris(wad: &[u8], cs_base: usize, sprite: u16) -> u16 
     u16::from_le_bytes([wad[at], wad[at + 1]])
 }
 
+/// Which samples a boss explosion burst plays (the levels differ: L1 bursts
+/// the asteroid sample, adding the big explosion for form 2; L3 bursts the
+/// big explosion alone).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum BossExplosionSound {
+    AsteroidPair { form2: bool },
+    Explosion,
+}
+
 /// One enemy shot (the original's 16-byte buffer-B record): position and
 /// velocity in 12.4 per sub-step.
 pub struct Shot {
@@ -179,10 +189,11 @@ pub struct Spawns {
     pub entities: Vec<Entity>,
     pub shots: Vec<Shot>,
     pub effects: Vec<Effect>,
-    /// A boss explosion fired this step; `Some(form2)` picks its sound pair.
-    pub boss_explosion: Option<bool>,
-    /// A carrier pod opened this step (the one-shot deploy sound).
-    pub pod_deployed: bool,
+    /// A boss explosion fired this step, with its level's sound.
+    pub boss_explosion: Option<BossExplosionSound>,
+    /// The level's enemy-voice sample fired this step (L1's carrier-pod
+    /// deploy, L3's boss volley).
+    pub enemy_voice: bool,
     /// Which per-level AI set drives mode-0 entities, when transcribed.
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
@@ -196,8 +207,10 @@ pub struct Spawns {
     /// The level-end flag (`cs:0xcc2`): once set, the gate no longer holds
     /// the clock (the original's ISR bypass).
     pub level_end: bool,
-    /// The boss's engine globals.
+    /// The L1 boss's engine globals.
     boss: ai_l1::BossState,
+    /// The L3 boss's engine globals.
+    boss_l3: ai_l3::BossState,
     /// Sprites assembled from descriptors, cached by descriptor pointer
     /// (`None` caches an unresolvable descriptor).
     sprites: HashMap<u16, Option<OverlaySprite>>,
@@ -219,7 +232,7 @@ impl Spawns {
             shots: Vec::new(),
             effects: Vec::new(),
             boss_explosion: None,
-            pod_deployed: false,
+            enemy_voice: false,
             ai,
             rng: EngineRng::new(clock_seed()),
             // The WAD's data image initializes the countdown to 3, so the
@@ -228,6 +241,7 @@ impl Spawns {
             gate: 0,
             level_end: false,
             boss: ai_l1::BossState::default(),
+            boss_l3: ai_l3::BossState::default(),
             sprites: HashMap::new(),
         }
     }
@@ -294,28 +308,52 @@ impl Spawns {
     /// The original runs this `elapsed_ticks` times per rendered frame (the
     /// catch-up stepping); the caller loops accordingly. `player` is the
     /// ship's pixel position (the aimed shooters lead on it).
-    pub fn step_movement(&mut self, wad: &[u8], player: (i32, i32)) {
-        if let Some(SpawnAi::L1) = self.ai {
-            let mut context = ai_l1::AiContext {
-                wad,
-                rng: &mut self.rng,
-                player_x: player.0,
-                player_y: player.1,
-                shots: &mut self.shots,
-                effects: &mut self.effects,
-                boss: &mut self.boss,
-                gate: &mut self.gate,
-                boss_explosion: &mut self.boss_explosion,
-                pod_deployed: &mut self.pod_deployed,
-            };
+    pub fn step_movement(&mut self, wad: &[u8], player: (i32, i32), firing_plasma: bool) {
+        match self.ai {
+            Some(SpawnAi::L1) => {
+                let mut context = ai_l1::AiContext {
+                    wad,
+                    rng: &mut self.rng,
+                    player_x: player.0,
+                    player_y: player.1,
+                    shots: &mut self.shots,
+                    effects: &mut self.effects,
+                    boss: &mut self.boss,
+                    gate: &mut self.gate,
+                    boss_explosion: &mut self.boss_explosion,
+                    enemy_voice: &mut self.enemy_voice,
+                };
 
-            for entity in &mut self.entities {
-                if entity.mode == 0 {
-                    ai_l1::step(entity, &mut context);
+                for entity in &mut self.entities {
+                    if entity.mode == 0 {
+                        ai_l1::step(entity, &mut context);
+                    }
+                    // mode != 0 follows a path table at the mode segment; no
+                    // LEVEL_1 row uses it.
                 }
-                // TODO: mode != 0 follows a {dx, dy, dsprite} path table at
-                // the mode segment; no LEVEL_1 row uses it.
             }
+            Some(SpawnAi::L3) => {
+                let mut context = ai_l3::AiContext {
+                    wad,
+                    rng: &mut self.rng,
+                    player_x: player.0,
+                    player_y: player.1,
+                    shots: &mut self.shots,
+                    effects: &mut self.effects,
+                    boss: &mut self.boss_l3,
+                    gate: &mut self.gate,
+                    boss_explosion: &mut self.boss_explosion,
+                    enemy_voice: &mut self.enemy_voice,
+                    firing_plasma,
+                };
+
+                for entity in &mut self.entities {
+                    if entity.mode == 0 {
+                        ai_l3::step(entity, &mut context);
+                    }
+                }
+            }
+            None => {}
         }
 
         // The cull only removes entities that have already been on screen
@@ -354,7 +392,10 @@ impl Spawns {
 
             if effect.phase >= effect.rate {
                 effect.phase = 0;
-                effect.frames -= 1;
+                // Wrapping: a template row with a zero frame count (L3's
+                // splash quirk row) runs 255 more frames off-screen, like
+                // the original's byte decrement.
+                effect.frames = effect.frames.wrapping_sub(1);
 
                 if effect.frames == 0 {
                     return false;
@@ -556,11 +597,11 @@ mod tests {
 
         // The bounds are inclusive: -0x500 survives, one step past it culls.
         spawns.entities[0].x = -0x500;
-        spawns.step_movement(&[], (0, 0));
+        spawns.step_movement(&[], (0, 0), false);
         assert_eq!(spawns.entities.len(), 1);
 
         spawns.entities[0].x = -0x501;
-        spawns.step_movement(&[], (0, 0));
+        spawns.step_movement(&[], (0, 0), false);
         assert!(spawns.entities.is_empty());
     }
 

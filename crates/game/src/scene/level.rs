@@ -234,6 +234,8 @@ impl LevelScene {
             return;
         }
 
+        // L1's form-2 boss arg; the skip stops there so the final fight
+        // stays playable.
         const BOSS_FORM_2: u16 = 23;
 
         self.flow = Flow::Running;
@@ -241,27 +243,32 @@ impl LevelScene {
 
         for _ in 0..ticks {
             if let Some(spawns) = &mut self.spawns {
-                if spawns.entities.iter().any(|e| e.arg == BOSS_FORM_2) {
+                let is_l1 = self.assets.spawn_ai == Some(crate::levels::SpawnAi::L1);
+
+                if is_l1 && spawns.entities.iter().any(|e| e.arg == BOSS_FORM_2) {
                     tracing::info!("skip stopped at the final boss form");
                     break;
                 }
 
                 if spawns.gate_holds() {
-                    let mut orbiters = 0;
+                    let (gate_min, gate_max) = spawns.combat.gate_release;
+                    let mut released = 0;
 
                     for entity in &mut spawns.entities {
-                        if entity.health > 0 && (0x392e..=0x399c).contains(&entity.sprite) {
+                        if entity.health > 0 && (gate_min..=gate_max).contains(&entity.sprite) {
                             entity.health = 0;
-                            orbiters += 1;
+                            released += 1;
                         }
                     }
 
-                    // No orbiters means a boss holds the gate: "defeat" it by
-                    // dropping it to the dying threshold (the next AI step
-                    // starts the death script).
-                    if orbiters == 0 {
+                    // Nothing released means a boss holds the gate: "defeat"
+                    // it by dropping it to L1's dying threshold (close enough
+                    // to a kill on every level's boss).
+                    if released == 0 {
+                        let boss_kind = spawns.combat.level_end_sprite;
+
                         for entity in &mut spawns.entities {
-                            if entity.health > 0x1388 && entity.kind >= 0x3ae8 {
+                            if entity.health > 0x1388 && entity.kind >= boss_kind {
                                 tracing::info!("skip auto-defeated a gating boss form");
                                 entity.health = 0x1388;
                             }
@@ -439,7 +446,8 @@ impl LevelScene {
         spawns.tick(rows, wad, cs_base);
 
         let shots_before = spawns.shots.len();
-        spawns.step_movement(wad, self.ship.position());
+        let firing_plasma = self.weapons.firing() == ActiveWeapon::Selected(Weapon::Plasma);
+        spawns.step_movement(wad, self.ship.position(), firing_plasma);
 
         if spawns.shots.len() > shots_before {
             self.sfx.enemy_fired(&self.assets.sfx, audio);
@@ -512,13 +520,13 @@ impl LevelScene {
             self.level_end_countdown = Some(460);
         }
 
-        if let Some(form2) = spawns.boss_explosion.take() {
-            self.sfx.boss_explosion(form2, &self.assets.sfx, audio);
+        if let Some(sound) = spawns.boss_explosion.take() {
+            self.sfx.boss_explosion(sound, &self.assets.sfx, audio);
         }
 
-        if spawns.pod_deployed {
-            spawns.pod_deployed = false;
-            self.sfx.pod_deployed(&self.assets.sfx, audio);
+        if spawns.enemy_voice {
+            spawns.enemy_voice = false;
+            self.sfx.enemy_voice(&self.assets.sfx, audio);
         }
 
         // Impact sounds first, then the death sounds: the original's frame

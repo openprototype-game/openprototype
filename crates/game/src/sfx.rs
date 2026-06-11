@@ -21,6 +21,7 @@
 
 use std::sync::Arc;
 
+use crate::spawns::BossExplosionSound;
 use openprototype_core::audio::{AudioCommand, PlaySfx};
 use openprototype_core::{ActiveWeapon, Weapon};
 
@@ -151,9 +152,9 @@ impl Sfx {
         play(bank, SLOT_CHANGEWE, EVENT_CHANNEL, false, audio);
     }
 
-    /// The carrier pod opened and deploys (`0xace3`): the level's enemy
-    /// voice sample (slot 8 is per-level themed; L1 is gegrocke).
-    pub fn pod_deployed(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+    /// The level's enemy-voice sample (slot 8 is per-level themed): L1's
+    /// carrier-pod deploy (`0xace3`, gegrocke), L3's boss volley (lgegshot).
+    pub fn enemy_voice(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, SLOT_ENEMY_VOICE, EVENT_CHANNEL, false, audio);
     }
 
@@ -162,12 +163,25 @@ impl Sfx {
         play(bank, SLOT_ENEMY_SHOT, EVENT_CHANNEL, false, audio);
     }
 
-    /// A boss explosion burst (`0xad43`, plus the big `0xad23` in form 2).
-    pub fn boss_explosion(&self, form2: bool, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
-        play(bank, SLOT_ASTEROID_DEATH, IMPACT_CHANNEL, false, audio);
+    /// A boss explosion burst, with its level's samples (L1 `0xad43` plus
+    /// the big `0xad23` in form 2; L3's bursts are the big explosion alone).
+    pub fn boss_explosion(
+        &self,
+        sound: BossExplosionSound,
+        bank: &SfxBank,
+        audio: &mut Vec<AudioCommand>,
+    ) {
+        match sound {
+            BossExplosionSound::AsteroidPair { form2 } => {
+                play(bank, SLOT_ASTEROID_DEATH, IMPACT_CHANNEL, false, audio);
 
-        if form2 {
-            play(bank, SLOT_EXPLOSION, IMPACT_CHANNEL, false, audio);
+                if form2 {
+                    play(bank, SLOT_EXPLOSION, IMPACT_CHANNEL, false, audio);
+                }
+            }
+            BossExplosionSound::Explosion => {
+                play(bank, SLOT_EXPLOSION, IMPACT_CHANNEL, false, audio);
+            }
         }
     }
 

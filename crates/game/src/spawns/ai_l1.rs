@@ -12,7 +12,7 @@
 //! orbiter frame patch's hitbox/claw writes, and the firing-weapon gate bypass
 //! (`cs:0xcb5 == 3`).
 
-use super::{Effect, Entity, Shot, descriptor_hitboxes};
+use super::{BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
 
 /// Per-step context the AI functions read and write besides the entity.
@@ -27,10 +27,11 @@ pub(super) struct AiContext<'a> {
     pub boss: &'a mut BossState,
     /// The boss/orbiter gate counter (`cs:0x269c`).
     pub gate: &'a mut u8,
-    /// A boss explosion fired this step (`Some(form2)` picks its sounds).
-    pub boss_explosion: &'a mut Option<bool>,
-    /// A carrier pod opened this step (the one-shot deploy sound).
-    pub pod_deployed: &'a mut bool,
+    /// A boss explosion fired this step (the form picks its sounds).
+    pub boss_explosion: &'a mut Option<BossExplosionSound>,
+    /// The level's enemy-voice sample fired this step (the carrier pod's
+    /// one-shot deploy sound).
+    pub enemy_voice: &'a mut bool,
 }
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
@@ -216,7 +217,7 @@ fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
     // Deployed: runs every call while on the final frame; the deploy sound
     // (0xace3, the level's enemy voice) fires once.
     if entity.phase_a & 0xff != 0x11 {
-        *ctx.pod_deployed = true;
+        *ctx.enemy_voice = true;
         entity.phase_a = (entity.phase_a & 0xff00) | 0x11;
     }
 
@@ -633,7 +634,9 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
 /// The boss explosion spawner (file 0xd23b): a staggered burst at a random
 /// offset, retimed from the PRNG (draw order 0x14, 0x28, 0x1e).
 fn boss_explosion(entity: &Entity, ctx: &mut AiContext) {
-    *ctx.boss_explosion = Some(ctx.boss.form2);
+    *ctx.boss_explosion = Some(BossExplosionSound::AsteroidPair {
+        form2: ctx.boss.form2,
+    });
 
     let mut timer = i32::from(ctx.rng.next(0x14));
 

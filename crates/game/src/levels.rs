@@ -388,6 +388,8 @@ pub struct SpawnPositionsData {
 pub enum SpawnAi {
     /// LEVEL_1's 24 functions (`re/l1-ai-functions.md`).
     L1,
+    /// LEVEL_3's 56 functions (`re/l3-ai-functions.md`).
+    L3,
 }
 
 impl Level {
@@ -571,7 +573,20 @@ impl Level {
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
-                combat: L1_COMBAT,
+                combat: CombatData {
+                    ship_rect_table: 0x63ef,
+                    pickups: [0x51e8, 0x510c, 0x5172, 0x52ae],
+                    orb_arg: 0,
+                    gate_release: (0x54d6, 0x5698),
+                    level_end_sprite: 0x5c20,
+                    level_end_clears_gate: false,
+                    ram_survivors: &[(0x54d6, 0x54d6), (0x5c20, 0x5c20)],
+                    entity_cap: 48,
+                    cull_x_min: -0x320,
+                    respawn_invincibility: 180,
+                    asteroid_kind: None,
+                    pod_kind: None,
+                },
                 background: Sp::Wald,
                 catalog: Bin::Wald,
                 catalog_offset: 0x134c0,
@@ -596,7 +611,7 @@ impl Level {
                 overlay_positions: 0xf504,
                 ship: ShipData {
                     catalog: 0xa85a,
-                    explosion: None,
+                    explosion: Some(0x9a0c),
                     y_min: -2,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -652,7 +667,7 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x85df,
                     rows: 113,
-                    ai: None,
+                    ai: Some(SpawnAi::L3),
                 }),
             },
             Level::L4 => LevelData {
