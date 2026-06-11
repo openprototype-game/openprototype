@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use prototype_disc::{AssetSource, DiscImage};
+use prototype_disc::{AssetSource, DiscImage, manifest};
 
 /// Locate a cue: `$PROTOTYPE_DISC` first, then `PROTOTYPE.cue` at the repo root
 /// (two levels up from this crate).
@@ -108,5 +108,30 @@ fn audio_tracks_match_the_verified_layout() {
     assert_eq!(
         pcm.len(),
         (track2.end_lba - track2.start_lba) as usize * 2352
+    );
+}
+
+#[test]
+#[cfg_attr(not(feature = "disc-tests"), ignore = "requires the disc image")]
+fn manifest_matches_the_image() {
+    let image = open();
+
+    let mismatches = manifest::verify(&image).expect("reading the data track");
+    assert!(
+        mismatches.is_empty(),
+        "the image deviates from the manifest:\n{}",
+        mismatches
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    // The manifest covers the whole data track; if it ever lags behind the
+    // file list, the startup check silently loses coverage.
+    assert_eq!(
+        manifest::MANIFEST.len(),
+        image.names().len(),
+        "one manifest entry per data-track file"
     );
 }

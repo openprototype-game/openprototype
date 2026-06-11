@@ -21,7 +21,7 @@ mod desktop {
     use openprototype::levels::Level;
     use openprototype::scene::SceneId;
     use openprototype_backend::run;
-    use prototype_disc::DiscImage;
+    use prototype_disc::{DiscImage, manifest};
     use tracing_subscriber::EnvFilter;
 
     /// Which scene to boot straight into, bypassing the normal intro flow.
@@ -60,6 +60,28 @@ mod desktop {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     }
 
+    /// Check the data track against the build manifest before touching any
+    /// baked-in offsets, so a wrong or corrupted image fails with a per-file
+    /// report instead of a decoder error.
+    fn verify_disc(disc: &DiscImage) -> Result<()> {
+        let mismatches = manifest::verify(disc).context("verifying the disc image")?;
+
+        if mismatches.is_empty() {
+            return Ok(());
+        }
+
+        let report = mismatches
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n  ");
+        anyhow::bail!(
+            "the disc image does not match the build this port supports:\n  {report}\n\
+             The port bakes in byte offsets for one specific pressing; a different \
+             pressing or a damaged rip will not work."
+        );
+    }
+
     pub fn main() -> Result<()> {
         init_tracing();
 
@@ -71,6 +93,9 @@ mod desktop {
             None => DiscImage::open_default()
                 .context("opening the default disc image (set --cue or $PROTOTYPE_DISC)")?,
         });
+
+        verify_disc(&disc)?;
+
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;

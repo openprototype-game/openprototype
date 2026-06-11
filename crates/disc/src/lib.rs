@@ -13,6 +13,7 @@ pub mod cue;
 pub mod disc;
 pub mod error;
 pub mod iso9660;
+pub mod manifest;
 pub mod sector;
 
 pub use disc::{AudioTrack, DiscImage, FileEntry};
