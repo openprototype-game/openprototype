@@ -86,12 +86,16 @@ const GET_READY_TEXT: &str = "GET READY..";
 enum Flow {
     /// Frozen on the last composed frame with GET READY overlaid, waiting for
     /// fire released-then-pressed (level start and after each death).
-    GetReady { fire_released: bool },
+    GetReady {
+        fire_released: bool,
+    },
     Running,
     /// The ship's death explosion is playing; the world runs on with input,
     /// body contact and the ship hit tests gated off. The life is deducted
     /// when the sequence ends (the original's respawn-time decrement).
-    Dying { ticks_left: u32 },
+    Dying {
+        ticks_left: u32,
+    },
     /// Out of lives: hand back to the front-end.
     GameOver,
 }
@@ -278,11 +282,10 @@ impl LevelScene {
         };
     }
 
-    /// Cycle to the next weapon and replay the pod's open/settle animation.
+    /// Cycle to the next weapon. The pod replays when the firing weapon
+    /// actually resolves to it, not on the keypress (see `advance`).
     fn cycle_weapon(&mut self) {
         self.state.cycle_weapon();
-        self.pod_frame = 0;
-        self.pod_ticks = 0;
     }
 
     /// Report the selected weapon's charge after a dev-key adjustment.
@@ -381,8 +384,13 @@ impl LevelScene {
                 enemy_count,
             );
 
+            // The resolve changing the firing weapon plays the switch sound
+            // and replays the pod animation (file 0xae59); both wait out a
+            // held burst because the resolve is gated on fire released.
             if sounds.switched {
                 self.sfx.weapon_switched(&self.assets.sfx, audio);
+                self.pod_frame = 0;
+                self.pod_ticks = 0;
             }
 
             if let Some(weapon) = sounds.fired {
@@ -554,7 +562,9 @@ impl LevelScene {
     /// panel once it snaps up to its settled row. The original gates the
     /// playfield sprite blitter against the HUD band for the same effect.
     fn render(&mut self) {
-        let active = self.state.active_weapon();
+        // The panel (pod, overlay) shows the resolved firing weapon, frozen
+        // across a held burst, not the instantaneous selection.
+        let active = self.weapons.firing();
 
         self.assets.background.render(
             &self.background_scroll,
@@ -899,14 +909,19 @@ mod tests {
     }
 
     #[test]
-    fn shift_cycles_the_weapon_and_restarts_the_pod_animation() {
+    fn shift_cycles_the_weapon_and_the_resolve_restarts_the_pod() {
         let mut scene = test_scene();
         assert_eq!(
             scene.state.active_weapon(),
             ActiveWeapon::Selected(Weapon::Multishot)
         );
 
+        // The press itself only moves the selection; the pod replays when
+        // the firing weapon re-resolves on the next tick (fire not held).
         scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Shift)]);
+        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+
+        scene.update(TICK, &[]);
 
         assert_eq!(
             scene.state.active_weapon(),
@@ -916,9 +931,32 @@ mod tests {
     }
 
     #[test]
+    fn a_held_burst_freezes_the_panels_firing_weapon() {
+        let mut scene = test_scene();
+
+        // Fire held: the selection moves but the resolve (and the pod
+        // replay) wait for the release.
+        scene.update(TICK, &[KeyEvent::Pressed(Key::Ctrl)]);
+        scene.update(TICK, &[KeyEvent::Pressed(Key::Shift)]);
+        assert_eq!(
+            scene.weapons.firing(),
+            ActiveWeapon::Selected(Weapon::Multishot)
+        );
+        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+
+        scene.update(TICK, &[KeyEvent::Released(Key::Ctrl)]);
+        scene.update(TICK, &[]);
+        assert_eq!(
+            scene.weapons.firing(),
+            ActiveWeapon::Selected(Weapon::Burning)
+        );
+        assert_eq!(scene.pod_frame, 0);
+    }
+
+    #[test]
     fn the_pod_animation_advances_to_settled_then_stops() {
         let mut scene = test_scene();
-        scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Shift)]);
+        scene.update(TICK, &[KeyEvent::Pressed(Key::Shift)]);
         assert_eq!(scene.pod_frame, 0);
 
         // Enough ticks to carry frame 0 up to the settled frame and then hold.

@@ -578,6 +578,14 @@ impl Weapons {
         }
     }
 
+    /// The resolved firing weapon (`cs:0xcb5`), frozen while fire is held.
+    /// The panel's pod and overlay track this, not the instantaneous
+    /// selection: an orb picked up mid-burst doesn't switch the display
+    /// until fire is released (the resolve at file 0xae59).
+    pub fn firing(&self) -> ActiveWeapon {
+        self.firing
+    }
+
     /// The firing weapon's bar hit zero mid-hold: revert to the chaingun
     /// with the original's cooldown (the hit consequence at file 0xc52c).
     pub fn weapon_lost(&mut self) {
