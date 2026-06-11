@@ -46,6 +46,12 @@ mod desktop {
         /// Which level to load for the `--scene level` harness (1..=7).
         #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=7))]
         level: u8,
+
+        /// Skip this many seconds into the level (`--scene level` only): the
+        /// spawn clock, enemies, and scroll are pre-simulated, so the scene
+        /// starts mid-action.
+        #[arg(long, default_value_t = 0.0)]
+        skip: f32,
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
@@ -111,6 +117,7 @@ mod desktop {
         );
 
         if let Some(DevScene::Level) = cli.scene {
+            app.set_level_skip((cli.skip * 60.0) as u32);
             app.start_on(SceneId::Level);
         }
 

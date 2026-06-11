@@ -24,6 +24,8 @@ pub struct App {
     intro_assets: Rc<IntroAssets>,
     highscore_assets: Rc<HighscoreAssets>,
     level_assets: Rc<LevelAssets>,
+    /// Dev fast-forward for the level scene (`--skip`), in logic ticks.
+    level_skip_ticks: u32,
     highscore_store: HighscoreStore,
 }
 
@@ -45,8 +47,14 @@ impl App {
             intro_assets,
             highscore_assets: Rc::new(highscore_assets),
             level_assets: Rc::new(level_assets),
+            level_skip_ticks: 0,
             highscore_store,
         }
+    }
+
+    /// Set the level scene's dev fast-forward (`--skip`), in logic ticks.
+    pub fn set_level_skip(&mut self, ticks: u32) {
+        self.level_skip_ticks = ticks;
     }
 
     /// Replace the current scene, to boot straight into one (the `--scene` flag).
@@ -66,7 +74,10 @@ impl App {
                 self.highscore_assets.clone(),
                 self.highscore_store.load(),
             )),
-            SceneId::Level => Box::new(LevelScene::new(self.level_assets.clone())),
+            SceneId::Level => Box::new(LevelScene::new(
+                self.level_assets.clone(),
+                self.level_skip_ticks,
+            )),
         }
     }
 }

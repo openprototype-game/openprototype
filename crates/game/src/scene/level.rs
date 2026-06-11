@@ -118,16 +118,18 @@ pub struct LevelScene {
     /// Debug freeze: P stops every scroll so stills can be compared against
     /// the original. Starts frozen-off; the scene begins at scroll zero anyway.
     paused: bool,
+    /// Dev fast-forward: F held runs 8 logic ticks per frame.
+    turbo: bool,
 }
 
 impl LevelScene {
-    pub fn new(assets: Rc<LevelAssets>) -> Self {
+    pub fn new(assets: Rc<LevelAssets>, skip_ticks: u32) -> Self {
         let state = new_game_state();
 
         eprintln!(
-            "level scene: arrows fly the ship, Shift cycles weapon, \
-             WASD nudge the overlay, [/] adjust its level, P pauses the scroll, \
-             Esc quits"
+            "level scene: arrows fly the ship, Ctrl fires, Shift cycles weapon, \
+             Space smart-bombs, F fast-forwards, WASD nudge the overlay, \
+             [/] adjust its level, P pauses the scroll, Esc quits"
         );
 
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
@@ -168,10 +170,32 @@ impl LevelScene {
             pod_ticks: 0,
             tick_elapsed: Duration::ZERO,
             paused: false,
+            turbo: false,
         };
+        scene.fast_forward(skip_ticks);
         scene.render();
 
         scene
+    }
+
+    /// Dev fast-forward (`--skip`): pre-simulates `ticks` of the level with
+    /// the ship parked and shielded, then leaves the respawn shield up so the
+    /// player can orient. Sounds from the skipped span are dropped.
+    fn fast_forward(&mut self, ticks: u32) {
+        if ticks == 0 {
+            return;
+        }
+
+        let mut scratch = Vec::new();
+
+        for _ in 0..ticks {
+            self.state.invincible_ticks = self.state.invincible_ticks.max(2);
+            self.advance(1, &mut scratch);
+            scratch.clear();
+        }
+
+        self.state.invincible_ticks = 300;
+        self.ship.arm_shield(300);
     }
 
     /// Cycle to the next weapon and replay the pod's open/settle animation.
@@ -511,6 +535,7 @@ impl Scene for LevelScene {
             match *event {
                 KeyEvent::Pressed(key) => match key {
                     Key::Shift => self.cycle_weapon(),
+                    Key::Char('f') => self.turbo = true,
                     Key::Char(' ') => {
                         if self.bomb_countdown == 0 && self.state.use_smart_bomb() {
                             self.bomb_countdown = 15;
@@ -553,6 +578,7 @@ impl Scene for LevelScene {
                     Key::Left => self.held.left = false,
                     Key::Right => self.held.right = false,
                     Key::Ctrl => self.fire_held = false,
+                    Key::Char('f') => self.turbo = false,
                     _ => {}
                 },
             }
@@ -563,6 +589,11 @@ impl Scene for LevelScene {
         while self.tick_elapsed >= TICK {
             self.tick_elapsed -= TICK;
             ticks += 1;
+        }
+
+        // Dev fast-forward: F held runs the level at 8x.
+        if self.turbo {
+            ticks *= 8;
         }
 
         // The music runs off the timer ISR in the original, so the dev pause
@@ -623,7 +654,7 @@ mod tests {
     use crate::assets::test_level_assets;
 
     fn test_scene() -> LevelScene {
-        LevelScene::new(Rc::new(test_level_assets()))
+        LevelScene::new(Rc::new(test_level_assets()), 0)
     }
 
     #[test]
