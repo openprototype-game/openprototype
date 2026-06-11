@@ -326,6 +326,7 @@ mod tests {
         y_min: -2,
         y_max: 110,
         spawn_shield_ticks: 300,
+        explosion: None,
     };
 
     /// L5's ship data (side-view idle at 21, flicker on the 29th frame).
@@ -336,6 +337,7 @@ mod tests {
         y_min: -12,
         y_max: 113,
         spawn_shield_ticks: 300,
+        explosion: None,
     };
 
     fn held(up: bool, down: bool, left: bool, right: bool) -> HeldKeys {

@@ -180,6 +180,15 @@ pub struct LevelAssets {
     pub spawns: SpawnSource,
     /// The level's transcribed AI set, if any.
     pub spawn_ai: Option<SpawnAi>,
+    /// The glyph sheet (`FONT.RAW`), for the GET READY overlay.
+    pub font: Font,
+    /// Per palette index, the index of the nearest color to one third of its
+    /// brightness; the GET READY freeze remaps the playfield through it.
+    pub dim_table: [u8; 256],
+    /// The ship's death-explosion frames, decoded from
+    /// [`ShipData::explosion`]; empty until that level's descriptors are
+    /// found.
+    pub ship_explosion: Vec<OverlaySprite>,
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -283,6 +292,51 @@ pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets>
     })
 }
 
+/// The death sequence steps the explosion descriptor offset by 8 until it
+/// reaches `0xb8` (`cs:0x8f5f` in the tick at file `0xb354`): 23 frames.
+const SHIP_EXPLOSION_FRAMES: usize = 23;
+
+/// Build the playfield-dimming remap (the level init's table builder at file
+/// `0xe4be`): for each palette index, the target is its color at one-third
+/// brightness (6-bit channels, integer division), and the entry is the
+/// palette index nearest that target by L1 distance, earliest index winning
+/// ties. The GET READY freeze (file `0xe60f`) remaps every playfield pixel
+/// through the table.
+fn darken_table(palette: &Palette) -> [u8; 256] {
+    // The palette stores bit-replicated 8-bit channels; `>> 2` recovers the
+    // 6-bit DAC values the original works in.
+    let dac: Vec<[i32; 3]> = palette
+        .colors
+        .iter()
+        .map(|color| {
+            [
+                i32::from(color.r >> 2),
+                i32::from(color.g >> 2),
+                i32::from(color.b >> 2),
+            ]
+        })
+        .collect();
+
+    std::array::from_fn(|index| {
+        let target = dac[index].map(|channel| channel / 3);
+        let mut best_distance = i32::MAX;
+        let mut best_index = 0u8;
+
+        for (candidate, color) in dac.iter().enumerate() {
+            let distance = (color[0] - target[0]).abs()
+                + (color[1] - target[1]).abs()
+                + (color[2] - target[2]).abs();
+
+            if distance < best_distance {
+                best_distance = distance;
+                best_index = candidate as u8;
+            }
+        }
+
+        best_index
+    })
+}
+
 /// Load and decode the level scene's assets: the parallax background, the HUD,
 /// and the weapon overlays with their per-weapon slide tables.
 pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> {
@@ -315,6 +369,20 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let (fire_sprites, barrel_offsets, bob_wave) = load_fire(&wad, &overlay_catalog, data.fire)?;
     let sfx = load_sfx(disc, &wad, data.sfx)?;
     let music = load_music(disc, data.music_track)?;
+    let font_bytes = disc.read("FONT.RAW").context("reading FONT.RAW")?;
+    let font = Font::decode(&font_bytes).context("decoding FONT.RAW")?;
+    let dim_table = darken_table(&hud.palette);
+    let ship_explosion = data
+        .ship
+        .explosion
+        .map(|base| {
+            (0..SHIP_EXPLOSION_FRAMES)
+                .map(|frame| directory_sprite(&wad, &overlay_catalog, base + frame * 8))
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()
+        .context("decoding the ship explosion frames")?
+        .unwrap_or_default();
     let spawn_rows = data
         .spawn_positions
         .map(|positions| crate::spawns::decode_rows(&wad, positions.table, positions.rows))
@@ -344,6 +412,9 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         spawn_rows,
         spawns: data.spawns,
         spawn_ai: data.spawn_positions.and_then(|positions| positions.ai),
+        font,
+        dim_table,
+        ship_explosion,
     })
 }
 
@@ -1008,6 +1079,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             y_min: -2,
             y_max: 110,
             spawn_shield_ticks: 300,
+            explosion: None,
         },
         shield_frames: Vec::new(),
         fire_sprites: FireSprites {
@@ -1048,6 +1120,9 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         spawn_rows: None,
         spawns: SpawnSource::StaticTable { table: 0 },
         spawn_ai: None,
+        font: Font::decode(&[0u8; 320 * 16]).expect("synthetic font sheet decodes"),
+        dim_table: [0; 256],
+        ship_explosion: Vec::new(),
     }
 }
 

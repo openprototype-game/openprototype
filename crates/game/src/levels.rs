@@ -74,6 +74,10 @@ pub struct ShipData {
     /// Shield ticks granted at spawn: 300 (~5s) in L1 and L5, 180 (~3s)
     /// elsewhere.
     pub spawn_shield_ticks: i32,
+    /// File offset of the ship's 23 death-explosion descriptors (the dying
+    /// draw blits `base + frame*8` at the ship position; L1 `cs:0x45e2` =
+    /// file `0x6fd2`), `None` until found in that level's WAD.
+    pub explosion: Option<usize>,
 }
 
 /// Where a level's WAD keeps the player-fire data: the shot sprites' directory
@@ -369,6 +373,7 @@ impl Level {
                 overlay_positions: 0xbb18,
                 ship: ShipData {
                     catalog: 0x6ddc,
+                    explosion: Some(0x6fd2),
                     y_min: -2,
                     y_max: 110,
                     spawn_shield_ticks: 300,
@@ -454,6 +459,7 @@ impl Level {
                 overlay_positions: 0x9683,
                 ship: ShipData {
                     catalog: 0x4954,
+                    explosion: None,
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -523,6 +529,7 @@ impl Level {
                 overlay_positions: 0xf504,
                 ship: ShipData {
                     catalog: 0xa85a,
+                    explosion: None,
                     y_min: -2,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -606,6 +613,7 @@ impl Level {
                 overlay_positions: 0x96fb,
                 ship: ShipData {
                     catalog: 0x49cc,
+                    explosion: None,
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -673,6 +681,7 @@ impl Level {
                 overlay_positions: 0xd1e0,
                 ship: ShipData {
                     catalog: 0x84d0,
+                    explosion: None,
                     y_min: -12,
                     y_max: 113,
                     spawn_shield_ticks: 300,
@@ -751,6 +760,7 @@ impl Level {
                 overlay_positions: 0x9bfb,
                 ship: ShipData {
                     catalog: 0x4ecc,
+                    explosion: None,
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -815,6 +825,7 @@ impl Level {
                 overlay_positions: 0xf75d,
                 ship: ShipData {
                     catalog: 0xaa94,
+                    explosion: None,
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,

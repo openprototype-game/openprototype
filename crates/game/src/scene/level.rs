@@ -70,6 +70,31 @@ const OVERLAY_X: i32 = 251;
 /// cut-off top extends up from there. Still nudgeable with W/S.
 const OVERLAY_OFFSET_Y: i32 = -7;
 
+/// The ship death sequence's length: 23 explosion frames, 4 ticks each
+/// (`cs:0x8f5f` stepping by 8 to `0xb8` on a 4-tick divider, file `0xb354`).
+const DEATH_TICKS: u32 = 92;
+
+/// Where the GET READY text draws: the original blits to VRAM offset `0xfb8`
+/// on the frozen page = row 50, byte 24 of the 80-byte Mode X row = x 96.
+const GET_READY_POS: (i32, i32) = (96, 50);
+
+/// The GET READY string as the WAD stores it (`cs:0x6e7`, `$`-terminated).
+const GET_READY_TEXT: &str = "GET READY..";
+
+/// The level's run state (the original's freeze and dying globals,
+/// `cs:0x29f7` and `cs:0x46b2`).
+enum Flow {
+    /// Frozen on the last composed frame with GET READY overlaid, waiting for
+    /// fire released-then-pressed (level start and after each death).
+    GetReady { fire_released: bool },
+    Running,
+    /// The ship's death explosion is playing; the world runs on with input,
+    /// body contact and the ship hit tests gated off.
+    Dying { ticks_left: u32, game_over: bool },
+    /// Out of lives: hand back to the front-end.
+    GameOver,
+}
+
 pub struct LevelScene {
     assets: Rc<LevelAssets>,
     state: GameState,
@@ -124,6 +149,8 @@ pub struct LevelScene {
     /// frames after the boss dies, and for the last 300 the ship flies off
     /// to the right with input locked ([`Ship::fly_out`]).
     level_end_countdown: Option<u32>,
+    /// The freeze/dying state; the level starts frozen on GET READY.
+    flow: Flow,
 }
 
 impl LevelScene {
@@ -176,6 +203,9 @@ impl LevelScene {
             paused: false,
             turbo: false,
             level_end_countdown: None,
+            flow: Flow::GetReady {
+                fire_released: false,
+            },
         };
         scene.fast_forward(skip_ticks);
         scene.render();
@@ -200,6 +230,7 @@ impl LevelScene {
 
         const BOSS_FORM_2: u16 = 23;
 
+        self.flow = Flow::Running;
         let mut scratch = Vec::new();
 
         for _ in 0..ticks {
@@ -240,6 +271,10 @@ impl LevelScene {
 
         self.state.invincible_ticks = 300;
         self.ship.arm_shield(300);
+        // Land frozen on GET READY so the player starts on their own cue.
+        self.flow = Flow::GetReady {
+            fire_released: false,
+        };
     }
 
     /// Cycle to the next weapon and replay the pod's open/settle animation.
@@ -268,10 +303,19 @@ impl LevelScene {
         );
     }
 
-    /// Start the music on the first frame and loop it on the track-length
-    /// countdown, like the original's timer ISR.
+    /// Start the music and loop it on the track-length countdown, like the
+    /// original's timer ISR.
+    ///
+    /// The start waits for the first GET READY dismissal: the original bakes
+    /// a pending-start flag (`cs:0x736c`) that the first unfreeze consumes
+    /// (file `0x9e65`), so the opening GET READY is silent and respawn
+    /// freezes don't restart the track.
     fn advance_music(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         if !self.music_started {
+            if matches!(self.flow, Flow::GetReady { .. }) {
+                return;
+            }
+
             self.music_started = true;
             audio.push(AudioCommand::PlayTrack(self.assets.music.track));
             self.music_countdown = i64::from(self.assets.music.length_ticks);
@@ -295,10 +339,41 @@ impl LevelScene {
             self.state.tick();
             self.run_combat(audio);
 
-            self.ship
-                .update(self.held, &mut self.camera_y, self.assets.camera_min);
+            // The death sequence: the world keeps running, the ship doesn't.
+            // When the explosion finishes, the original freezes into the
+            // respawn GET READY, or exits when the lives ran out.
+            if let Flow::Dying {
+                ticks_left,
+                game_over,
+            } = &mut self.flow
+            {
+                *ticks_left -= 1;
+                let finished = *ticks_left == 0;
+                let game_over = *game_over;
+
+                if finished && game_over {
+                    self.flow = Flow::GameOver;
+                    break;
+                }
+
+                if finished {
+                    self.ship = Ship::new(self.assets.ship);
+                    self.flow = Flow::GetReady {
+                        fire_released: false,
+                    };
+                    break;
+                }
+            }
+
+            let running = matches!(self.flow, Flow::Running);
+
+            if running {
+                self.ship
+                    .update(self.held, &mut self.camera_y, self.assets.camera_min);
+            }
+
             let sounds = self.weapons.update(
-                self.fire_held,
+                self.fire_held && running,
                 &self.state,
                 self.ship.position(),
                 self.ship.roll_frame(),
@@ -378,8 +453,15 @@ impl LevelScene {
 
         combat::player_shots(&mut self.weapons, spawns, wad, cs_base, &mut events);
 
-        let (ship_x, ship_y) = self.ship.position();
-        let rects = combat::ship_rects(wad, cs_base, self.ship.roll_frame(), ship_x, ship_y);
+        // While the death explosion plays, the ship has no presence: the
+        // original gates the ship hit test and body contact off the dying
+        // flag (`cs:0x46b2`). Far-away rects disable both passes here.
+        let rects = if matches!(self.flow, Flow::Dying { .. }) {
+            [[i32::MAX, i32::MAX, i32::MAX, i32::MAX]; 3]
+        } else {
+            let (ship_x, ship_y) = self.ship.position();
+            combat::ship_rects(wad, cs_base, self.ship.roll_frame(), ship_x, ship_y)
+        };
 
         for _ in 0..combat::enemy_shots_vs_ship(spawns, wad, cs_base, &rects) {
             let outcome = self.state.take_hit(Severity::Bullet);
@@ -447,20 +529,22 @@ impl LevelScene {
             self.sfx.weapon_lost(&self.assets.sfx, audio);
         }
 
+        // A fatal hit starts the death explosion; the respawn (or the
+        // game-over exit) happens when the sequence finishes, in `advance`.
         match events.ship {
             Some(HitOutcome::Died) => {
-                // The original runs a death sequence and a GET READY; the
-                // port respawns with the fly-in directly.
                 self.sfx.ship_died(&self.assets.sfx, audio);
-                self.ship = Ship::new(self.assets.ship);
+                self.flow = Flow::Dying {
+                    ticks_left: DEATH_TICKS,
+                    game_over: false,
+                };
             }
             Some(HitOutcome::GameOver) => {
-                // TODO: the game-over flow (exit to the front-end). The dev
-                // scene restarts a fresh game so respawn invincibility keeps
-                // working.
                 self.sfx.ship_died(&self.assets.sfx, audio);
-                self.state = new_game_state();
-                self.ship = Ship::new(self.assets.ship);
+                self.flow = Flow::Dying {
+                    ticks_left: DEATH_TICKS,
+                    game_over: true,
+                };
             }
             _ => {}
         }
@@ -513,6 +597,22 @@ impl LevelScene {
             self.camera_y,
         );
 
+        // The death explosion draws over the ship at its position (the dying
+        // branch of the ship draw, file 0xbafd).
+        if let Flow::Dying { ticks_left, .. } = self.flow {
+            let frame_index = ((DEATH_TICKS - ticks_left) / 4) as usize;
+
+            if let Some(sprite) = self.assets.ship_explosion.get(frame_index) {
+                let (x, y) = self.ship.position();
+                self.frame.blit_transparent(
+                    &sprite.pixels,
+                    sprite.size,
+                    playfield::LEFT + x,
+                    y - self.camera_y,
+                );
+            }
+        }
+
         self.weapons.render_flash(
             &self.assets.fire_sprites,
             &mut self.frame,
@@ -557,6 +657,27 @@ impl LevelScene {
             playfield::PANEL_TOP,
             &mut self.frame,
         );
+
+        if matches!(self.flow, Flow::GetReady { .. }) {
+            self.dim_playfield();
+            self.assets.font.draw_into(
+                &mut self.frame.image,
+                GET_READY_POS.0,
+                GET_READY_POS.1,
+                GET_READY_TEXT,
+            );
+        }
+    }
+
+    /// The GET READY freeze darkens the playfield but not the panel (file
+    /// `0xe60f`): every playfield pixel is remapped through the level's
+    /// third-brightness table before the text draws over it.
+    fn dim_playfield(&mut self) {
+        let playfield_pixels = (SCREEN.width * playfield::PANEL_TOP as u32) as usize;
+
+        for pixel in &mut self.frame.image.pixels[..playfield_pixels] {
+            *pixel = self.assets.dim_table[usize::from(*pixel)];
+        }
     }
 
     /// Black out everything outside the playfield window, standing in for the
@@ -583,10 +704,20 @@ impl Scene for LevelScene {
         for event in input {
             match *event {
                 KeyEvent::Pressed(key) => match key {
-                    Key::Shift => self.cycle_weapon(),
+                    // The weapon switch and the smart bomb only respond in
+                    // free flight (the original skips input while frozen or
+                    // dying).
+                    Key::Shift => {
+                        if matches!(self.flow, Flow::Running) {
+                            self.cycle_weapon();
+                        }
+                    }
                     Key::Char('f') => self.turbo = true,
                     Key::Char(' ') => {
-                        if self.bomb_countdown == 0 && self.state.use_smart_bomb() {
+                        if matches!(self.flow, Flow::Running)
+                            && self.bomb_countdown == 0
+                            && self.state.use_smart_bomb()
+                        {
                             self.bomb_countdown = 15;
                             // TODO: the 32-record expanding orb ring visual.
                         }
@@ -645,12 +776,29 @@ impl Scene for LevelScene {
             ticks *= 8;
         }
 
-        // The music runs off the timer ISR in the original, so the dev pause
-        // (which freezes the scroll) does not stop its loop countdown.
+        // The GET READY freeze waits for fire released, then pressed (the
+        // respawn handler's two key loops at file 0x9d84).
+        if let Flow::GetReady { fire_released } = &mut self.flow {
+            if !self.fire_held {
+                *fire_released = true;
+            } else if *fire_released {
+                self.flow = Flow::Running;
+            }
+        }
+
+        // The music runs off the timer ISR in the original, so neither the
+        // dev pause nor the GET READY freeze stops its loop countdown.
         self.advance_music(ticks, &mut output.audio);
 
-        if !self.paused {
+        let frozen = matches!(self.flow, Flow::GetReady { .. } | Flow::GameOver);
+
+        if !self.paused && !frozen {
             self.advance(ticks, &mut output.audio);
+        }
+
+        // Out of lives: the original tears down and exits to the front-end.
+        if matches!(self.flow, Flow::GameOver) {
+            output.transition = Some(Transition::To(SceneId::MainMenu));
         }
 
         // The level-end sequence (file 0xf866): the boss died, the game runs
@@ -721,8 +869,12 @@ mod tests {
     use super::*;
     use crate::assets::test_level_assets;
 
+    /// A scene past the GET READY freeze, so ticks advance the world.
     fn test_scene() -> LevelScene {
-        LevelScene::new(Rc::new(test_level_assets()), 0)
+        let mut scene = LevelScene::new(Rc::new(test_level_assets()), 0);
+        scene.flow = Flow::Running;
+
+        scene
     }
 
     #[test]
