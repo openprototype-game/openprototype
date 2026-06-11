@@ -80,6 +80,62 @@ pub struct ShipData {
     pub explosion: Option<usize>,
 }
 
+/// A level's combat constants: the kind/sprite values and engine bounds the
+/// combat passes key on. Each WAD links the same engine with different data,
+/// so these are pointer values into that WAD's descriptor blocks.
+#[derive(Clone, Copy)]
+pub struct CombatData {
+    /// The ship hit-rect pointer table (cs-relative; L1 `cs:0x4771`),
+    /// indexed `roll_frame * 2`, one 12-byte block pointer per roll band.
+    pub ship_rect_table: usize,
+    /// The four pickup kinds at the body-contact dispatch, in the order
+    /// weapon orb, smart bomb, invincibility, extra life.
+    pub pickups: [u16; 4],
+    /// The AI arg installed on the orb-drop conversion (L1 5, L3/L5 0).
+    pub orb_arg: u16,
+    /// Dying entities whose current sprite is in this inclusive range
+    /// release one gate count (the orbiter/sweeper frame run).
+    pub gate_release: (u16, u16),
+    /// A dying sprite at or past this sets the level-end flags.
+    pub level_end_sprite: u16,
+    /// Whether the level-end flag bypasses the gate's hold on the spawn
+    /// clock and scroll (L1 writes 1 to the ISR-override flag; L3 writes 0,
+    /// leaving its gate stuck through the flyout).
+    pub level_end_clears_gate: bool,
+    /// Kind ranges (inclusive) that survive being rammed (orbiters, the
+    /// boss).
+    pub ram_survivors: &'static [(u16, u16)],
+    /// The live-entity cap (L1/L5 24, L3 48).
+    pub entity_cap: usize,
+    /// The off-screen cull's left bound in 12.4 (L1 -0x500, L3 -0x320,
+    /// L5 -0x780); the other bounds are shared.
+    pub cull_x_min: i32,
+    /// Respawn invincibility in ticks (L3 180, the others 300).
+    pub respawn_invincibility: u16,
+    /// Kinds whose death plays a dedicated sample over the explosion
+    /// (L1's asteroid and carrier pod; the other levels have none).
+    pub asteroid_kind: Option<u16>,
+    pub pod_kind: Option<u16>,
+}
+
+/// L1's combat data, also the placeholder for the race levels until their
+/// consumer is reverse-engineered (they build no spawn layer, so it goes
+/// unread there).
+const L1_COMBAT: CombatData = CombatData {
+    ship_rect_table: 0x4771,
+    pickups: [0x36ea, 0x3750, 0x37b6, 0x382c],
+    orb_arg: 5,
+    gate_release: (0x392e, 0x399c),
+    level_end_sprite: 0x3ae8,
+    level_end_clears_gate: true,
+    ram_survivors: &[(0x392e, 0x392e), (0x3ae8, 0xffff)],
+    entity_cap: 24,
+    cull_x_min: -0x500,
+    respawn_invincibility: 300,
+    asteroid_kind: Some(0x3308),
+    pod_kind: Some(0x38b0),
+};
+
 /// Where a level's WAD keeps the player-fire data: the shot sprites' directory
 /// records (`{ncells, width, height, cell}`, like the shield's), the chaingun
 /// muzzle-flash directory, and the per-roll-frame barrel offsets. All file
@@ -258,6 +314,8 @@ impl Bin {
 pub struct LevelData {
     /// The level's WAD/executable on the disc, e.g. `"LEVEL_2.WAD"`.
     pub wad: &'static str,
+    /// The level's combat constants (kinds, bounds, gate sprites).
+    pub combat: CombatData,
     /// The level's SP parallax background (which carries its own strip layout).
     pub background: Sp,
     /// The level's sprite-catalog BIN file (per-theme; 2/4/6 share Race1).
@@ -353,6 +411,7 @@ impl Level {
         match self {
             Level::L1 => LevelData {
                 wad: "LEVEL_1.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Canyon,
                 catalog: Bin::Out,
                 catalog_offset: 0xf9f0,
@@ -440,6 +499,7 @@ impl Level {
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbf5a,
@@ -511,6 +571,7 @@ impl Level {
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Wald,
                 catalog: Bin::Wald,
                 catalog_offset: 0x134c0,
@@ -596,6 +657,7 @@ impl Level {
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbfd6,
@@ -665,6 +727,7 @@ impl Level {
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Alienbg,
                 catalog: Bin::Techno,
                 catalog_offset: 0x10e10,
@@ -745,6 +808,7 @@ impl Level {
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xc4d6,
@@ -811,6 +875,7 @@ impl Level {
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
+                combat: L1_COMBAT,
                 background: Sp::Lavah,
                 catalog: Bin::Lava,
                 catalog_offset: 0x13240,

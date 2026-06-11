@@ -182,6 +182,8 @@ pub struct LevelAssets {
     pub spawns: SpawnSource,
     /// The level's transcribed AI set, if any.
     pub spawn_ai: Option<SpawnAi>,
+    /// The level's combat constants, straight from the registry.
+    pub combat: crate::levels::CombatData,
     /// The glyph sheet (`FONT.RAW`), for the GET READY overlay.
     pub font: Font,
     /// Per palette index, the index of the nearest color to one third of its
@@ -417,6 +419,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         spawn_rows,
         spawns: data.spawns,
         spawn_ai: data.spawn_positions.and_then(|positions| positions.ai),
+        combat: data.combat,
         font,
         dim_table,
         ship_explosion,
@@ -1168,6 +1171,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         spawn_rows: None,
         spawns: SpawnSource::StaticTable { table: 0 },
         spawn_ai: None,
+        combat: Level::L1.data().combat,
         font: Font::decode(&[0u8; 320 * 16]).expect("synthetic font sheet decodes"),
         dim_table: [0; 256],
         ship_explosion: Vec::new(),

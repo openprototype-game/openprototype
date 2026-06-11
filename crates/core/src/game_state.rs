@@ -18,9 +18,6 @@ use crate::bounded::BoundedU8;
 /// Points between extra lives; one life is granted per boundary crossed.
 const EXTRA_LIFE_INTERVAL: u32 = 10_000;
 
-/// Invincibility granted on respawn, in game ticks (the original's `300`, ~3 s).
-const RESPAWN_INVINCIBILITY_TICKS: u16 = 300;
-
 /// A weapon's charge level: `0..=4`, one filled bar segment per level.
 ///
 /// A power-up orb raises it by one (the original stores it as pixel fill
@@ -282,15 +279,16 @@ impl GameState {
         HitOutcome::Absorbed
     }
 
-    /// Drops a life. Arms respawn invincibility if any lives remain, otherwise
-    /// reports game over.
-    pub fn lose_life(&mut self) -> HitOutcome {
+    /// Drops a life. Arms `respawn_invincibility` ticks if any lives remain,
+    /// otherwise reports game over. The duration is per level (L3's respawn
+    /// handler writes 180 ticks, the others 300).
+    pub fn lose_life(&mut self, respawn_invincibility: u16) -> HitOutcome {
         self.lives = self.lives.saturating_sub(1);
 
         if self.lives.get() == 0 {
             HitOutcome::GameOver
         } else {
-            self.invincible_ticks = RESPAWN_INVINCIBILITY_TICKS;
+            self.invincible_ticks = respawn_invincibility;
             HitOutcome::Died
         }
     }
@@ -469,13 +467,13 @@ mod tests {
     #[test]
     fn lose_life_arms_the_shield_while_lives_remain() {
         let mut state = fresh();
-        assert_eq!(state.lose_life(), HitOutcome::Died);
+        assert_eq!(state.lose_life(300), HitOutcome::Died);
         assert_eq!(state.lives.get(), 2);
         assert_eq!(state.invincible_ticks, 300);
 
         state.invincible_ticks = 0;
         state.lives = Lives::new(1);
-        assert_eq!(state.lose_life(), HitOutcome::GameOver);
+        assert_eq!(state.lose_life(300), HitOutcome::GameOver);
         assert_eq!(state.invincible_ticks, 0);
     }
 

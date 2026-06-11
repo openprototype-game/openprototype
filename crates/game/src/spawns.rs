@@ -15,18 +15,15 @@ use std::collections::HashMap;
 use crate::assets::{OverlaySprite, directory_sprite};
 use crate::level::prng::{EngineRng, clock_seed};
 use crate::level::slot::Record;
-use crate::levels::SpawnAi;
+use crate::levels::{CombatData, SpawnAi};
 use crate::playfield;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
 
-/// The live-entity cap, the original's hard error bound (`0x18`).
-const MAX_ENTITIES: usize = 24;
-
 /// The off-screen cull bounds in 12.4 fixed point, from the update loop's
 /// signed compares (both ends inclusive): x in [-1280, 4608], y in
 /// [-960, 2560].
-const CULL_X: std::ops::RangeInclusive<i32> = -0x500..=0x1200;
+const CULL_X_MAX: i32 = 0x1200;
 const CULL_Y: std::ops::RangeInclusive<i32> = -0x3c0..=0xa00;
 
 /// One row of a level's spawn-position table: where a spawn enters the
@@ -170,6 +167,8 @@ const SHOT_Y: std::ops::Range<i32> = 1..0xa00;
 
 /// The spawn schedule, live entities, and enemy shots for a running level.
 pub struct Spawns {
+    /// The level's combat constants (kinds, bounds, gate sprites).
+    pub combat: CombatData,
     /// The level's spawn records, in spawn order.
     records: Vec<Record>,
     /// Index of the next record to spawn.
@@ -206,10 +205,13 @@ pub struct Spawns {
 
 impl Spawns {
     /// Builds the schedule over a generated (or static) record buffer.
-    pub fn new(records: Vec<Record>, ai: Option<SpawnAi>) -> Self {
+    /// `combat` carries the level's engine bounds (entity cap, cull floor)
+    /// and the kind/sprite constants the combat passes key on.
+    pub fn new(records: Vec<Record>, ai: Option<SpawnAi>, combat: CombatData) -> Self {
         let countdown = records.first().map_or(0, |record| i32::from(record.delay));
 
         Self {
+            combat,
             records,
             cursor: 0,
             countdown,
@@ -262,7 +264,7 @@ impl Spawns {
                 continue;
             };
 
-            if self.entities.len() >= MAX_ENTITIES {
+            if self.entities.len() >= self.combat.entity_cap {
                 continue;
             }
 
@@ -321,8 +323,9 @@ impl Spawns {
         // off-screen entry. Dead entities (health <= 0, including the boss's
         // form-2 self-destruct at -1) stay for the reap pass, which runs the
         // death handler on them.
+        let cull_x = self.combat.cull_x_min..=CULL_X_MAX;
         self.entities.retain_mut(|entity| {
-            let in_bounds = CULL_X.contains(&entity.x) && CULL_Y.contains(&entity.y);
+            let in_bounds = cull_x.contains(&entity.x) && CULL_Y.contains(&entity.y);
 
             if in_bounds {
                 entity.seen = true;
@@ -364,10 +367,13 @@ impl Spawns {
         });
     }
 
-    /// Whether the boss/orbiter gate is holding the scroll and spawn clock
-    /// (the level-end flag bypasses it, the original's ISR check order).
+    /// Whether the boss/orbiter gate is holding the scroll and spawn clock.
+    /// The level-end flag bypasses it where the level writes the ISR
+    /// override (L1; L3 leaves its gate stuck through the flyout).
     pub fn gate_holds(&self) -> bool {
-        self.gate > 0 && !self.level_end
+        let bypassed = self.level_end && self.combat.level_end_clears_gate;
+
+        self.gate > 0 && !bypassed
     }
 
     /// Appends an effect, dropping it past the original's buffer cap.
@@ -500,7 +506,11 @@ mod tests {
     fn pulls_due_records_and_chains_zero_delays() {
         // Delays 3, 0, 2: the first two spawn together on tick 3, the third
         // two ticks later.
-        let mut spawns = Spawns::new(vec![record(3, 0), record(0, 1), record(2, 0)], None);
+        let mut spawns = Spawns::new(
+            vec![record(3, 0), record(0, 1), record(2, 0)],
+            None,
+            crate::levels::Level::L1.data().combat,
+        );
         let rows = rows();
 
         spawns.tick(&rows, &[], 0);
@@ -527,15 +537,19 @@ mod tests {
     #[test]
     fn caps_the_entity_list() {
         let records = (0..30).map(|_| record(0, 0)).collect();
-        let mut spawns = Spawns::new(records, None);
+        let mut spawns = Spawns::new(records, None, crate::levels::Level::L1.data().combat);
 
         spawns.tick(&rows(), &[], 0);
-        assert_eq!(spawns.entities.len(), MAX_ENTITIES);
+        assert_eq!(spawns.entities.len(), spawns.combat.entity_cap);
     }
 
     #[test]
     fn culls_out_of_bounds_entities() {
-        let mut spawns = Spawns::new(vec![record(1, 0)], None);
+        let mut spawns = Spawns::new(
+            vec![record(1, 0)],
+            None,
+            crate::levels::Level::L1.data().combat,
+        );
 
         spawns.tick(&rows(), &[], 0);
         assert_eq!(spawns.entities.len(), 1);

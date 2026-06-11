@@ -160,7 +160,7 @@ pub struct LevelScene {
 
 impl LevelScene {
     pub fn new(assets: Rc<LevelAssets>, skip_ticks: u32) -> Self {
-        let state = new_game_state();
+        let state = new_game_state(assets.ship.spawn_shield_ticks as u16);
 
         eprintln!(
             "level scene: arrows fly the ship, Ctrl fires, Shift cycles weapon, \
@@ -178,6 +178,7 @@ impl LevelScene {
             Spawns::new(
                 assets.spawns.records(&assets.wad, clock_seed()),
                 assets.spawn_ai,
+                assets.combat,
             )
         });
         let ship = Ship::new(assets.ship);
@@ -351,7 +352,9 @@ impl LevelScene {
                 *ticks_left -= 1;
 
                 if *ticks_left == 0 {
-                    if self.state.lose_life() == HitOutcome::GameOver {
+                    let respawn_invincibility = self.assets.combat.respawn_invincibility;
+
+                    if self.state.lose_life(respawn_invincibility) == HitOutcome::GameOver {
                         self.flow = Flow::GameOver;
                     } else {
                         self.ship = Ship::new(self.assets.ship);
@@ -474,7 +477,14 @@ impl LevelScene {
             [[i32::MAX, i32::MAX, i32::MAX, i32::MAX]; 3]
         } else {
             let (ship_x, ship_y) = self.ship.position();
-            combat::ship_rects(wad, cs_base, self.ship.roll_frame(), ship_x, ship_y)
+            combat::ship_rects(
+                wad,
+                cs_base,
+                self.assets.combat.ship_rect_table,
+                self.ship.roll_frame(),
+                ship_x,
+                ship_y,
+            )
         };
 
         for _ in 0..combat::enemy_shots_vs_ship(spawns, wad, cs_base, &rects) {
@@ -862,16 +872,16 @@ impl Scene for LevelScene {
 
 /// The fresh-game player state (the original's new-game init is untraced;
 /// these are the dev scene's starting values).
-fn new_game_state() -> GameState {
+fn new_game_state(spawn_invincibility: u16) -> GameState {
     GameState {
         score: 0,
         lives: Lives::new(3),
         smart_bombs: SmartBombs::new(3),
         weapons: PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX)),
         selected: Weapon::Multishot,
-        // The level-start GET READY arms the same 300-tick shield as a
-        // respawn (the original's `0x266a = 0x12c` init).
-        invincible_ticks: 300,
+        // The level start arms the level's baked shield duration (the same
+        // data-image init the ship's shield visual reads).
+        invincible_ticks: spawn_invincibility,
     }
 }
 

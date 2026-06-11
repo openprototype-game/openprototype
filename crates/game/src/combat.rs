@@ -15,12 +15,6 @@ use crate::shots::Weapons;
 use crate::spawns::{Effect, Entity, Spawns, descriptor_debris, descriptor_hitboxes};
 use openprototype_core::game_state::{GameState, HitOutcome, Severity};
 
-/// The L1 WAD's ship hit-rect table (`cs:0x4771`), one pointer per roll band.
-///
-/// TODO: per-level offsets once the other levels' combat is wired (locate
-/// like the spawn tables).
-const SHIP_RECT_TABLE: usize = 0x4771;
-
 /// What a combat pass tells the scene.
 #[derive(Default)]
 pub struct CombatEvents {
@@ -220,12 +214,14 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
 
         // The death handler keys these on the CURRENT sprite: a dying
         // orbiter frame releases one gate count, the boss/station range
-        // flags the level end (which also bypasses the gate).
-        if (0x392e..=0x399c).contains(&sprite) {
+        // flags the level end.
+        let (release_min, release_max) = spawns.combat.gate_release;
+
+        if (release_min..=release_max).contains(&sprite) {
             spawns.gate = spawns.gate.saturating_sub(1);
         }
 
-        if sprite >= 0x3ae8 {
+        if sprite >= spawns.combat.level_end_sprite {
             events.level_end = true;
             spawns.level_end = true;
         }
@@ -242,17 +238,20 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
 
         // A dying orb pickup is simply removed; everything else feeds the
         // every-Nth orb-drop countdown and may convert in place.
-        if kind != 0x36ea && spawns.orb_drop_due() {
+        let orb = spawns.combat.pickups[0];
+
+        if kind != orb && spawns.orb_drop_due() {
+            let orb_arg = spawns.combat.orb_arg;
             let center = center_offset(wad, cs_base, kind);
             let entity = &mut spawns.entities[index];
-            entity.sprite = 0x36ea;
-            entity.kind = 0x36ea;
+            entity.sprite = orb;
+            entity.kind = orb;
             entity.x += center.0;
             entity.y += center.1;
-            entity.hitboxes = descriptor_hitboxes(wad, cs_base, 0x36ea);
-            entity.debris = descriptor_debris(wad, cs_base, 0x36ea);
+            entity.hitboxes = descriptor_hitboxes(wad, cs_base, orb);
+            entity.debris = descriptor_debris(wad, cs_base, orb);
             entity.mode = 0;
-            entity.arg = 5;
+            entity.arg = orb_arg;
             entity.health = 0x15e;
             entity.seen = false;
             entity.anim = 0;
@@ -405,7 +404,7 @@ mod tests {
 
     #[test]
     fn touching_a_pickup_grants_and_removes_it() {
-        let mut spawns = Spawns::new(Vec::new(), None);
+        let mut spawns = Spawns::new(Vec::new(), None, crate::levels::Level::L1.data().combat);
         let mut orb = entity(100, 50, 350);
         orb.kind = 0x36ea;
         spawns.entities.push(orb);
@@ -428,7 +427,7 @@ mod tests {
 
     #[test]
     fn ramming_an_enemy_costs_the_bar_and_kills_it() {
-        let mut spawns = Spawns::new(Vec::new(), None);
+        let mut spawns = Spawns::new(Vec::new(), None, crate::levels::Level::L1.data().combat);
         spawns.entities.push(entity(100, 50, 100));
 
         let mut state = fresh_state();
@@ -450,7 +449,7 @@ mod tests {
 
     #[test]
     fn the_first_orb_drops_on_the_third_kill() {
-        let mut spawns = Spawns::new(Vec::new(), None);
+        let mut spawns = Spawns::new(Vec::new(), None, crate::levels::Level::L1.data().combat);
         let mut events = CombatEvents::default();
 
         for kill in 1..=3 {
@@ -487,8 +486,15 @@ pub type ShipRects = [[i32; 4]; 3];
 /// the roll counts in 0x12 steps, so that is `frame * 2` over a table that
 /// duplicates each word. A `0xff` offset pushes the rect ~255 px away, which
 /// disables it with no explicit check.
-pub fn ship_rects(wad: &[u8], cs_base: usize, roll_frame: usize, x: i32, y: i32) -> ShipRects {
-    let entry = SHIP_RECT_TABLE + cs_base + roll_frame * 2;
+pub fn ship_rects(
+    wad: &[u8],
+    cs_base: usize,
+    table: usize,
+    roll_frame: usize,
+    x: i32,
+    y: i32,
+) -> ShipRects {
+    let entry = table + cs_base + roll_frame * 2;
 
     if wad.len() < entry + 2 {
         return [[i32::MAX, i32::MAX, i32::MAX, i32::MAX]; 3];
@@ -603,47 +609,50 @@ pub fn body_contact(
             continue;
         }
 
-        match entity.kind {
-            // TODO: the HUD bar pickup effect.
-            0x36ea => {
-                state.level_up();
-                events.pickup = true;
-                spawns.entities.swap_remove(index);
-            }
-            0x3750 => {
-                state.smart_bombs = state.smart_bombs.saturating_add(1);
-                events.pickup = true;
-                spawns.entities.swap_remove(index);
-            }
-            0x37b6 => {
-                state.invincible_ticks = 600;
-                events.pickup = true;
-                events.shield_pickup = true;
-                spawns.entities.swap_remove(index);
-            }
-            0x382c => {
-                state.lives = state.lives.saturating_add(1);
-                events.pickup = true;
-                spawns.entities.swap_remove(index);
-            }
-            kind => {
-                match state.take_hit(Severity::Collision) {
-                    // Invincible: the ram has no effect on either side.
-                    HitOutcome::Shielded => {}
-                    outcome => {
-                        events.ship = merge_ship_outcome(events.ship, outcome);
-                        events.ram = merge_ship_outcome(events.ram, outcome);
-                        rammed = true;
+        let [orb, smart_bomb, invincibility, extra_life] = spawns.combat.pickups;
+        let kind = entity.kind;
 
-                        // The rammed enemy dies, except orbiters and the boss.
-                        if kind != 0x392e && kind < 0x3ae8 {
-                            spawns.entities[index].health = 0;
-                        }
+        // TODO: the HUD bar pickup effect.
+        if kind == orb {
+            state.level_up();
+            events.pickup = true;
+            spawns.entities.swap_remove(index);
+        } else if kind == smart_bomb {
+            state.smart_bombs = state.smart_bombs.saturating_add(1);
+            events.pickup = true;
+            spawns.entities.swap_remove(index);
+        } else if kind == invincibility {
+            state.invincible_ticks = 600;
+            events.pickup = true;
+            events.shield_pickup = true;
+            spawns.entities.swap_remove(index);
+        } else if kind == extra_life {
+            state.lives = state.lives.saturating_add(1);
+            events.pickup = true;
+            spawns.entities.swap_remove(index);
+        } else {
+            match state.take_hit(Severity::Collision) {
+                // Invincible: the ram has no effect on either side.
+                HitOutcome::Shielded => {}
+                outcome => {
+                    events.ship = merge_ship_outcome(events.ship, outcome);
+                    events.ram = merge_ship_outcome(events.ram, outcome);
+                    rammed = true;
+
+                    // The rammed enemy dies, except orbiters and the boss.
+                    let survives = spawns
+                        .combat
+                        .ram_survivors
+                        .iter()
+                        .any(|(min, max)| (*min..=*max).contains(&kind));
+
+                    if !survives {
+                        spawns.entities[index].health = 0;
                     }
                 }
-
-                index += 1;
             }
+
+            index += 1;
         }
     }
 
