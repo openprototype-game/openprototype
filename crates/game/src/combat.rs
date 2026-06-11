@@ -90,7 +90,15 @@ pub fn player_shots(
             let spark = if shot.is_chaingun() {
                 Some((0x356a, x - 0x20, y - 3, 6))
             } else if shot.is_missile() {
-                Some((0x3522, x, y, 9))
+                // The down/left/up octant sprites pull the spark 7 px left
+                // (file 0xbeff's 0x32d8..0x32f8 sprite check).
+                let spark_x = if (2..=6).contains(&shot.octant) {
+                    x - 7
+                } else {
+                    x
+                };
+
+                Some((0x3522, spark_x, y, 9))
             } else if shot.is_plasma() {
                 None
             } else {

@@ -187,6 +187,20 @@ impl Shot {
 /// The missile trail puff's sprite descriptor (`0x365a`).
 const MISSILE_TRAIL: u16 = 0x365a;
 
+/// The missile's per-octant draw offsets in pixels (the shot draw at file
+/// `0xbc2d` adds these, 12.4-scaled, before the blit). The record position
+/// is the hit-test/trail anchor; these seat the rotated sprite on it.
+const MISSILE_DRAW_OFFSETS: [(i32, i32); 8] = [
+    (2, 4),
+    (3, 6),
+    (-2, 7),
+    (-5, 6),
+    (-9, 3),
+    (-9, 1),
+    (-2, 0),
+    (2, 1),
+];
+
 /// One homing step (the locked branch of file `0xc114`).
 fn steer(shot: &mut Shot, enemy: &Entity, wad: &[u8], cs_base: usize) {
     let descriptor = usize::from(enemy.kind) + cs_base;
@@ -646,19 +660,30 @@ impl Weapons {
     /// furthest-back first like the original's `0xb952` pass).
     pub fn render(&self, sprites: &FireSprites, frame: &mut Framebuffer, camera: i32) {
         for shot in &self.shots {
-            let sprite = match shot.kind {
-                ShotKind::Chaingun => &sprites.chaingun,
-                ShotKind::Multishot(level) => &sprites.multishot[level],
-                ShotKind::Burning(level) => &sprites.burning[level],
-                ShotKind::PlasmaBolt => &sprites.plasma_bolt,
-                ShotKind::PlasmaBall => &sprites.plasma_orbs[1][0],
-                ShotKind::Missile => &sprites.missile[shot.octant],
+            // The missile draws offset from its record position, per facing
+            // octant (the shot draw at file 0xbc2d): the record anchors the
+            // hit test and the trail, the offsets seat the sprite on them.
+            let (sprite, (offset_x, offset_y)) = match shot.kind {
+                ShotKind::Chaingun => (&sprites.chaingun, (0, 0)),
+                ShotKind::Multishot(level) => (&sprites.multishot[level], (0, 0)),
+                ShotKind::Burning(level) => (&sprites.burning[level], (0, 0)),
+                ShotKind::PlasmaBolt => (&sprites.plasma_bolt, (0, 0)),
+                ShotKind::PlasmaBall => (&sprites.plasma_orbs[1][0], (0, 0)),
+                ShotKind::Missile => (
+                    &sprites.missile[shot.octant],
+                    MISSILE_DRAW_OFFSETS[shot.octant],
+                ),
                 // The wave records carry descriptor 0x3210, the multishot
                 // level-3 shot sprite.
-                ShotKind::BombWave => &sprites.multishot[2],
+                ShotKind::BombWave => (&sprites.multishot[2], (0, 0)),
             };
 
-            blit(frame, sprite, shot.x >> 4, (shot.y >> 4) - camera);
+            blit(
+                frame,
+                sprite,
+                (shot.x >> 4) + offset_x,
+                (shot.y >> 4) + offset_y - camera,
+            );
         }
 
         if self.firing == ActiveWeapon::Selected(Weapon::Plasma) {
