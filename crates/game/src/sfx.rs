@@ -171,11 +171,16 @@ impl Sfx {
         }
     }
 
-    /// A chaingun round hit an enemy (`0xad83`; the original only plays it
-    /// while the minigun is the firing weapon and skips a busy channel —
-    /// TODO: the don't-interrupt guard).
+    /// A chaingun round hit an enemy (`0xad83`): the don't-interrupt guard
+    /// drops it while the impact channel is still playing, so explosions are
+    /// never cut short by the round stream.
     pub fn chaingun_impact(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
-        play(bank, SLOT_CHAINHIT, IMPACT_CHANNEL, false, audio);
+        audio.push(AudioCommand::PlaySfx(PlaySfx {
+            channel: IMPACT_CHANNEL,
+            sample: bank.samples[SLOT_CHAINHIT].clone(),
+            looped: false,
+            skip_if_busy: true,
+        }));
     }
 
     /// A missile hit an enemy (`0xad63`).
@@ -189,6 +194,7 @@ fn play(bank: &SfxBank, slot: usize, channel: usize, looped: bool, audio: &mut V
         channel,
         sample: bank.samples[slot].clone(),
         looped,
+        skip_if_busy: false,
     }));
 }
 

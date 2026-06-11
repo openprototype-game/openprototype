@@ -46,4 +46,7 @@ pub struct PlaySfx {
     /// Restart the sample at its end instead of freeing the channel, until
     /// [`AudioCommand::EndSfxLoop`] or a replacing trigger.
     pub looped: bool,
+    /// Drop the trigger if the channel is still playing (the original's
+    /// chaingun-impact don't-interrupt guard).
+    pub skip_if_busy: bool,
 }

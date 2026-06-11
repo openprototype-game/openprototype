@@ -155,8 +155,12 @@ impl App {
                 AudioCommand::PlayTrack(track) => self.music.play_track(*track),
                 AudioCommand::StopMusic => self.music.stop(),
                 AudioCommand::PlaySfx(play) => {
-                    self.sfx
-                        .play(play.channel, play.sample.clone(), play.looped);
+                    self.sfx.play(
+                        play.channel,
+                        play.sample.clone(),
+                        play.looped,
+                        play.skip_if_busy,
+                    );
                 }
                 AudioCommand::EndSfxLoop { channel } => self.sfx.end_loop(*channel),
             }

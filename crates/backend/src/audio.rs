@@ -67,9 +67,10 @@ pub fn make_music_player(_disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
 /// original's DMA feed. A play replaces whatever its channel holds.
 pub trait SfxPlayer {
     /// Play a sample (signed 8-bit mono, 11111 Hz) on `channel`, replacing
-    /// the channel's current sound. A looped sample restarts at its end until
+    /// the channel's current sound (unless `skip_if_busy` and the channel is
+    /// still playing). A looped sample restarts at its end until
     /// [`end_loop`](SfxPlayer::end_loop) or a replacing play.
-    fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool);
+    fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool, skip_if_busy: bool);
 
     /// End a channel's loop: the current pass plays to its end and the
     /// channel then frees.
@@ -91,7 +92,7 @@ impl NullSfxPlayer {
 }
 
 impl SfxPlayer for NullSfxPlayer {
-    fn play(&mut self, _channel: usize, _sample: Arc<[i8]>, _looped: bool) {}
+    fn play(&mut self, _channel: usize, _sample: Arc<[i8]>, _looped: bool, _skip_if_busy: bool) {}
 
     fn end_loop(&mut self, _channel: usize) {}
 }
@@ -374,12 +375,16 @@ mod rodio_backend {
     }
 
     impl SfxPlayer for RodioSfxPlayer {
-        fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool) {
+        fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool, skip_if_busy: bool) {
             let mut channels = self.channels.lock().expect("sfx mixer lock");
 
             let Some(slot) = channels.get_mut(channel) else {
                 return;
             };
+
+            if skip_if_busy && slot.sample.is_some() {
+                return;
+            }
 
             // An empty sample would underflow the mixer's position math;
             // treat it as silence.

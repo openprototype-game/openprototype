@@ -367,18 +367,19 @@ impl LevelScene {
             self.sfx.pod_deployed(&self.assets.sfx, audio);
         }
 
-        // The per-kind death sounds restart the impact channel in death
-        // order, so the last kill's sample wins the tick, like the original.
-        for kind in &events.kills {
-            self.sfx.enemy_died(*kind, &self.assets.sfx, audio);
-        }
-
+        // Impact sounds first, then the death sounds: the original's frame
+        // runs the collision pass (sparks) before the update loop (deaths),
+        // so a kill's explosion replaces the impact on their shared channel.
         if events.chaingun_impact {
             self.sfx.chaingun_impact(&self.assets.sfx, audio);
         }
 
         if events.missile_impact {
             self.sfx.missile_impact(&self.assets.sfx, audio);
+        }
+
+        for kind in &events.kills {
+            self.sfx.enemy_died(*kind, &self.assets.sfx, audio);
         }
 
         if events.orb_dropped {
