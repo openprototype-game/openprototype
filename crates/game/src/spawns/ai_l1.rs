@@ -597,7 +597,7 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
             entity.x += 8 + i32::from(tick) - 0x794;
 
             if entity.x >= 0x11c0 {
-                // TODO: clear the scroll/spawn gate (cs:0x269c = 0).
+                *ctx.gate = 0;
             }
         } else if tick > 0x810 {
             boss.dying = false;
