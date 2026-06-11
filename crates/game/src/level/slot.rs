@@ -14,10 +14,11 @@
 
 use super::prng::EngineRng;
 
-/// One placed scenery object.
+/// One placed enemy or pickup spawn.
 ///
 /// `x_step` is a horizontal step; a consumer running-sums these into an
-/// absolute scroll position. `depth` is the parallax layer.
+/// absolute scroll position. `depth` is the draw layer (z-order among the
+/// objects); it does not tie the object to a background strip's scroll.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Record {
     pub x_step: u16,

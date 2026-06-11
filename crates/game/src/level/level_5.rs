@@ -6,7 +6,7 @@
 
 use super::slot::{Cell, Emitter, Fill, RowStyle, Step, XStart, rand, step};
 
-// Per-sprite-type depth (parallax layer), read by the original from runtime
+// Per-sprite-type depth (draw layer), read by the original from runtime
 // slots `cs:[bd9e..bdae]`. Two sprites share `D_3C4E`.
 const D_3A2C_A: u16 = 0xfa;
 const D_3A2C_B: u16 = 0x96;

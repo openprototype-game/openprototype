@@ -1,8 +1,8 @@
 //! The engine's pseudo-random number generator.
 //!
-//! Every generated level scatters its scenery with one engine RNG: an additive
-//! lagged-Fibonacci generator over a word table that is itself seeded by a
-//! 16-bit linear congruential generator. The same routine drives all four
+//! Every generated level scatters its enemy/pickup spawns with one engine RNG:
+//! an additive lagged-Fibonacci generator over a word table that is itself
+//! seeded by a 16-bit linear congruential generator. The same routine drives all four
 //! generated WADs (relinked per level). This mirrors the disassembly in
 //! `reference/formats/level-layout.md` 1:1 — the lag pointers stay as byte
 //! offsets into the word table, not tidied-up indices, so a transcription error

@@ -6,7 +6,7 @@
 
 use super::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
-/// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
+/// Per-sprite-type depth (draw layer), read by the original from a 9-entry
 /// table at `cs:[bf6d..]`.
 const DEPTHS: [u16; 9] = [100, 160, 500, 600, 200, 200, 1000, 14000, 10000];
 
@@ -130,7 +130,7 @@ const ECBD: [Cell; 6] = [
     },
 ];
 
-// Emitter builders: each bakes one emitter's scenery constants; the dispatcher
+// Emitter builders: each bakes one emitter's spawn constants; the dispatcher
 // supplies the count (and, for e776, the x spread). Named for their original
 // code addresses.
 

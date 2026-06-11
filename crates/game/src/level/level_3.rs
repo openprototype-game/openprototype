@@ -6,7 +6,7 @@
 
 use super::slot::{Cell, Emitter, Fill, Overwrite, PostOp, Step, XStart, rand, step};
 
-/// Per-sprite-type depth (parallax layer), read by the original from a 9-entry
+/// Per-sprite-type depth (draw layer), read by the original from a 9-entry
 /// table at `cs:[dac5..dad5]`.
 const DEPTHS: [u16; 9] = [0x82, 0x47e, 0x15e, 0x64, 0x8c, 0x50, 0xbe, 0xc8, 0x3a98];
 
