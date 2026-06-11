@@ -15,11 +15,13 @@ use prototype_formats::{Dimensions, Flic, IndexedImage, Palette, StartExe, bdy, 
 use std::sync::Arc;
 
 use crate::background::{Background, Sp};
+use crate::level::spawn::SpawnSource;
 use crate::levels::{Level, Overlay, SceneryData, SfxData, ShipData, StarPlaneData};
 use crate::scenery::{Scenery, SceneryLayer};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use crate::sfx::SfxBank;
 use crate::ship::SHIELD_FRAMES;
+use crate::spawns::SpawnRow;
 use openprototype_core::PerWeapon;
 
 /// Everything the main menu needs to render.
@@ -162,6 +164,20 @@ pub struct LevelAssets {
     pub stars: &'static [StarPlaneData],
     /// The vertical camera range start (and starting row), from the registry.
     pub camera_min: i32,
+    /// The raw WAD image, kept for runtime descriptor reads (the spawn layer
+    /// resolves sprite descriptors by cs-pointer as entities animate).
+    pub wad: Vec<u8>,
+    /// The clip-header reading of the catalog (the one the shield/fire
+    /// directory records use); the spawn sprites assemble from it.
+    pub clip_catalog: SpriteSheet,
+    /// The WAD's cs-to-file offset (`file = cs + cs_base`), for descriptor
+    /// pointer resolution.
+    pub cs_base: usize,
+    /// The level's spawn-position table rows, `None` until that level's table
+    /// is reverse-engineered.
+    pub spawn_rows: Option<Vec<SpawnRow>>,
+    /// The level's spawn source, straight from the registry.
+    pub spawns: SpawnSource,
 }
 
 /// A masked sprite: `None` is transparent. Used for the weapon overlay, which
@@ -297,6 +313,11 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let (fire_sprites, barrel_offsets, bob_wave) = load_fire(&wad, &overlay_catalog, data.fire)?;
     let sfx = load_sfx(disc, &wad, data.sfx)?;
     let music = load_music(disc, data.music_track)?;
+    let spawn_rows = data
+        .spawn_positions
+        .map(|positions| crate::spawns::decode_rows(&wad, positions.table, positions.rows))
+        .transpose()
+        .context("decoding the spawn-position table")?;
 
     Ok(LevelAssets {
         background,
@@ -315,6 +336,11 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         music,
         stars: data.stars,
         camera_min: data.camera_min,
+        wad,
+        clip_catalog: overlay_catalog,
+        cs_base: data.scenery.cs_base,
+        spawn_rows,
+        spawns: data.spawns,
     })
 }
 
@@ -408,7 +434,11 @@ fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
 /// Assemble one sprite from a directory record at `record` in the WAD:
 /// `{ncells, width, height, cell}` (all `u16`), `cell` indexing the level's
 /// clip-header catalog.
-fn directory_sprite(wad: &[u8], catalog: &SpriteSheet, record: usize) -> Result<OverlaySprite> {
+pub(crate) fn directory_sprite(
+    wad: &[u8],
+    catalog: &SpriteSheet,
+    record: usize,
+) -> Result<OverlaySprite> {
     if wad.len() < record + 8 {
         anyhow::bail!(
             "WAD is {} bytes, directory record at {record} overruns",
@@ -1007,6 +1037,13 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         },
         stars: &[],
         camera_min: 0,
+        wad: Vec::new(),
+        clip_catalog: SpriteSheet {
+            sprites: Vec::new(),
+        },
+        cs_base: 0,
+        spawn_rows: None,
+        spawns: SpawnSource::StaticTable { table: 0 },
     }
 }
 

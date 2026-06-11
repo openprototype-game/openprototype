@@ -298,6 +298,18 @@ pub struct LevelData {
     /// script (1/3/5/7) or a static table baked into the WAD (2/4/6). See
     /// `reference/formats/level-layout.md`.
     pub spawns: SpawnSource,
+    /// The level's spawn-position table in its WAD (the rows a record's
+    /// `spawn_row` indexes: `{x, y, movement mode, movement arg}`). `None`
+    /// until that level's table is located in its WAD.
+    pub spawn_positions: Option<SpawnPositionsData>,
+}
+
+/// Where a WAD keeps its spawn-position table: the file offset and the row
+/// count (the level's highest `spawn_row` + 1).
+#[derive(Clone, Copy)]
+pub struct SpawnPositionsData {
+    pub table: usize,
+    pub rows: usize,
 }
 
 impl Level {
@@ -398,6 +410,10 @@ impl Level {
                     script: level_1::script,
                     post_pass: None,
                 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x5678,
+                    rows: 76,
+                }),
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
@@ -466,6 +482,7 @@ impl Level {
                 stars: RACE_STARS,
                 camera_min: 0,
                 spawns: SpawnSource::StaticTable { table: 0x1690 },
+                spawn_positions: None,
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
@@ -544,6 +561,10 @@ impl Level {
                     script: level_3::script,
                     post_pass: Some(level_3::post_pass),
                 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x85df,
+                    rows: 113,
+                }),
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
@@ -610,6 +631,7 @@ impl Level {
                 stars: RACE_STARS,
                 camera_min: 0,
                 spawns: SpawnSource::StaticTable { table: 0x1690 },
+                spawn_positions: None,
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
@@ -683,6 +705,10 @@ impl Level {
                     script: level_5::script,
                     post_pass: None,
                 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x6bb6,
+                    rows: 99,
+                }),
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
@@ -746,6 +772,7 @@ impl Level {
                 stars: RACE_STARS,
                 camera_min: 0,
                 spawns: SpawnSource::StaticTable { table: 0x1690 },
+                spawn_positions: None,
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
@@ -821,6 +848,10 @@ impl Level {
                     script: level_7::script,
                     post_pass: Some(level_7::post_pass),
                 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x8635,
+                    rows: 136,
+                }),
             },
         }
     }

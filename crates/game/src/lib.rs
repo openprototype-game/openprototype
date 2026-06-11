@@ -30,4 +30,5 @@ pub mod screen;
 pub mod sfx;
 pub mod ship;
 pub mod shots;
+pub mod spawns;
 pub mod stars;
