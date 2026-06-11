@@ -185,6 +185,10 @@ impl LevelScene {
     /// Dev fast-forward (`--skip`): pre-simulates `ticks` of the level with
     /// the ship parked and shielded, then leaves the respawn shield up so the
     /// player can orient. Sounds from the skipped span are dropped.
+    ///
+    /// Gate fights can't resolve with a parked ship, so the skip clears them:
+    /// orbiters are auto-killed (their deaths release the gate through the
+    /// regular reap), and a boss gate ends the skip where the fight starts.
     fn fast_forward(&mut self, ticks: u32) {
         if ticks == 0 {
             return;
@@ -193,6 +197,24 @@ impl LevelScene {
         let mut scratch = Vec::new();
 
         for _ in 0..ticks {
+            if let Some(spawns) = &mut self.spawns
+                && spawns.gate_holds()
+            {
+                let mut orbiters = 0;
+
+                for entity in &mut spawns.entities {
+                    if entity.health > 0 && (0x392e..=0x399c).contains(&entity.sprite) {
+                        entity.health = 0;
+                        orbiters += 1;
+                    }
+                }
+
+                if orbiters == 0 {
+                    tracing::info!("skip stopped at a boss gate");
+                    break;
+                }
+            }
+
             self.state.invincible_ticks = self.state.invincible_ticks.max(2);
             self.advance(1, &mut scratch);
             scratch.clear();
