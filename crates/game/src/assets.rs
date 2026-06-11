@@ -392,7 +392,7 @@ const SFX_NAME_STRIDE: usize = 16;
 
 /// Load the level's sound-effect samples: read the WAD's NUL-padded filename
 /// table and pull each `.SMP` off the disc, cut to its trigger's authored
-/// length (see [`SfxData`]). The files are raw signed 8-bit mono at 22222 Hz
+/// length (see [`SfxData`]). The files are raw signed 8-bit mono at 11111 Hz
 /// and are kept that way; the platform's mixer does the format conversion.
 fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
     let table_end = data.name_table + data.sample_lengths.len() * SFX_NAME_STRIDE;

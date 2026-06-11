@@ -2,7 +2,7 @@
 //!
 //! The original game's only music is CD-DA: track 1 is data, tracks 2-8 are the
 //! seven songs, driven through MSCDEX. Sound effects are the `.SMP` files
-//! (signed 8-bit mono at 22222 Hz), mixed by the level engine into three
+//! (signed 8-bit mono at 11111 Hz), mixed by the level engine into three
 //! channels on the Sound Blaster. The core never opens an audio device. It
 //! emits these commands from [`step`](crate::game::Game::step) and the
 //! platform drains and executes them, keeping the core free of any audio
@@ -40,7 +40,7 @@ pub enum AudioCommand {
 pub struct PlaySfx {
     /// The mixer channel to play on, `0..`[`SFX_CHANNELS`].
     pub channel: usize,
-    /// The sample: signed 8-bit mono at 22222 Hz, already cut to the
+    /// The sample: signed 8-bit mono at 11111 Hz, already cut to the
     /// trigger's authored length.
     pub sample: Arc<[i8]>,
     /// Restart the sample at its end instead of freeing the channel, until

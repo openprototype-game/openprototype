@@ -123,9 +123,9 @@ enum Command {
     Smp {
         input: PathBuf,
         output: PathBuf,
-        /// Playback sample rate in Hz. Default 22222 = the engine's DSP time
+        /// Playback sample rate in Hz. Default 11111 = the engine's DSP time
         /// constant 0xD3 (`256 - 1000000/rate`).
-        #[arg(long, default_value_t = 22222)]
+        #[arg(long, default_value_t = 11111)]
         rate: u32,
         /// Treat the source as unsigned 8-bit (default: signed, the on-disk format).
         #[arg(long)]

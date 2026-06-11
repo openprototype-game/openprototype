@@ -66,7 +66,7 @@ pub fn make_music_player(_disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
 /// [`SFX_CHANNELS`](openprototype_core::audio::SFX_CHANNELS)), matching the
 /// original's DMA feed. A play replaces whatever its channel holds.
 pub trait SfxPlayer {
-    /// Play a sample (signed 8-bit mono, 22222 Hz) on `channel`, replacing
+    /// Play a sample (signed 8-bit mono, 11111 Hz) on `channel`, replacing
     /// the channel's current sound. A looped sample restarts at its end until
     /// [`end_loop`](SfxPlayer::end_loop) or a replacing play.
     fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool);
@@ -298,12 +298,14 @@ mod rodio_backend {
         }
     }
 
-    /// The original's sample rate: Sound Blaster time constant `0xD3`,
-    /// `1000000 / (256 - 211)`.
-    const SFX_SAMPLE_RATE: u32 = 22222;
+    /// The original's sample rate: the level engine requests 11000 Hz and the
+    /// Sound Blaster time constant quantizes it (`256 - 1000000/11000` = 166,
+    /// so the DSP plays `1000000 / 90` ~= 11111 Hz; mixer init at LEVEL_1 file
+    /// `0x7a06`).
+    const SFX_SAMPLE_RATE: u32 = 11111;
 
     /// Samples mixed per buffer refill. 250 is the original's DMA chunk, so
-    /// trigger latency and end-of-sample granularity (~11 ms) match it.
+    /// trigger latency and end-of-sample granularity (~22 ms) match it.
     const MIX_BLOCK: usize = 250;
 
     /// One mixer channel: the playing sample and the read position.
