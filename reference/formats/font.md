@@ -42,7 +42,9 @@ through `fcn.00000230` (DAC ports 0x3c8/0x3c9) just before the menu loop; see
 RGB channels and tints everything green, which is how the right alignment was
 found.
 
-## Open
+## Font usage
 
-- `FONT2.RAW` has the same dimensions; its distinct glyph set (different size or
-  color for the HUD) is not yet rendered.
+`FONT.RAW` draws the main menu, the jukebox, the intro credits, and the
+highscore name-entry prompts. `FONT2.RAW` (same dimensions, its own glyph art)
+draws the highscore table's eight entry lines (see `reference/start-exe.md`,
+"HIGHSCORES").

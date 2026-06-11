@@ -36,6 +36,15 @@ Only three appear across every file:
 
 The flipped sign convention between BRUN and LC is the easy bug to write.
 
+## Playback
+
+START.EXE ignores the header `speed` field. Its players wait a caller-set tick
+count (`cs:[0x3022]`, 1/70 s units) after every frame, including the last:
+intro.fli plays at 3 ticks/frame, fly.fli at 2, highscor.fli at 4, credz.fli
+at 8. The intro player (`0x31fd`) plays exactly the header frame count; the
+credits player (`0x3293`) plays one frame fewer and composites text over each
+frame. Details in `reference/start-exe.md`.
+
 ## Notes
 
 - No `COLOR256` (4), `SS2` (7), `BLACK` (13), or `COPY` (16) chunks are present,
