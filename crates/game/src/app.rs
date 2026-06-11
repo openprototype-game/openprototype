@@ -9,10 +9,11 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::assets::{HighscoreAssets, IntroAssets, LevelAssets, MenuAssets};
+use crate::assets::{GameOverAssets, HighscoreAssets, IntroAssets, LevelAssets, MenuAssets};
 use crate::highscores::HighscoreStore;
 use crate::scene::{
-    HighscoreScreen, Intro, LevelScene, Menu, MusicMenu, Scene, SceneId, Transition,
+    GameOverScene, HighscoreEntry, HighscoreScreen, Intro, LevelScene, Menu, MusicMenu, Scene,
+    SceneId, Transition,
 };
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game::{Game, StepOutput};
@@ -23,10 +24,11 @@ pub struct App {
     menu_assets: Rc<MenuAssets>,
     intro_assets: Rc<IntroAssets>,
     highscore_assets: Rc<HighscoreAssets>,
+    gameover_assets: Rc<GameOverAssets>,
     level_assets: Rc<LevelAssets>,
     /// Dev fast-forward for the level scene (`--skip`), in logic ticks.
     level_skip_ticks: u32,
-    highscore_store: HighscoreStore,
+    highscore_store: Rc<HighscoreStore>,
 }
 
 impl App {
@@ -35,6 +37,7 @@ impl App {
         menu_assets: MenuAssets,
         intro_assets: IntroAssets,
         highscore_assets: HighscoreAssets,
+        gameover_assets: GameOverAssets,
         level_assets: LevelAssets,
         highscore_store: HighscoreStore,
     ) -> Self {
@@ -46,9 +49,10 @@ impl App {
             menu_assets,
             intro_assets,
             highscore_assets: Rc::new(highscore_assets),
+            gameover_assets: Rc::new(gameover_assets),
             level_assets: Rc::new(level_assets),
             level_skip_ticks: 0,
-            highscore_store,
+            highscore_store: Rc::new(highscore_store),
         }
     }
 
@@ -73,6 +77,25 @@ impl App {
             SceneId::Highscores => Box::new(HighscoreScreen::new(
                 self.highscore_assets.clone(),
                 self.highscore_store.load(),
+            )),
+            SceneId::GameOver { score } => {
+                // The original's qualify test is strict: the score must beat
+                // the lowest entry (`0x4bde`); otherwise the sequence skips
+                // the name entry and returns to the menu.
+                let scores = self.highscore_store.load();
+                let lowest = scores.entries().last().map_or(0, |entry| entry.score);
+                let next = if score > lowest {
+                    SceneId::HighscoreEntry { score }
+                } else {
+                    SceneId::MainMenu
+                };
+
+                Box::new(GameOverScene::new(self.gameover_assets.clone(), next))
+            }
+            SceneId::HighscoreEntry { score } => Box::new(HighscoreEntry::new(
+                self.menu_assets.clone(),
+                self.highscore_store.clone(),
+                score,
             )),
             SceneId::Level => Box::new(LevelScene::new(
                 self.level_assets.clone(),
@@ -118,7 +141,8 @@ impl Game for App {
 mod tests {
     use super::*;
     use crate::assets::{
-        test_highscore_assets, test_intro_assets, test_level_assets, test_menu_assets,
+        test_gameover_assets, test_highscore_assets, test_intro_assets, test_level_assets,
+        test_menu_assets,
     };
     use crate::highscores::test_store;
     use openprototype_core::audio::AudioCommand;
@@ -131,6 +155,7 @@ mod tests {
             test_menu_assets(),
             test_intro_assets(),
             test_highscore_assets(),
+            test_gameover_assets(),
             test_level_assets(),
             test_store(),
         )

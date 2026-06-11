@@ -15,7 +15,8 @@ mod desktop {
     use clap::Parser;
     use openprototype::app::App;
     use openprototype::assets::{
-        load_highscore_assets, load_intro_assets, load_level_assets, load_menu_assets,
+        load_gameover_assets, load_highscore_assets, load_intro_assets, load_level_assets,
+        load_menu_assets,
     };
     use openprototype::highscores::HighscoreStore;
     use openprototype::levels::Level;
@@ -105,6 +106,7 @@ mod desktop {
         let menu_assets = load_menu_assets(&disc)?;
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
+        let gameover_assets = load_gameover_assets(&disc)?;
         let level = Level::from_number(cli.level).expect("--level is validated to 1..=7");
         let level_assets = load_level_assets(&disc, level)?;
         let highscore_store = HighscoreStore::open(&disc)?;
@@ -112,6 +114,7 @@ mod desktop {
             menu_assets,
             intro_assets,
             highscore_assets,
+            gameover_assets,
             level_assets,
             highscore_store,
         );

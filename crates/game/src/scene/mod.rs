@@ -9,6 +9,8 @@
 //!
 //! [`App`]: crate::app::App
 
+pub mod gameover;
+pub mod highscore_entry;
 pub mod highscores;
 pub mod intro;
 pub mod level;
@@ -16,6 +18,8 @@ pub mod list_menu;
 pub mod menu;
 pub mod music;
 
+pub use gameover::GameOverScene;
+pub use highscore_entry::HighscoreEntry;
 pub use highscores::HighscoreScreen;
 pub use intro::Intro;
 pub use level::LevelScene;
@@ -36,6 +40,11 @@ pub enum SceneId {
     MainMenu,
     MusicMenu,
     Highscores,
+    /// The game-over sequence (`GO2.FLI` under CD track 8), carrying the
+    /// final score toward the high-score check.
+    GameOver { score: u32 },
+    /// The high-score name entry, for a score that made the table.
+    HighscoreEntry { score: u32 },
     /// The developer level-render scene, reached only via `--scene level`.
     Level,
 }

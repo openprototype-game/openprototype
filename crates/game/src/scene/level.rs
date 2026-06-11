@@ -725,7 +725,7 @@ impl Scene for LevelScene {
                     Key::Right => self.held.right = true,
                     Key::Esc => output.transition = Some(Transition::Quit),
                     Key::Ctrl => self.fire_held = true,
-                    Key::Enter => {}
+                    Key::Enter | Key::Backspace => {}
                     Key::Char(c) => match c.to_ascii_lowercase() {
                         'a' => self.nudge_overlay(-1, 0),
                         'd' => self.nudge_overlay(1, 0),
@@ -793,9 +793,12 @@ impl Scene for LevelScene {
             self.advance(ticks, &mut output.audio);
         }
 
-        // Out of lives: the original tears down and exits to the front-end.
+        // Out of lives: the original exits to the front-end with status 5,
+        // which runs the game-over sequence and the high-score check.
         if matches!(self.flow, Flow::GameOver) {
-            output.transition = Some(Transition::To(SceneId::MainMenu));
+            output.transition = Some(Transition::To(SceneId::GameOver {
+                score: self.state.score,
+            }));
         }
 
         // The level-end sequence (file 0xf866): the boss died, the game runs

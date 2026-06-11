@@ -990,6 +990,19 @@ fn load_fli_bytes(disc: &DiscImage, name: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// The game-over sequence's assets.
+pub struct GameOverAssets {
+    /// `FLI/GO2.FLI`, the game-over animation.
+    pub fli: Vec<u8>,
+}
+
+/// Load the game-over sequence's assets from the disc image.
+pub fn load_gameover_assets(disc: &DiscImage) -> Result<GameOverAssets> {
+    Ok(GameOverAssets {
+        fli: load_fli_bytes(disc, "FLI/GO2.FLI")?,
+    })
+}
+
 /// Load and decode the high-score screen's assets from the disc image.
 pub fn load_highscore_assets(disc: &DiscImage) -> Result<HighscoreAssets> {
     let fli = load_fli_bytes(disc, "FLI/HIGHSCOR.FLI")?;
@@ -1171,6 +1184,12 @@ pub(crate) fn test_highscore_assets() -> HighscoreAssets {
         fli: Vec::new(),
         font,
     }
+}
+
+/// Synthetic game-over assets (empty FLI) for headless tests.
+#[cfg(test)]
+pub(crate) fn test_gameover_assets() -> GameOverAssets {
+    GameOverAssets { fli: Vec::new() }
 }
 
 #[cfg(test)]

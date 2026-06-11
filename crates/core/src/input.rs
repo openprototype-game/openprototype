@@ -23,6 +23,8 @@ pub enum Key {
     Ctrl,
     /// Weapon switch, edge-triggered (the original's Shift, flag `0x8158`).
     Shift,
+    /// Edits the high-score name entry.
+    Backspace,
     Char(char),
 }
 

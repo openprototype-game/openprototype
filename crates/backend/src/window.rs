@@ -318,6 +318,7 @@ fn translate_key(key: &Key) -> Option<CoreKey> {
         Key::Named(NamedKey::Escape) => Some(CoreKey::Esc),
         Key::Named(NamedKey::Control) => Some(CoreKey::Ctrl),
         Key::Named(NamedKey::Shift) => Some(CoreKey::Shift),
+        Key::Named(NamedKey::Backspace) => Some(CoreKey::Backspace),
         Key::Character(text) => text.chars().next().map(CoreKey::Char),
         _ => None,
     }
