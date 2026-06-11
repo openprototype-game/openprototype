@@ -23,7 +23,7 @@ use crate::combat::{self, CombatEvents};
 use crate::hud::{self, POD_SETTLED_FRAME};
 use crate::level::prng::{EngineRng, clock_seed};
 use crate::playfield;
-use crate::scene::{Scene, SceneOutput, Transition};
+use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
 use crate::sfx::Sfx;
 use crate::ship::{HeldKeys, Ship};
@@ -120,6 +120,9 @@ pub struct LevelScene {
     paused: bool,
     /// Dev fast-forward: F held runs 8 logic ticks per frame.
     turbo: bool,
+    /// Ticks left of the level-end hold (the original runs ~460 more frames
+    /// after the boss dies, letting the debris play, before exiting).
+    level_end_countdown: Option<u32>,
 }
 
 impl LevelScene {
@@ -171,6 +174,7 @@ impl LevelScene {
             tick_elapsed: Duration::ZERO,
             paused: false,
             turbo: false,
+            level_end_countdown: None,
         };
         scene.fast_forward(skip_ticks);
         scene.render();
@@ -356,7 +360,11 @@ impl LevelScene {
         combat::body_contact(spawns, &rects, &mut self.state, wad, cs_base, &mut events);
 
         self.state.add_score(events.score);
-        // TODO: events.level_end ends the level once the flow exists.
+
+        if events.level_end && self.level_end_countdown.is_none() {
+            tracing::info!(score = self.state.score, "level complete");
+            self.level_end_countdown = Some(460);
+        }
 
         if let Some(form2) = spawns.boss_explosion.take() {
             self.sfx.boss_explosion(form2, &self.assets.sfx, audio);
@@ -603,6 +611,17 @@ impl Scene for LevelScene {
 
         if !self.paused {
             self.advance(ticks, &mut output.audio);
+        }
+
+        // The level-end hold: the boss died, the debris plays out, then the
+        // level hands back (the original exits to the front-end; the next-
+        // level flow is not built yet).
+        if let Some(countdown) = &mut self.level_end_countdown {
+            *countdown = countdown.saturating_sub(ticks);
+
+            if *countdown == 0 {
+                output.transition = Some(Transition::To(SceneId::MainMenu));
+            }
         }
 
         self.render();

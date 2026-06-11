@@ -318,13 +318,10 @@ impl Spawns {
 
         // The cull only removes entities that have already been on screen
         // (the original's seen flag), so right-edge spawns survive their
-        // off-screen entry. A negative health is the boss's removal sentinel
-        // (combat damage is not wired yet).
+        // off-screen entry. Dead entities (health <= 0, including the boss's
+        // form-2 self-destruct at -1) stay for the reap pass, which runs the
+        // death handler on them.
         self.entities.retain_mut(|entity| {
-            if entity.health < 0 {
-                return false;
-            }
-
             let in_bounds = CULL_X.contains(&entity.x) && CULL_Y.contains(&entity.y);
 
             if in_bounds {
