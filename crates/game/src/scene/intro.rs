@@ -77,6 +77,10 @@ enum Beat {
     Hold(Duration),
     FadeOut(Duration),
     Flic(Fli),
+    /// A white screen: the original blasts the DAC full white right after
+    /// `fly.fli` and copies the cover's four planes into VRAM behind it, so
+    /// the cover reveal opens on a white flash.
+    Flash(Duration),
     Credits,
     /// Compose the real main-menu frame and fade it in from black, then end the
     /// intro. The original draws the menu under a black palette and fades it in
@@ -127,6 +131,10 @@ impl Intro {
             Beat::Hold(ticks(200)),
             Beat::FadeOut(ticks(110)),
             Beat::Flic(Fli::Fly),
+            // The flash length approximates the original's machine-bound
+            // plane copy plus its one-tick timer align; there is no authored
+            // duration to mirror.
+            Beat::Flash(ticks(4)),
             Beat::ShowLit(Still::Cover),
             Beat::Hold(ticks(180)),
             Beat::FadeOut(ticks(90)),
@@ -191,6 +199,13 @@ impl Intro {
                     return;
                 }
                 Beat::Hold(duration) => {
+                    self.active = Active::Hold(*duration);
+                    return;
+                }
+                Beat::Flash(duration) => {
+                    self.image = blank_image();
+                    self.displayed = white();
+                    self.target = white();
                     self.active = Active::Hold(*duration);
                     return;
                 }
@@ -334,16 +349,25 @@ impl Intro {
         match &self.active {
             Active::Flic(player) => {
                 let frame = player.current();
-                self.framebuffer.blit_screen(&frame.image);
-                self.framebuffer.palette = frame.palette.clone();
+                present(&mut self.framebuffer, &frame.image, &frame.palette);
             }
             Active::Credits(credits) => credits.render(&mut self.framebuffer, &self.assets.font),
-            _ => {
-                self.framebuffer.blit_screen(&self.image);
-                self.framebuffer.palette = self.displayed.clone();
-            }
+            _ => present(&mut self.framebuffer, &self.image, &self.displayed),
         }
     }
+}
+
+/// Show a full frame, recreating the framebuffer when the source size changes:
+/// the cover beats run at the original's 320x400 (its unchained 400-line
+/// mode), everything else at 320x200. The platform rebuilds its textures to
+/// match, and its 4:3 fit gives both shapes the original's screen aspect.
+fn present(framebuffer: &mut Framebuffer, image: &IndexedImage, palette: &Palette) {
+    if framebuffer.image.size != image.size {
+        *framebuffer = Framebuffer::new(image.size, palette.clone());
+    }
+
+    framebuffer.blit_screen(image);
+    framebuffer.palette = palette.clone();
 }
 
 impl Scene for Intro {
@@ -428,8 +452,7 @@ impl Credits {
 
     fn render(&self, framebuffer: &mut Framebuffer, font: &Font) {
         let frame = self.player.current();
-        framebuffer.blit_screen(&frame.image);
-        framebuffer.palette = frame.palette.clone();
+        present(framebuffer, &frame.image, &frame.palette);
 
         // Pages run during loops 1..=N; the lead-in and the trailing linger
         // show the animation with no text.
@@ -529,6 +552,18 @@ fn black() -> Palette {
     }
 }
 
+/// The all-white palette of the cover flash (the original writes 0x3f to every
+/// DAC channel, full intensity).
+fn white() -> Palette {
+    Palette {
+        colors: [Rgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        }; 256],
+    }
+}
+
 fn blank_image() -> IndexedImage {
     IndexedImage::new(
         Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
@@ -621,11 +656,11 @@ mod tests {
     fn beat_boundaries_lose_no_time() {
         // With synthetic assets the FLI and credits beats skip at decode, so
         // the script is the timed beats only: 220+220+350+230+220+110+200+110
-        // +180+90 = 1930 ticks. Stepping by an awkward 7 ticks, the intro must
-        // end on exactly the first update that reaches the total; a beat
+        // +4+180+90 = 1934 ticks. Stepping by an awkward 7 ticks, the intro
+        // must end on exactly the first update that reaches the total; a beat
         // boundary swallowing a remainder would push it later.
         let mut intro = test_intro();
-        let total_ticks: u64 = 1930;
+        let total_ticks: u64 = 1934;
         let step_ticks: u64 = 7;
         let expected_updates = total_ticks.div_ceil(step_ticks);
 
@@ -643,6 +678,36 @@ mod tests {
 
         assert_eq!(transition, Transition::To(SceneId::MainMenu));
         assert_eq!(updates, expected_updates);
+    }
+
+    #[test]
+    fn the_cover_flashes_white_then_shows_at_the_originals_resolution() {
+        let mut intro = test_intro();
+
+        // Everything before the flash sums to 1660 ticks (the FLI beats skip
+        // with synthetic assets); land two ticks into the 4-tick flash.
+        intro.update(ticks(1662), &[]);
+        assert_eq!(
+            intro.framebuffer.palette.colors[0],
+            Rgb {
+                r: 255,
+                g: 255,
+                b: 255
+            },
+            "the flash shows a white screen"
+        );
+
+        // The flash ends and the cover snaps in on its 320x400 framebuffer.
+        intro.update(ticks(4), &[]);
+        assert_eq!(intro.framebuffer.image.size.height, 400);
+
+        // Past the cover hold and fade-out the script ends (the credits skip
+        // with an empty synthetic FLI) and hands over to the menu; the real
+        // disc-gated run covers the switch back to 320x200 for the credits.
+        assert_eq!(
+            intro.update(ticks(280), &[]).transition,
+            Some(Transition::To(SceneId::MainMenu))
+        );
     }
 
     #[test]

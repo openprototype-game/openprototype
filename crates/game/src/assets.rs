@@ -817,25 +817,26 @@ fn load_still(disc: &DiscImage, body: &str, palette: &str) -> Result<StillImage>
     Ok(StillImage { image, palette })
 }
 
-/// Decode the PROTOTYPE cover and squeeze it to the screen. `COVER3.BDY` is a
-/// 320x478 image; the original displays its top 320x400 in a Mode X 320x400
-/// screen (the CRT squashes it to normal height). We reproduce that on the
-/// 320x200 framebuffer by taking every other row of those top 400.
+/// Rows of the cover the original puts on screen: it copies 0x7d00 bytes per
+/// plane into an unchained 400-line tweak of mode 13h, the top 400 rows of the
+/// 478-row BDY.
+const COVER_VISIBLE_HEIGHT: u32 = 400;
+
+/// Decode the PROTOTYPE cover at the original's display size. `COVER3.BDY` is
+/// a 320x478 image shown as 320x400 (the renderer's 4:3 fit squashes it to the
+/// same shape the CRT did); the intro swaps its framebuffer to this size for
+/// the cover beats.
 fn load_cover(disc: &DiscImage) -> Result<StillImage> {
     let body_bytes = disc.read("COVER3.BDY").context("reading COVER3.BDY")?;
     let full = bdy::decode(&body_bytes, Dimensions::new(SCREEN_WIDTH, COVER_HEIGHT))
         .context("decoding COVER3.BDY")?;
 
-    let width = SCREEN_WIDTH as usize;
-    let mut pixels = Vec::with_capacity((SCREEN_WIDTH * SCREEN_HEIGHT) as usize);
-
-    for row in 0..SCREEN_HEIGHT as usize {
-        let start = row * 2 * width;
-        pixels.extend_from_slice(&full.pixels[start..start + width]);
-    }
-
-    let image = IndexedImage::new(Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT), pixels)
-        .expect("squeezed cover matches its dimensions");
+    let visible = (SCREEN_WIDTH * COVER_VISIBLE_HEIGHT) as usize;
+    let image = IndexedImage::new(
+        Dimensions::new(SCREEN_WIDTH, COVER_VISIBLE_HEIGHT),
+        full.pixels[..visible].to_vec(),
+    )
+    .expect("cropped cover matches its dimensions");
 
     let palette_bytes = disc.read("COVER3.PAL").context("reading COVER3.PAL")?;
     let palette = pal::decode(&palette_bytes).context("decoding COVER3.PAL")?;
@@ -900,10 +901,17 @@ pub(crate) fn test_intro_assets() -> IntroAssets {
     let font_sheet = vec![0u8; 320 * 62];
     let font = Font::decode(&font_sheet).expect("synthetic font sheet decodes");
 
+    // The cover is taller than the screen like the real one (320x400), so the
+    // intro's framebuffer swap is exercised without the disc.
+    let cover = StillImage {
+        image: blank_image(Dimensions::new(SCREEN_WIDTH, COVER_VISIBLE_HEIGHT)),
+        palette: Palette::from_vga_6bit(&[0u8; 768]).expect("synthetic palette decodes"),
+    };
+
     IntroAssets {
         neo: still(),
         surplogo: still(),
-        cover: still(),
+        cover,
         intro_fli: Vec::new(),
         fly_fli: Vec::new(),
         credz_fli: Vec::new(),
