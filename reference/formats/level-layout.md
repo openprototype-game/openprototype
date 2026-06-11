@@ -128,10 +128,14 @@ the per-layer scroll rates (`cs:0x25f6/fa/f2`) are placeholders until traced.
 LEVEL_2, 4, 6 are one code build, so a lower-data byte diff between them isolates the
 per-level data: a table at file `0x1690`.
 
-- 8-byte records from `0x1698`; slot 0 at `0x1690` is a constant header
-  `00 00 00 00 00 00 C8 00`, identical across the three.
-- Fixed capacity 244 slots (1952 bytes): populated records, then zero padding.
-- Populated count scales with level length: LEVEL_2 ~64, LEVEL_4 ~78, LEVEL_6 ~230.
+- 8-byte records from `0x1698`; slot 0 at `0x1690` is a header of three zero words
+  and a per-level word3 (`0xC8` = 200 in LEVEL_2/4, `0x64` = 100 in LEVEL_6; meaning
+  unknown).
+- Fixed capacity 244 slots (1952 bytes): populated records, then `(0, 0, 0, 20)`
+  padding slots (word3 stays 20, the rest zero).
+- Populated count scales with level length: LEVEL_2 67, LEVEL_4 82, LEVEL_6 242.
+  Every run ends with a shared `(ref, 20, 209, 20)` trailer record; a populated
+  record always has a nonzero word0, so the first zero word0 ends the run.
 - `word0` is a reference into the level's BIN: in LEVEL_2 the offsets point at real,
   reused sprite data in `RACE1.BIN` (`0x3EB2` appears three times in a row, the same
   sprite placed repeatedly); the bytes there are compiled-sprite code
@@ -479,9 +483,16 @@ the step-repeat) plus `prng.rs` (the shared PRNG) and `Record`/`Rand` types. Per
 data: `level_1.rs` (seed `0x3b95`, `Scatter`/`RowOnce`/`Cells`/`Choice`/`RowEveryNth`),
 `level_3.rs` (seed `0x1a94`, 28-call overwrite post-pass), `level_5.rs` (seed `0x2d93`),
 `level_7.rs` (seed `0x3e94`, 9-op insert post-pass). Each has a full-buffer golden-hash
-test that locks its output byte-for-byte. The old baked `generator.rs` is gone: its
-LEVEL_1-only emitters moved into the slot `Emitter` enum (renamed off the slot variants
-they clashed with), so there is no second interpreter.
+test that locks its output byte-for-byte; `re/verify_layouts.py` (with the `dump_layout`
+example) re-runs the full record-by-record diff against the captures. The old baked
+`generator.rs` is gone: its LEVEL_1-only emitters moved into the slot `Emitter` enum
+(renamed off the slot variants they clashed with), so there is no second interpreter.
+
+Both mechanisms hang off the level registry: `LevelData.spawns` is a `SpawnSource`
+(`level/spawn.rs`), either the level's script + post-pass fn pointers or the static
+table's file offset, and `SpawnSource::records` resolves either into the shared
+`Record` buffer (the generated arm takes the PRNG seed, the static arm the WAD
+image). The race arm's field mapping is provisional until the render validation.
 
 ## Open
 

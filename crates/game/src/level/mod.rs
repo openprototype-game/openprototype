@@ -12,6 +12,7 @@ pub mod level_5;
 pub mod level_7;
 pub mod prng;
 pub mod slot;
+pub mod spawn;
 
 /// A stable fingerprint of a generated layout, for full-buffer golden tests.
 ///

@@ -6,6 +6,8 @@
 //! hardcoding `LEVEL_1.WAD`.
 
 use crate::background::Sp;
+use crate::level::spawn::SpawnSource;
+use crate::level::{level_1, level_3, level_5, level_7};
 use openprototype_core::PerWeapon;
 
 /// Which catalog cells make up a weapon's overlay sprite: the run of `count`
@@ -292,6 +294,10 @@ pub struct LevelData {
     /// starts here, per the pan variable's data-image value. Only L3 is panned
     /// down from row 0.
     pub camera_min: i32,
+    /// The level's enemy/pickup spawn placement: generated at load by a layout
+    /// script (1/3/5/7) or a static table baked into the WAD (2/4/6). See
+    /// `reference/formats/level-layout.md`.
+    pub spawns: SpawnSource,
 }
 
 impl Level {
@@ -388,6 +394,10 @@ impl Level {
                 },
                 stars: &[],
                 camera_min: 0,
+                spawns: SpawnSource::Generated {
+                    script: level_1::script,
+                    post_pass: None,
+                },
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
@@ -455,6 +465,7 @@ impl Level {
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
+                spawns: SpawnSource::StaticTable { table: 0x1690 },
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
@@ -529,6 +540,10 @@ impl Level {
                 },
                 stars: &[],
                 camera_min: 4,
+                spawns: SpawnSource::Generated {
+                    script: level_3::script,
+                    post_pass: Some(level_3::post_pass),
+                },
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
@@ -594,6 +609,7 @@ impl Level {
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
+                spawns: SpawnSource::StaticTable { table: 0x1690 },
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
@@ -663,6 +679,10 @@ impl Level {
                 },
                 stars: &[],
                 camera_min: 0,
+                spawns: SpawnSource::Generated {
+                    script: level_5::script,
+                    post_pass: None,
+                },
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
@@ -725,6 +745,7 @@ impl Level {
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
+                spawns: SpawnSource::StaticTable { table: 0x1690 },
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
@@ -796,6 +817,10 @@ impl Level {
                 },
                 stars: &[],
                 camera_min: 0,
+                spawns: SpawnSource::Generated {
+                    script: level_7::script,
+                    post_pass: Some(level_7::post_pass),
+                },
             },
         }
     }
