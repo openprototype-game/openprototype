@@ -19,6 +19,7 @@ use prototype_formats::Dimensions;
 
 use crate::assets::LevelAssets;
 use crate::background::BackgroundScroll;
+use crate::combat::{self, CombatEvents};
 use crate::hud::{self, POD_SETTLED_FRAME};
 use crate::level::prng::{EngineRng, clock_seed};
 use crate::playfield;
@@ -226,8 +227,19 @@ impl LevelScene {
     fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
             if let (Some(spawns), Some(rows)) = (&mut self.spawns, &self.assets.spawn_rows) {
-                spawns.tick(rows);
+                spawns.tick(rows, &self.assets.wad, self.assets.cs_base);
                 spawns.step_movement(&self.assets.wad, self.ship.position());
+
+                let mut events = CombatEvents::default();
+                combat::player_shots(
+                    &mut self.weapons,
+                    spawns,
+                    &self.assets.wad,
+                    self.assets.cs_base,
+                    &mut events,
+                );
+                self.state.score += events.score;
+                // TODO: events.level_end ends the level once the flow exists.
             }
 
             self.ship

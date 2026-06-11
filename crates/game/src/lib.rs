@@ -17,6 +17,7 @@
 pub mod app;
 pub mod assets;
 pub mod background;
+pub mod combat;
 pub mod fade;
 pub mod flic_player;
 pub mod highscores;

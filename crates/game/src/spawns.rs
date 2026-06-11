@@ -89,12 +89,29 @@ pub struct Entity {
     pub anim: u8,
     /// The per-life tick counter (entity +0x20).
     pub tick: u16,
+    /// Three collision boxes (entity +0x8..0x13): unsigned byte offsets
+    /// `{dx_min, dy_min, dx_max, dy_max}` from the entity's pixel position; a
+    /// leading 0xff disables the box. Copied from the descriptor block at
+    /// spawn; the boss re-copies its current frame's boxes every step.
+    pub hitboxes: [[u8; 4]; 3],
     /// Orbit/path phase words (entity +0x22/+0x24).
     pub phase_a: u16,
     pub phase_b: u16,
     /// Stored orbit-center position (entity +0x26/+0x28).
     pub save_y: i32,
     pub save_x: i32,
+}
+
+/// Reads an entity's three 4-byte collision boxes from its descriptor block
+/// (descriptor +0x8..0x13).
+pub(crate) fn descriptor_hitboxes(wad: &[u8], cs_base: usize, sprite: u16) -> [[u8; 4]; 3] {
+    let at = usize::from(sprite) + cs_base + 8;
+
+    if wad.len() < at + 12 {
+        return [[0xff, 0, 0, 0]; 3];
+    }
+
+    std::array::from_fn(|box_index| std::array::from_fn(|byte| wad[at + box_index * 4 + byte]))
 }
 
 /// One enemy shot (the original's 16-byte buffer-B record): position and
@@ -127,6 +144,9 @@ pub struct Spawns {
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
     rng: EngineRng,
+    /// The orb-drop countdown (`cs:0x2666`): every Nth killed enemy converts
+    /// into the weapon-orb pickup.
+    orb_drop_countdown: i32,
     /// The boss's engine globals.
     boss: ai_l1::BossState,
     /// Sprites assembled from descriptors, cached by descriptor pointer
@@ -147,6 +167,7 @@ impl Spawns {
             shots: Vec::new(),
             ai,
             rng: EngineRng::new(clock_seed()),
+            orb_drop_countdown: 0,
             boss: ai_l1::BossState::default(),
             sprites: HashMap::new(),
         }
@@ -160,7 +181,7 @@ impl Spawns {
     /// are due, so zero-delay records spawn together. The entity cap drops
     /// overflow spawns (the original treats overflow as a fatal error; the
     /// port degrades gracefully).
-    pub fn tick(&mut self, rows: &[SpawnRow]) {
+    pub fn tick(&mut self, rows: &[SpawnRow], wad: &[u8], cs_base: usize) {
         if self.cursor >= self.records.len() {
             return;
         }
@@ -199,6 +220,7 @@ impl Spawns {
                 seen: false,
                 anim: 0,
                 tick: 0,
+                hitboxes: descriptor_hitboxes(wad, cs_base, record.sprite),
                 phase_a: 0,
                 phase_b: 0,
                 save_y: 0,
@@ -257,6 +279,20 @@ impl Spawns {
 
         self.shots
             .retain(|shot| SHOT_X.contains(&shot.x) && SHOT_Y.contains(&shot.y));
+    }
+
+    /// Decrements the orb-drop countdown (`cs:0x2666`); `true` means this
+    /// kill converts into the weapon-orb pickup, and the countdown reseeds as
+    /// `rng(4) + 5`.
+    pub fn orb_drop_due(&mut self) -> bool {
+        self.orb_drop_countdown -= 1;
+
+        if self.orb_drop_countdown > 0 {
+            return false;
+        }
+
+        self.orb_drop_countdown = i32::from(self.rng.next(4)) + 5;
+        true
     }
 
     /// The schedule position, for tests: `(next record index, head countdown)`.
@@ -350,11 +386,11 @@ mod tests {
         let mut spawns = Spawns::new(vec![record(3, 0), record(0, 1), record(2, 0)], None);
         let rows = rows();
 
-        spawns.tick(&rows);
-        spawns.tick(&rows);
+        spawns.tick(&rows, &[], 0);
+        spawns.tick(&rows, &[], 0);
         assert_eq!(spawns.entities.len(), 0);
 
-        spawns.tick(&rows);
+        spawns.tick(&rows, &[], 0);
         assert_eq!(spawns.entities.len(), 2);
         assert_eq!(spawns.cursor_state(), (2, 2));
         assert_eq!(
@@ -366,8 +402,8 @@ mod tests {
             (-20 << 4, 30 << 4)
         );
 
-        spawns.tick(&rows);
-        spawns.tick(&rows);
+        spawns.tick(&rows, &[], 0);
+        spawns.tick(&rows, &[], 0);
         assert_eq!(spawns.entities.len(), 3);
     }
 
@@ -376,7 +412,7 @@ mod tests {
         let records = (0..30).map(|_| record(0, 0)).collect();
         let mut spawns = Spawns::new(records, None);
 
-        spawns.tick(&rows());
+        spawns.tick(&rows(), &[], 0);
         assert_eq!(spawns.entities.len(), MAX_ENTITIES);
     }
 
@@ -384,7 +420,7 @@ mod tests {
     fn culls_out_of_bounds_entities() {
         let mut spawns = Spawns::new(vec![record(1, 0)], None);
 
-        spawns.tick(&rows());
+        spawns.tick(&rows(), &[], 0);
         assert_eq!(spawns.entities.len(), 1);
 
         // The bounds are inclusive: -0x500 survives, one step past it culls.

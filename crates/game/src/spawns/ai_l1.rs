@@ -12,7 +12,7 @@
 //! orbiter frame patch's hitbox/claw writes, and the firing-weapon gate bypass
 //! (`cs:0xcb5 == 3`).
 
-use super::{Entity, Shot};
+use super::{Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
 
 /// Per-step context the AI functions read and write besides the entity.
@@ -375,9 +375,28 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
             entity.sprite = 0x392e;
         } else {
             entity.sprite += 8;
-            // TODO: orbiter frame patch (0xcc5e): per-frame hitbox bytes and
-            // the claw-word write into the rest descriptor.
+            orbiter_frame_patch(entity, ctx.wad);
         }
+    }
+}
+
+/// The orbiter frame patch (file 0xcc5e): the attack frames carry their own
+/// middle collision box, from the 12-entry table at file 0xc892.
+///
+/// TODO: the original also writes a per-frame claw word into the rest
+/// descriptor (table at file 0xc8c2, target cs:0x3942); its consumer is
+/// untraced.
+fn orbiter_frame_patch(entity: &mut Entity, wad: &[u8]) {
+    let index = if entity.sprite == 0x392e {
+        0
+    } else {
+        usize::from((entity.sprite - 0x394c) >> 3) + 1
+    };
+
+    let at = 0xc892 + index * 4;
+
+    if wad.len() >= at + 4 {
+        entity.hitboxes[1] = [wad[at], wad[at + 1], wad[at + 2], wad[at + 3]];
     }
 }
 
@@ -559,6 +578,9 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
             entity.health = -1; // health = 0xffff: remove on the next update
         }
     }
+
+    // Every call: the hitbox tracks the current frame's descriptor.
+    entity.hitboxes = descriptor_hitboxes(ctx.wad, 0x29f0, entity.sprite);
 
     // Every call past the fly-in: fire an aimed pair every 0x3c sub-steps.
     if tick >= 0xaa {

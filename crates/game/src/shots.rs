@@ -125,12 +125,49 @@ pub struct FireSounds {
 }
 
 /// One live shot, in 1/16-pixel window coordinates.
-struct Shot {
+///
+/// `damage` is the shot's remaining damage budget (record word +0xe): hits
+/// spend it against enemy health, and overkill pierces through with the
+/// remainder (see `crate::combat`).
+pub struct Shot {
     kind: ShotKind,
-    x: i32,
-    y: i32,
+    pub x: i32,
+    pub y: i32,
     dx: i32,
     dy: i32,
+    pub damage: i32,
+}
+
+impl Shot {
+    /// The shot's collision extent in pixels (record bytes +0xa/+0xb), from
+    /// the spawner literals.
+    pub fn collision_size(&self) -> (i32, i32) {
+        match self.kind {
+            ShotKind::Chaingun | ShotKind::Missile => (13, 4),
+            ShotKind::Multishot(_) => (5, 4),
+            ShotKind::Burning(_) => (135, 12),
+            // TODO: the launched ball's record sizes are unverified; the bolt's
+            // (22, 15) is from the spawner at file 0x9924.
+            ShotKind::PlasmaBolt | ShotKind::PlasmaBall => (22, 15),
+        }
+    }
+
+    /// Whether the damage path skips the hit spark (the original's `0x32c0`
+    /// plasma type check at file 0xc0df).
+    pub fn is_plasma(&self) -> bool {
+        matches!(self.kind, ShotKind::PlasmaBolt | ShotKind::PlasmaBall)
+    }
+}
+
+/// A shot's initial damage budget (the spawners' `+0xe` literals).
+fn initial_damage(kind: ShotKind) -> i32 {
+    match kind {
+        ShotKind::Chaingun => 12,
+        ShotKind::Multishot(level) => [15, 18, 20, 22][level],
+        ShotKind::Burning(level) => [60, 70, 90, 125][level],
+        ShotKind::PlasmaBolt | ShotKind::PlasmaBall => 30,
+        ShotKind::Missile => 80,
+    }
 }
 
 /// The player's fire state: the cooldown machine, the live shots, and the
@@ -168,7 +205,7 @@ pub struct Weapons {
     trail: [(i32, i32); TRAIL],
     /// The orbs' bob wave, from the level WAD.
     bob_wave: Vec<i32>,
-    shots: Vec<Shot>,
+    pub shots: Vec<Shot>,
 }
 
 impl Weapons {
@@ -387,6 +424,7 @@ impl Weapons {
             y: y << 4,
             dx,
             dy,
+            damage: initial_damage(kind),
         });
     }
 
