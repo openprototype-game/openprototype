@@ -659,7 +659,6 @@ fn touches_ship(entity: &Entity, rects: &ShipRects) -> bool {
 /// Keeps the worse of two ship outcomes across a pass.
 fn merge_ship_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<HitOutcome> {
     match (current, new) {
-        (Some(HitOutcome::GameOver), _) | (_, HitOutcome::GameOver) => Some(HitOutcome::GameOver),
         (Some(HitOutcome::Died), _) | (_, HitOutcome::Died) => Some(HitOutcome::Died),
         (current, new) => current.or(Some(new)),
     }

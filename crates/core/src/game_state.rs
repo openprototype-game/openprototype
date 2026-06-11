@@ -156,9 +156,11 @@ pub enum HitOutcome {
     Shielded,
     /// A charged weapon absorbed the hit; no life lost.
     Absorbed,
-    /// The hit cost a life; the ship respawns (invincibility armed).
+    /// A fatal hit: the death sequence starts. The life itself is deducted
+    /// when the sequence ends ([`GameState::lose_life`]), like the
+    /// original's respawn-time decrement.
     Died,
-    /// The last life was lost.
+    /// The last life was lost ([`GameState::lose_life`] only).
     GameOver,
 }
 
@@ -255,15 +257,20 @@ impl GameState {
     /// Applies a hit. While invincible nothing happens; otherwise a charged
     /// weapon absorbs it (zeroed by a [`Collision`](Severity::Collision),
     /// drained one level by a [`Bullet`](Severity::Bullet)) and the ship
-    /// survives, while a hit on the bare chaingun costs a life. See
+    /// survives, while a hit on the bare chaingun is fatal. See
     /// `reference/combat.md`.
+    ///
+    /// A fatal hit does not touch the lives counter: the caller plays the
+    /// death sequence and calls [`Self::lose_life`] when it ends, matching
+    /// the original (the dying flag is set at the hit, the decrement and the
+    /// game-over check live in the respawn handler).
     pub fn take_hit(&mut self, severity: Severity) -> HitOutcome {
         if self.is_invincible() {
             return HitOutcome::Shielded;
         }
 
         if self.active_weapon() == ActiveWeapon::Chaingun {
-            return self.lose_life();
+            return HitOutcome::Died;
         }
 
         let level = self.weapons.get_mut(self.selected);
@@ -452,19 +459,10 @@ mod tests {
     }
 
     #[test]
-    fn a_hit_on_the_chaingun_costs_a_life_and_arms_the_shield() {
+    fn a_hit_on_the_chaingun_is_fatal_but_defers_the_life_loss() {
         let mut state = fresh();
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Died);
-        assert_eq!(state.lives.get(), 2);
-        assert_eq!(state.invincible_ticks, 300);
-    }
-
-    #[test]
-    fn the_last_life_lost_is_game_over_with_no_shield() {
-        let mut state = fresh();
-        state.lives = Lives::new(1);
-        assert_eq!(state.take_hit(Severity::Bullet), HitOutcome::GameOver);
-        assert_eq!(state.lives.get(), 0);
+        assert_eq!(state.lives.get(), 3);
         assert_eq!(state.invincible_ticks, 0);
     }
 
@@ -482,14 +480,13 @@ mod tests {
     }
 
     #[test]
-    fn two_hits_in_a_row_zero_the_bar_then_take_the_life() {
+    fn two_hits_in_a_row_zero_the_bar_then_turn_fatal() {
         let mut state = with_selected_level(Weapon::Burning, 4);
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Absorbed);
         assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(state.lives.get(), 3);
 
         assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Died);
-        assert_eq!(state.lives.get(), 2);
-        assert_eq!(state.invincible_ticks, 300);
+        assert_eq!(state.lives.get(), 3);
     }
 }

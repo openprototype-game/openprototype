@@ -89,8 +89,9 @@ enum Flow {
     GetReady { fire_released: bool },
     Running,
     /// The ship's death explosion is playing; the world runs on with input,
-    /// body contact and the ship hit tests gated off.
-    Dying { ticks_left: u32, game_over: bool },
+    /// body contact and the ship hit tests gated off. The life is deducted
+    /// when the sequence ends (the original's respawn-time decrement).
+    Dying { ticks_left: u32 },
     /// Out of lives: hand back to the front-end.
     GameOver,
 }
@@ -340,27 +341,22 @@ impl LevelScene {
             self.run_combat(audio);
 
             // The death sequence: the world keeps running, the ship doesn't.
-            // When the explosion finishes, the original freezes into the
-            // respawn GET READY, or exits when the lives ran out.
-            if let Flow::Dying {
-                ticks_left,
-                game_over,
-            } = &mut self.flow
-            {
+            // When the explosion finishes, the life comes off and the level
+            // freezes into the respawn GET READY, or exits when that was the
+            // last one (the original's respawn handler, file 0x9d84).
+            if let Flow::Dying { ticks_left } = &mut self.flow {
                 *ticks_left -= 1;
-                let finished = *ticks_left == 0;
-                let game_over = *game_over;
 
-                if finished && game_over {
-                    self.flow = Flow::GameOver;
-                    break;
-                }
+                if *ticks_left == 0 {
+                    if self.state.lose_life() == HitOutcome::GameOver {
+                        self.flow = Flow::GameOver;
+                    } else {
+                        self.ship = Ship::new(self.assets.ship);
+                        self.flow = Flow::GetReady {
+                            fire_released: false,
+                        };
+                    }
 
-                if finished {
-                    self.ship = Ship::new(self.assets.ship);
-                    self.flow = Flow::GetReady {
-                        fire_released: false,
-                    };
                     break;
                 }
             }
@@ -529,24 +525,14 @@ impl LevelScene {
             self.sfx.weapon_lost(&self.assets.sfx, audio);
         }
 
-        // A fatal hit starts the death explosion; the respawn (or the
-        // game-over exit) happens when the sequence finishes, in `advance`.
-        match events.ship {
-            Some(HitOutcome::Died) => {
-                self.sfx.ship_died(&self.assets.sfx, audio);
-                self.flow = Flow::Dying {
-                    ticks_left: DEATH_TICKS,
-                    game_over: false,
-                };
-            }
-            Some(HitOutcome::GameOver) => {
-                self.sfx.ship_died(&self.assets.sfx, audio);
-                self.flow = Flow::Dying {
-                    ticks_left: DEATH_TICKS,
-                    game_over: true,
-                };
-            }
-            _ => {}
+        // A fatal hit starts the death explosion; the life loss and the
+        // respawn (or the game-over exit) happen when the sequence finishes,
+        // in `advance`.
+        if events.ship == Some(HitOutcome::Died) {
+            self.sfx.ship_died(&self.assets.sfx, audio);
+            self.flow = Flow::Dying {
+                ticks_left: DEATH_TICKS,
+            };
         }
     }
 
@@ -858,7 +844,6 @@ fn new_game_state() -> GameState {
 /// Keeps the worse of two ship outcomes across the tick's passes.
 fn merge_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<HitOutcome> {
     match (current, new) {
-        (Some(HitOutcome::GameOver), _) | (_, HitOutcome::GameOver) => Some(HitOutcome::GameOver),
         (Some(HitOutcome::Died), _) | (_, HitOutcome::Died) => Some(HitOutcome::Died),
         (current, new) => current.or(Some(new)),
     }
