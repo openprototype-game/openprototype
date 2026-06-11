@@ -317,10 +317,15 @@ impl LevelScene {
             let outcome = self.state.take_hit(Severity::Bullet);
             events.ship = merge_outcome(events.ship, outcome);
 
-            // A drain to zero loses the weapon mid-hold (the original's
-            // immediate revert to the minigun).
-            if outcome == HitOutcome::Absorbed && self.state.level(self.state.selected).get() == 0 {
-                self.weapons.weapon_lost();
+            if outcome == HitOutcome::Absorbed {
+                // A drain to zero loses the weapon mid-hold (the original's
+                // immediate revert to the minigun, with its own sound).
+                if self.state.level(self.state.selected).get() == 0 {
+                    self.weapons.weapon_lost();
+                    self.sfx.weapon_lost(&self.assets.sfx, audio);
+                } else {
+                    self.sfx.weapon_drained(&self.assets.sfx, audio);
+                }
             }
         }
 
@@ -329,15 +334,50 @@ impl LevelScene {
         self.state.add_score(events.score);
         // TODO: events.level_end ends the level once the flow exists.
 
+        // The per-kind death sounds restart the impact channel in death
+        // order, so the last kill's sample wins the tick, like the original.
+        for kind in &events.kills {
+            self.sfx.enemy_died(*kind, &self.assets.sfx, audio);
+        }
+
+        if events.chaingun_impact {
+            self.sfx.chaingun_impact(&self.assets.sfx, audio);
+        }
+
+        if events.missile_impact {
+            self.sfx.missile_impact(&self.assets.sfx, audio);
+        }
+
+        if events.orb_dropped {
+            self.sfx.orb_dropped(&self.assets.sfx, audio);
+        }
+
+        if events.pickup {
+            self.sfx.pickup_collected(&self.assets.sfx, audio);
+        }
+
+        if events.shield_pickup {
+            self.ship.arm_shield(600);
+        }
+
+        if events.ram == Some(HitOutcome::Absorbed) {
+            self.weapons.weapon_lost();
+            self.sfx.weapon_lost(&self.assets.sfx, audio);
+        }
+
         match events.ship {
             Some(HitOutcome::Died) => {
                 // The original runs a death sequence and a GET READY; the
                 // port respawns with the fly-in directly.
+                self.sfx.ship_died(&self.assets.sfx, audio);
                 self.ship = Ship::new(self.assets.ship);
             }
             Some(HitOutcome::GameOver) => {
                 // TODO: the game-over flow (exit to the front-end). The dev
-                // scene respawns regardless.
+                // scene restarts a fresh game so respawn invincibility keeps
+                // working.
+                self.sfx.ship_died(&self.assets.sfx, audio);
+                self.state = new_game_state();
                 self.ship = Ship::new(self.assets.ship);
             }
             _ => {}
