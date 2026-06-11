@@ -224,6 +224,7 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
         if sprite >= spawns.combat.level_end_sprite {
             events.level_end = true;
             spawns.level_end = true;
+            spawns.boss_killed();
         }
 
         events.kills.push(kind);
@@ -363,6 +364,7 @@ mod tests {
             phase_b: 0,
             save_y: 0,
             save_x: 0,
+            counter: 0,
         }
     }
 

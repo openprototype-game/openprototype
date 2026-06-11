@@ -107,9 +107,11 @@ pub struct CombatData {
     pub ram_survivors: &'static [(u16, u16)],
     /// The live-entity cap (L1/L5 24, L3 48).
     pub entity_cap: usize,
-    /// The off-screen cull's left bound in 12.4 (L1 -0x500, L3 -0x320,
-    /// L5 -0x780); the other bounds are shared.
+    /// The off-screen cull's x bounds in 12.4 (left: L1 -0x500, L3 -0x320,
+    /// L5 -0x780, L7 -0x3c0; right: 0x1200 except L7's 0x1840 for its
+    /// x = 358 snake spawns). The y bounds are shared.
     pub cull_x_min: i32,
+    pub cull_x_max: i32,
     /// Respawn invincibility in ticks (L3 180, the others 300).
     pub respawn_invincibility: u16,
     /// Kinds whose death plays a dedicated sample over the explosion
@@ -131,6 +133,7 @@ const L1_COMBAT: CombatData = CombatData {
     ram_survivors: &[(0x392e, 0x392e), (0x3ae8, 0xffff)],
     entity_cap: 24,
     cull_x_min: -0x500,
+    cull_x_max: 0x1200,
     respawn_invincibility: 300,
     asteroid_kind: Some(0x3308),
     pod_kind: Some(0x38b0),
@@ -396,6 +399,8 @@ pub enum SpawnAi {
     L3,
     /// LEVEL_5's 44 functions (`re/l5-ai-functions.md`).
     L5,
+    /// LEVEL_7's 50 functions (`re/l7-ai-functions.md`).
+    L7,
 }
 
 impl Level {
@@ -592,6 +597,7 @@ impl Level {
                     ram_survivors: &[(0x54d6, 0x54d6), (0x5c20, 0x5c20)],
                     entity_cap: 48,
                     cull_x_min: -0x320,
+                    cull_x_max: 0x1200,
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -763,6 +769,7 @@ impl Level {
                     ram_survivors: &[(0x3b70, 0x3c3e), (0x426e, 0xffff)],
                     entity_cap: 24,
                     cull_x_min: -0x780,
+                    cull_x_max: 0x1200,
                     respawn_invincibility: 300,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -916,7 +923,30 @@ impl Level {
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
                 dim_divisor: 3,
-                combat: L1_COMBAT,
+                combat: CombatData {
+                    ship_rect_table: 0x5b47,
+                    pickups: [0x4291, 0x41b5, 0x421b, 0x4357],
+                    orb_arg: 0,
+                    gate_release: (0x4959, 0x4a27),
+                    level_end_sprite: 0x4cbd,
+                    level_end_clears_gate: false,
+                    ram_survivors: &[
+                        (0x4689, 0x4689),
+                        (0x47f1, 0x47f1),
+                        (0x4959, 0x4959),
+                        (0x4cbd, 0x4cbd),
+                        (0x507d, 0x507d),
+                        (0x53a7, 0x53a7),
+                        (0x5749, 0x5749),
+                        (0x5893, 0x5893),
+                    ],
+                    entity_cap: 49,
+                    cull_x_min: -0x3c0,
+                    cull_x_max: 0x1840,
+                    respawn_invincibility: 180,
+                    asteroid_kind: None,
+                    pod_kind: None,
+                },
                 background: Sp::Lavah,
                 catalog: Bin::Lava,
                 catalog_offset: 0x13240,
@@ -941,7 +971,7 @@ impl Level {
                 overlay_positions: 0xf75d,
                 ship: ShipData {
                     catalog: 0xaa94,
-                    explosion: None,
+                    explosion: Some(0x9585),
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -994,7 +1024,7 @@ impl Level {
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x8635,
                     rows: 136,
-                    ai: None,
+                    ai: Some(SpawnAi::L7),
                 }),
             },
         }

@@ -11,6 +11,7 @@
 mod ai_l1;
 mod ai_l3;
 mod ai_l5;
+mod ai_l7;
 
 use std::collections::HashMap;
 
@@ -22,10 +23,8 @@ use crate::playfield;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
 
-/// The off-screen cull bounds in 12.4 fixed point, from the update loop's
-/// signed compares (both ends inclusive): x in [-1280, 4608], y in
-/// [-960, 2560].
-const CULL_X_MAX: i32 = 0x1200;
+/// The off-screen y cull bounds in 12.4 fixed point, shared by every level
+/// (the x bounds are per-level, in [`CombatData`]).
 const CULL_Y: std::ops::RangeInclusive<i32> = -0x3c0..=0xa00;
 
 /// One row of a level's spawn-position table: where a spawn enters the
@@ -102,6 +101,8 @@ pub struct Entity {
     /// Stored orbit-center position (entity +0x26/+0x28).
     pub save_y: i32,
     pub save_x: i32,
+    /// A second per-entity counter (entity +0x2a; L7's snake burst clock).
+    pub counter: u16,
 }
 
 /// Reads an entity's three 4-byte collision boxes from its descriptor block
@@ -230,6 +231,8 @@ pub struct Spawns {
     boss_l3: ai_l3::BossState,
     /// The L5 boss's engine globals.
     boss_l5: ai_l5::BossState,
+    /// The L7 composite boss's shared globals.
+    boss_l7: ai_l7::BossState,
     /// Sprites assembled from descriptors, cached by descriptor pointer
     /// (`None` caches an unresolvable descriptor).
     sprites: HashMap<u16, Option<OverlaySprite>>,
@@ -262,6 +265,7 @@ impl Spawns {
             boss: ai_l1::BossState::default(),
             boss_l3: ai_l3::BossState::default(),
             boss_l5: ai_l5::BossState::default(),
+            boss_l7: ai_l7::BossState::default(),
             sprites: HashMap::new(),
         }
     }
@@ -319,6 +323,7 @@ impl Spawns {
                 phase_b: 0,
                 save_y: 0,
                 save_x: 0,
+                counter: 0,
             });
         }
     }
@@ -373,6 +378,25 @@ impl Spawns {
                     }
                 }
             }
+            Some(SpawnAi::L7) => {
+                let mut context = ai_l7::AiContext {
+                    wad,
+                    rng: &mut self.rng,
+                    player_y: player.y,
+                    shots: &mut self.shots,
+                    effects: &mut self.effects,
+                    boss: &mut self.boss_l7,
+                    gate: &mut self.gate,
+                    boss_explosion: &mut self.boss_explosion,
+                    sounds: &mut self.ai_sounds,
+                };
+
+                for entity in &mut self.entities {
+                    if entity.mode == 0 {
+                        ai_l7::step(entity, &mut context);
+                    }
+                }
+            }
             Some(SpawnAi::L5) => {
                 let mut context = ai_l5::AiContext {
                     wad,
@@ -403,7 +427,7 @@ impl Spawns {
         // off-screen entry. Dead entities (health <= 0, including the boss's
         // form-2 self-destruct at -1) stay for the reap pass, which runs the
         // death handler on them.
-        let cull_x = self.combat.cull_x_min..=CULL_X_MAX;
+        let cull_x = self.combat.cull_x_min..=self.combat.cull_x_max;
         self.entities.retain_mut(|entity| {
             let in_bounds = cull_x.contains(&entity.x) && CULL_Y.contains(&entity.y);
 
@@ -448,6 +472,13 @@ impl Spawns {
 
             true
         });
+    }
+
+    /// The level-end death's boss cascade: L7's death handler zeroes the
+    /// composite boss's shared health pool so the min-share kills the other
+    /// parts on their next step. A no-op for the single-boss levels.
+    pub fn boss_killed(&mut self) {
+        self.boss_l7.shared_health = 0;
     }
 
     /// Whether the boss/orbiter gate is holding the scroll and spawn clock.
