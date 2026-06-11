@@ -120,8 +120,9 @@ pub struct LevelScene {
     paused: bool,
     /// Dev fast-forward: F held runs 8 logic ticks per frame.
     turbo: bool,
-    /// Ticks left of the level-end hold (the original runs ~460 more frames
-    /// after the boss dies, letting the debris play, before exiting).
+    /// Ticks left of the level-end sequence: the original runs 460 more
+    /// frames after the boss dies, and for the last 300 the ship flies off
+    /// to the right with input locked ([`Ship::fly_out`]).
     level_end_countdown: Option<u32>,
 }
 
@@ -188,30 +189,47 @@ impl LevelScene {
     ///
     /// Gate fights can't resolve with a parked ship, so the skip clears them:
     /// orbiters are auto-killed (their deaths release the gate through the
-    /// regular reap), and a boss gate ends the skip where the fight starts.
+    /// regular reap) and a gating form-1 boss is dropped to its dying
+    /// threshold so its retreat plays out during the skip. The final boss
+    /// form's arrival ends the skip, so a large `--skip` lands at the last
+    /// phase with the fight still ahead.
     fn fast_forward(&mut self, ticks: u32) {
         if ticks == 0 {
             return;
         }
 
+        const BOSS_FORM_2: u16 = 23;
+
         let mut scratch = Vec::new();
 
         for _ in 0..ticks {
-            if let Some(spawns) = &mut self.spawns
-                && spawns.gate_holds()
-            {
-                let mut orbiters = 0;
-
-                for entity in &mut spawns.entities {
-                    if entity.health > 0 && (0x392e..=0x399c).contains(&entity.sprite) {
-                        entity.health = 0;
-                        orbiters += 1;
-                    }
+            if let Some(spawns) = &mut self.spawns {
+                if spawns.entities.iter().any(|e| e.arg == BOSS_FORM_2) {
+                    tracing::info!("skip stopped at the final boss form");
+                    break;
                 }
 
-                if orbiters == 0 {
-                    tracing::info!("skip stopped at a boss gate");
-                    break;
+                if spawns.gate_holds() {
+                    let mut orbiters = 0;
+
+                    for entity in &mut spawns.entities {
+                        if entity.health > 0 && (0x392e..=0x399c).contains(&entity.sprite) {
+                            entity.health = 0;
+                            orbiters += 1;
+                        }
+                    }
+
+                    // No orbiters means a boss holds the gate: "defeat" it by
+                    // dropping it to the dying threshold (the next AI step
+                    // starts the death script).
+                    if orbiters == 0 {
+                        for entity in &mut spawns.entities {
+                            if entity.health > 0x1388 && entity.kind >= 0x3ae8 {
+                                tracing::info!("skip auto-defeated a gating boss form");
+                                entity.health = 0x1388;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -635,11 +653,17 @@ impl Scene for LevelScene {
             self.advance(ticks, &mut output.audio);
         }
 
-        // The level-end hold: the boss died, the debris plays out, then the
-        // level hands back (the original exits to the front-end; the next-
-        // level flow is not built yet).
+        // The level-end sequence (file 0xf866): the boss died, the game runs
+        // on for 460 frames, and for the last 300 the ship's controls lock
+        // and it flies off the right edge. Then the level hands back (the
+        // original exits to the front-end; the next-level flow is not built
+        // yet).
         if let Some(countdown) = &mut self.level_end_countdown {
             *countdown = countdown.saturating_sub(ticks);
+
+            if *countdown < 300 {
+                self.ship.fly_out();
+            }
 
             if *countdown == 0 {
                 output.transition = Some(Transition::To(SceneId::MainMenu));

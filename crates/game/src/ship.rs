@@ -24,7 +24,9 @@
 //! the exhaust flicker.
 //!
 //! Spawning (`cs:[0x2642]` ramp) flies the ship in from the left at +2/tick
-//! with input ignored until the ramp counter reaches 10, and grants the
+//! with input ignored until the ramp counter reaches 10; the level-end
+//! flyout reuses the same ramp by re-pinning it each tick ([`Ship::fly_out`])
+//! so the ship exits right under locked controls. Spawning also grants the
 //! level's shield duration (`cs:[0x266a]`; 300 ticks in L1/L5, 180
 //! elsewhere). The shield animates over [`SHIELD_FRAMES`] frames, 4 ticks
 //! each (`cs:[0x8f5c]`/`[0x8f5e]`), and draws at the ship position offset by
@@ -61,6 +63,11 @@ const SPAWN_X: i32 = -60;
 const SPAWN_Y: i32 = 45;
 const SPAWN_RAMP: i32 = -80;
 const RAMP_DONE: i32 = 10;
+
+/// The level-end flyout re-pins the ramp to this every tick (`cs:[0x2642]` =
+/// `0xfed4`), so the auto-drift branch keeps running and the ship leaves the
+/// right edge under locked controls.
+const FLYOUT_RAMP: i32 = -300;
 
 /// Horizontal bounds (`cmp` guards before each 2-pixel step), the same in
 /// every level; the vertical bounds are per-level ([`ShipData::y_min`]).
@@ -153,6 +160,15 @@ impl Ship {
     /// it; the original drives both off the same `cs:0x266a` counter).
     pub fn arm_shield(&mut self, ticks: i32) {
         self.shield_ticks = ticks;
+    }
+
+    /// One tick of the level-end flyout: pins the ramp below the unlock
+    /// threshold so [`Self::update`] drifts the ship right with input
+    /// ignored. The original's flyout loop (file `0xf866`) re-forces
+    /// `cs:[0x2642]` every frame for the last 300 of its 460, which is why
+    /// this must be called per tick rather than once.
+    pub fn fly_out(&mut self) {
+        self.ramp = FLYOUT_RAMP;
     }
 
     /// Advance one logic tick: animations, movement, and the camera coupling.
