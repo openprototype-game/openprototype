@@ -110,6 +110,10 @@ enum ShotKind {
     /// The launched orb itself, flying forward after fire is released.
     PlasmaBall,
     Missile,
+    /// One record of the smart bomb's expanding ring: inert (zero size and
+    /// damage, the hit test's zero-size pre-check skips it), drawn with the
+    /// multishot sprite its `0x3210` descriptor aliases.
+    BombWave,
 }
 
 /// What the fire pass did this tick, for the sound triggers.
@@ -159,6 +163,7 @@ impl Shot {
             // TODO: the launched ball's record sizes are unverified; the bolt's
             // (22, 15) is from the spawner at file 0x9924.
             ShotKind::PlasmaBolt | ShotKind::PlasmaBall => (22, 15),
+            ShotKind::BombWave => (0, 0),
         }
     }
 
@@ -275,6 +280,7 @@ fn initial_damage(kind: ShotKind) -> i32 {
         ShotKind::Burning(level) => [60, 70, 90, 125][level],
         ShotKind::PlasmaBolt | ShotKind::PlasmaBall => 30,
         ShotKind::Missile => 80,
+        ShotKind::BombWave => 0,
     }
 }
 
@@ -565,6 +571,16 @@ impl Weapons {
         self.rate = 6;
     }
 
+    /// Spawn the smart bomb's expanding ring (file `0x99b7`): 32 inert wave
+    /// records from `(ship + 25, ship + 20)` px, one per velocity in the
+    /// level's ellipse table. They fly out as ordinary shots and despawn at
+    /// the bounds; the bomb's field damage lands separately, 14 ticks later.
+    pub fn smart_bomb(&mut self, (x, y): (i32, i32), wave: &[(i32, i32)]) {
+        for &(dx, dy) in wave {
+            self.spawn(ShotKind::BombWave, x + 25, y + 20, dx, dy);
+        }
+    }
+
     /// One steering step for every live missile (file `0xc114`, run per
     /// movement sub-step in the original's shot pass, between the hit test
     /// and the velocity add).
@@ -637,6 +653,9 @@ impl Weapons {
                 ShotKind::PlasmaBolt => &sprites.plasma_bolt,
                 ShotKind::PlasmaBall => &sprites.plasma_orbs[1][0],
                 ShotKind::Missile => &sprites.missile[shot.octant],
+                // The wave records carry descriptor 0x3210, the multishot
+                // level-3 shot sprite.
+                ShotKind::BombWave => &sprites.multishot[2],
             };
 
             blit(frame, sprite, shot.x >> 4, (shot.y >> 4) - camera);

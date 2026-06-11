@@ -62,6 +62,13 @@ pub fn player_shots(
 
     weapons.shots.retain_mut(|shot| {
         let (size_x, size_y) = shot.collision_size();
+
+        // A zero-size shot never tests (the original's pre-check; the smart
+        // bomb's ring records rely on it to stay inert).
+        if size_x == 0 && size_y == 0 {
+            return true;
+        }
+
         let budget = shot.damage;
 
         let outcome = apply_shot(

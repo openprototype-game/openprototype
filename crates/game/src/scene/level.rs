@@ -715,7 +715,8 @@ impl Scene for LevelScene {
                             && self.state.use_smart_bomb()
                         {
                             self.bomb_countdown = 15;
-                            // TODO: the 32-record expanding orb ring visual.
+                            self.weapons
+                                .smart_bomb(self.ship.position(), &self.assets.bomb_wave);
                         }
                     }
                     Key::Up => self.held.up = true,

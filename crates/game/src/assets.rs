@@ -155,6 +155,8 @@ pub struct LevelAssets {
     pub barrel_offsets: Vec<(i32, i32)>,
     /// The plasma orbs' bob wave, sampled at staggered phases per orb.
     pub bob_wave: Vec<i32>,
+    /// The smart-bomb ring's 32 `(vx, vy)` velocities (12.4), around a circle.
+    pub bomb_wave: Vec<(i32, i32)>,
     /// The level's sound-effect samples, indexed by slot.
     pub sfx: SfxBank,
     /// The level's CD-DA music track and its loop period.
@@ -374,6 +376,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let font_bytes = disc.read("FONT.RAW").context("reading FONT.RAW")?;
     let font = Font::decode(&font_bytes).context("decoding FONT.RAW")?;
     let dim_table = darken_table(&hud.palette);
+    let bomb_wave = read_bomb_wave(&wad, data.fire.bomb_wave)?;
     let ship_explosion = data
         .ship
         .explosion
@@ -417,7 +420,27 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         font,
         dim_table,
         ship_explosion,
+        bomb_wave,
     })
+}
+
+/// Read the smart-bomb ring's 32 `(vx, vy)` 12.4 velocity pairs.
+fn read_bomb_wave(wad: &[u8], table: usize) -> Result<Vec<(i32, i32)>> {
+    let end = table + 32 * 4;
+
+    if wad.len() < end {
+        anyhow::bail!("bomb-wave table out of bounds");
+    }
+
+    Ok(wad[table..end]
+        .chunks_exact(4)
+        .map(|pair| {
+            (
+                i32::from(i16::from_le_bytes([pair[0], pair[1]])),
+                i32::from(i16::from_le_bytes([pair[2], pair[3]])),
+            )
+        })
+        .collect())
 }
 
 /// A level's music: which CD-DA track it plays and the track's TOC length in
@@ -1114,6 +1137,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         },
         barrel_offsets: vec![(0, 0); ROLL_FRAMES],
         bob_wave: vec![0; 20],
+        bomb_wave: vec![(0, 0); 32],
         sfx: SfxBank {
             samples: (0..16).map(|_| Arc::from(Vec::new())).collect(),
         },
