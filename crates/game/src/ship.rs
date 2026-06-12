@@ -191,6 +191,33 @@ impl Ship {
         self.ramp = FLYOUT_RAMP;
     }
 
+    /// Reset for a respawn: position, fly-in ramp and roll restart, but the
+    /// free-running animation phases carry over -- the original's respawn
+    /// never resets the idle-flicker phase, the roll divider, or the shield
+    /// animation frame/hold (L1 0xb601-area state untouched by the respawn
+    /// handler), and they keep stepping through the death sequence.
+    pub fn respawn(&mut self, data: crate::levels::ShipData) {
+        let idle_phase = self.idle_phase;
+        let roll_divider = self.roll_divider;
+        let shield_frame = self.shield_frame;
+        let shield_hold = self.shield_hold;
+
+        *self = Ship::new(data);
+        self.idle_phase = idle_phase;
+        self.roll_divider = roll_divider;
+        self.shield_frame = shield_frame;
+        self.shield_hold = shield_hold;
+    }
+
+    /// One dying-sequence tick: the explosion replaces the ship on screen,
+    /// but the original keeps stepping the flicker phase, the shield
+    /// timer/animation, and the roll (input gated off, so it levels out).
+    pub fn tick_animations(&mut self) {
+        self.idle_phase = (self.idle_phase + 1) % IDLE_PHASES;
+        self.advance_shield();
+        self.advance_roll(HeldKeys::default());
+    }
+
     /// Advance one logic tick: animations, movement, and the camera coupling.
     pub fn update(&mut self, held: HeldKeys, camera: &mut i32, camera_min: i32) {
         self.idle_phase = (self.idle_phase + 1) % IDLE_PHASES;

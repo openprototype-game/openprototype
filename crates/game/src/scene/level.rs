@@ -730,7 +730,7 @@ impl LevelScene {
                     if self.state.lose_life(respawn_invincibility) == HitOutcome::GameOver {
                         self.flow = Flow::GameOver;
                     } else {
-                        self.ship = Ship::new(self.assets.ship);
+                        self.ship.respawn(self.assets.ship);
                         // The shield bubble tracks the invincibility timer
                         // the respawn handler arms.
                         self.ship.arm_shield(i32::from(respawn_invincibility));
@@ -776,6 +776,8 @@ impl LevelScene {
                 self.esc_debounce = self.esc_debounce.saturating_sub(1);
                 self.ship
                     .update(self.held, &mut self.camera_y, self.assets.camera_min);
+            } else if matches!(self.flow, Flow::Dying { .. }) {
+                self.ship.tick_animations();
             }
 
             let enemy_count = self
