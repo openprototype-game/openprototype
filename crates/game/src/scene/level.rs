@@ -108,6 +108,9 @@ const PULSE_START: i32 = 0x30;
 
 /// The level's run state (the original's freeze and dying globals,
 /// `cs:0x29f7` and `cs:0x46b2`).
+/// Every unfreeze re-arms this many ticks before Esc can reopen the menu.
+const ESC_DEBOUNCE_TICKS: u32 = 0x14;
+
 enum Flow {
     /// Frozen on the last composed frame with GET READY overlaid, waiting for
     /// fire released-then-pressed (level start and after each death).
@@ -188,6 +191,10 @@ pub struct LevelScene {
     flow: Flow,
     /// The Esc menu, freezing the level while open.
     menu: Option<InGameMenu>,
+    /// Ticks until Esc can open the menu again: every unfreeze re-arms 20
+    /// (`movw $0x14`, L1 file 0xf85c / L2 0xbdcd, the single dispatcher
+    /// site in all seven WADs) and the gate requires it zero.
+    esc_debounce: u32,
     /// The freeze pulse's level and direction (`cs:0x6ea6`/`0x6ea7` in
     /// L2). Never reset: the phase persists across freezes within the level.
     pulse_value: i32,
@@ -272,6 +279,7 @@ impl LevelScene {
             level_end_countdown: None,
             flow,
             menu: None,
+            esc_debounce: 0,
             pulse_value: PULSE_START,
             pulse_rising: false,
         };
@@ -433,6 +441,7 @@ impl LevelScene {
             None => {}
             Some(MenuRequest::Resume) => {
                 self.menu = None;
+                self.esc_debounce = ESC_DEBOUNCE_TICKS;
 
                 // The original's dispatcher clears the freeze wholesale when
                 // the menu handler returns (file 0xbdc1), so closing the menu
@@ -692,6 +701,7 @@ impl LevelScene {
             let running = matches!(self.flow, Flow::Running);
 
             if running {
+                self.esc_debounce = self.esc_debounce.saturating_sub(1);
                 self.ship
                     .update(self.held, &mut self.camera_y, self.assets.camera_min);
             }
@@ -1160,11 +1170,15 @@ impl Scene for LevelScene {
                     Key::Left => self.held.left = true,
                     Key::Right => self.held.right = true,
                     // Esc freezes the level and opens the in-game menu. The
-                    // original's gate (file 0x91bb) blocks it during the win
-                    // flyout; game over transitions out by itself.
+                    // original's gate (L2 file 0x91bb) blocks it during the
+                    // win flyout, the dying skip jumps over it while the
+                    // death explosion plays (L1 0xb4de -> 0xb75d), and the
+                    // unfreeze debounce must have run out; game over
+                    // transitions out by itself.
                     Key::Esc => {
                         if self.level_end_countdown.is_none()
-                            && !matches!(self.flow, Flow::GameOver)
+                            && !matches!(self.flow, Flow::GameOver | Flow::Dying { .. })
+                            && self.esc_debounce == 0
                         {
                             self.menu = Some(InGameMenu::new(crate::savestore::open_or_warn()));
                         }
@@ -1228,6 +1242,7 @@ impl Scene for LevelScene {
                 *fire_released = true;
             } else if *fire_released {
                 self.flow = Flow::Running;
+                self.esc_debounce = ESC_DEBOUNCE_TICKS;
             }
         }
 
@@ -1653,6 +1668,34 @@ mod tests {
         press(&mut scene, Key::Esc);
 
         assert!(scene.menu.is_none());
+    }
+
+    #[test]
+    fn esc_is_blocked_while_the_death_explosion_plays() {
+        let mut scene = test_scene();
+        scene.flow = Flow::Dying { ticks_left: 50 };
+
+        press(&mut scene, Key::Esc);
+
+        assert!(scene.menu.is_none());
+    }
+
+    #[test]
+    fn esc_needs_twenty_ticks_after_a_resume() {
+        let mut scene = test_scene();
+        press(&mut scene, Key::Esc);
+        assert!(scene.menu.is_some());
+
+        // Resume re-arms the debounce; an immediate re-press is swallowed.
+        press(&mut scene, Key::Esc);
+        assert!(scene.menu.is_none());
+        press(&mut scene, Key::Esc);
+        assert!(scene.menu.is_none());
+
+        // Once 20 ticks have run, the gate opens again.
+        scene.update(TICK * 20, &[]);
+        press(&mut scene, Key::Esc);
+        assert!(scene.menu.is_some());
     }
 
     #[test]
