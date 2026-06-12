@@ -73,6 +73,13 @@ pub enum SceneId {
     Ending {
         score: u32,
     },
+    /// Boot the savegame in this slot: the in-game LOAD GAME for a
+    /// different level relaunches through here (the original bounces back
+    /// to START.EXE with the corrected level byte), and the main menu's
+    /// LOAD GAME will route here too.
+    LoadGame {
+        slot: usize,
+    },
 }
 
 /// A scene's request to change the app state, returned from [`Scene::update`].

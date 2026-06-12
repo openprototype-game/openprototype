@@ -88,13 +88,19 @@ impl App {
         self.current = self.build(id);
     }
 
-    /// Boot straight into a loaded savegame (the `--load` dev flag; the
-    /// save/load menus route here once they land).
+    /// Boot straight into a loaded savegame (the `--load` dev flag and the
+    /// load menus).
     pub fn start_on_save(&mut self, save: crate::savegame::SaveGame) {
+        self.current = self.save_scene(save);
+    }
+
+    /// A level scene resumed from a savegame snapshot.
+    fn save_scene(&self, save: crate::savegame::SaveGame) -> Box<dyn Scene> {
         let level = save.level;
         let assets = (self.level_loader)(level)
             .unwrap_or_else(|error| panic!("loading {level:?}: {error:#}"));
-        self.current = Box::new(LevelScene::from_save(Rc::new(assets), save));
+
+        Box::new(LevelScene::from_save(Rc::new(assets), save))
     }
 
     /// The end-of-run high-score routing, shared by the game-over and ending
@@ -152,6 +158,19 @@ impl App {
                 self.level_skip_ticks = 0;
 
                 scene
+            }
+            SceneId::LoadGame { slot } => {
+                // A slot that fails to read or decode falls back to the
+                // front-end menu (the original would relaunch into a level
+                // that re-reads the same file and dies; the port degrades).
+                match crate::savestore::SaveStore::open().and_then(|store| store.load(slot)) {
+                    Ok(save) => self.save_scene(save),
+                    Err(error) => {
+                        tracing::warn!("loading save slot {}: {error:#}", slot + 1);
+
+                        Box::new(Menu::new(self.menu_assets.clone()))
+                    }
+                }
             }
             SceneId::LevelTransition { after, handoff } => {
                 // A movie that fails to load plays as nothing: the scene

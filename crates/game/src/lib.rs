@@ -22,6 +22,7 @@ pub mod fade;
 pub mod flic_player;
 pub mod highscores;
 pub mod hud;
+pub mod ingame_menu;
 pub mod level;
 pub mod levels;
 pub mod playfield;

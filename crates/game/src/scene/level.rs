@@ -21,6 +21,7 @@ use crate::assets::LevelAssets;
 use crate::background::BackgroundScroll;
 use crate::combat::{self, CombatEvents};
 use crate::hud::{self, POD_SETTLED_FRAME};
+use crate::ingame_menu::{InGameMenu, MenuRequest};
 use crate::level::prng::{EngineRng, clock_seed};
 use crate::levels::Level;
 use crate::playfield;
@@ -160,6 +161,8 @@ pub struct LevelScene {
     level_end_countdown: Option<u32>,
     /// The freeze/dying state; the level starts frozen on GET READY.
     flow: Flow,
+    /// The Esc menu, freezing the level while open.
+    menu: Option<InGameMenu>,
 }
 
 impl LevelScene {
@@ -232,6 +235,7 @@ impl LevelScene {
             turbo: false,
             level_end_countdown: None,
             flow,
+            menu: None,
         };
 
         if !matches!(scene.flow, Flow::GameOver) {
@@ -346,6 +350,87 @@ impl LevelScene {
                 background,
             ],
             speed_level: self.camera_y as u16,
+        }
+    }
+
+    /// Route a key press into the open menu and carry out what it asks for.
+    fn menu_key(&mut self, key: Key, output: &mut SceneOutput) {
+        let Some(menu) = &mut self.menu else {
+            return;
+        };
+
+        match menu.handle_key(key) {
+            None => {}
+            Some(MenuRequest::Resume) => {
+                self.menu = None;
+
+                // The original's dispatcher clears the freeze wholesale when
+                // the menu handler returns (file 0xbdc1), so closing the menu
+                // resumes play directly — even when it was opened from the
+                // GET READY freeze, whose fire-wait is skipped. A death
+                // explosion keeps playing out (dying is not the freeze flag).
+                if matches!(self.flow, Flow::GetReady { .. }) {
+                    self.flow = Flow::Running;
+                }
+            }
+            Some(MenuRequest::NewGame) => {
+                // Exit status 4: START.EXE restarts the chain fresh.
+                output.transition = Some(Transition::To(SceneId::Level {
+                    level: Level::L1,
+                    handoff: Handoff::new_game(),
+                }));
+            }
+            Some(MenuRequest::Quit) => {
+                // Exit status 2: back to the front-end menu.
+                output.transition = Some(Transition::To(SceneId::MainMenu));
+            }
+            Some(MenuRequest::Save(slot)) => self.menu_save(slot),
+            Some(MenuRequest::Load(slot)) => self.menu_load(slot, output),
+        }
+    }
+
+    /// Write the running level into a slot.
+    fn menu_save(&mut self, slot: usize) {
+        // TODO: lift once the shooter codec lands; only the race levels
+        // encode so far.
+        if !matches!(self.level, Level::L2 | Level::L4 | Level::L6) {
+            tracing::warn!("saving shooter levels is not implemented yet");
+
+            return;
+        }
+
+        let save = self.to_save();
+
+        if let Some(menu) = &mut self.menu {
+            menu.save_to(slot, &save);
+        }
+    }
+
+    /// Load a slot: in place when the save is for this level (the world
+    /// swaps under the open menu, the way the original's same-WAD load
+    /// does), through the launcher otherwise (the original bounces back to
+    /// START.EXE with the corrected level byte).
+    fn menu_load(&mut self, slot: usize, output: &mut SceneOutput) {
+        let Some(menu) = &self.menu else {
+            return;
+        };
+
+        match menu.load_from(slot) {
+            Ok(save) if save.level == self.level => {
+                let mut menu = self.menu.take().expect("the menu is open");
+                menu.loaded();
+
+                *self = LevelScene::from_save(Rc::clone(&self.assets), save);
+                // The track keeps playing under the menu; the resume restarts
+                // it from the top (the original's reload at file 0xfe4), which
+                // the rebuilt scene's pending-start does once play resumes.
+                self.music_stopped = true;
+                self.menu = Some(menu);
+            }
+            Ok(_) => {
+                output.transition = Some(Transition::To(SceneId::LoadGame { slot }));
+            }
+            Err(error) => tracing::warn!("loading slot {}: {error:#}", slot + 1),
         }
     }
 
@@ -864,7 +949,16 @@ impl LevelScene {
             &mut self.frame,
         );
 
-        if matches!(self.flow, Flow::GetReady { .. }) {
+        // The menu draws over the dimmed playfield in place of GET READY
+        // (the original captures and dims the frozen frame once at freeze
+        // entry, file 0xb22d; the menu page never carries the text).
+        if self.menu.is_some() {
+            self.dim_playfield();
+
+            if let Some(menu) = &self.menu {
+                menu.render(&self.assets.font, &self.assets.dim_table, &mut self.frame);
+            }
+        } else if matches!(self.flow, Flow::GetReady { .. }) {
             self.dim_playfield();
             self.assets.font.draw_into(
                 &mut self.frame.image,
@@ -909,6 +1003,11 @@ impl Scene for LevelScene {
 
         for event in input {
             match *event {
+                // The open menu takes every key press; releases still reach
+                // the held-key state so nothing sticks across the freeze.
+                KeyEvent::Pressed(key) if self.menu.is_some() => {
+                    self.menu_key(key, &mut output);
+                }
                 KeyEvent::Pressed(key) => match key {
                     // The weapon switch and the smart bomb only respond in
                     // free flight (the original skips input while frozen or
@@ -933,7 +1032,16 @@ impl Scene for LevelScene {
                     Key::Down => self.held.down = true,
                     Key::Left => self.held.left = true,
                     Key::Right => self.held.right = true,
-                    Key::Esc => output.transition = Some(Transition::Quit),
+                    // Esc freezes the level and opens the in-game menu. The
+                    // original's gate (file 0x91bb) blocks it during the win
+                    // flyout; game over transitions out by itself.
+                    Key::Esc => {
+                        if self.level_end_countdown.is_none()
+                            && !matches!(self.flow, Flow::GameOver)
+                        {
+                            self.menu = Some(InGameMenu::new(open_save_store()));
+                        }
+                    }
                     Key::Ctrl => self.fire_held = true,
                     Key::Enter | Key::Backspace => {}
                     Key::Char(c) => match c.to_ascii_lowercase() {
@@ -984,8 +1092,11 @@ impl Scene for LevelScene {
         }
 
         // The GET READY freeze waits for fire released, then pressed (the
-        // respawn handler's two key loops at file 0x9d84).
-        if let Flow::GetReady { fire_released } = &mut self.flow {
+        // respawn handler's two key loops at file 0x9d84). The open menu
+        // owns the keys, so the wait pauses under it.
+        if self.menu.is_none()
+            && let Flow::GetReady { fire_released } = &mut self.flow
+        {
             if !self.fire_held {
                 *fire_released = true;
             } else if *fire_released {
@@ -994,10 +1105,18 @@ impl Scene for LevelScene {
         }
 
         // The music runs off the timer ISR in the original, so neither the
-        // dev pause nor the GET READY freeze stops its loop countdown.
+        // dev pause nor any freeze (GET READY, the menu) stops its loop
+        // countdown; the track keeps playing under the menu.
         self.advance_music(ticks, &mut output.audio);
 
-        let frozen = matches!(self.flow, Flow::GetReady { .. } | Flow::GameOver);
+        if let Some(menu) = &mut self.menu {
+            menu.advance(ticks);
+        }
+
+        // The menu freezes everything, the death explosion included (the
+        // original's freeze halts the whole frame loop).
+        let frozen =
+            matches!(self.flow, Flow::GetReady { .. } | Flow::GameOver) || self.menu.is_some();
 
         if !self.paused && !frozen {
             self.advance(ticks, &mut output.audio);
@@ -1050,6 +1169,14 @@ impl Scene for LevelScene {
         // [`TICK`], so the scroll advances one tick per frame with no beating.
         TICK
     }
+}
+
+/// The slot store for the in-game menu; a failure to resolve the data
+/// directory degrades to a menu whose slots all read empty.
+fn open_save_store() -> Option<crate::savestore::SaveStore> {
+    crate::savestore::SaveStore::open()
+        .map_err(|error| tracing::warn!("opening the save store: {error:#}"))
+        .ok()
 }
 
 /// Keeps the worse of two ship outcomes across the tick's passes.
@@ -1318,15 +1445,190 @@ mod tests {
         assert_eq!(output.audio, vec![AudioCommand::PlayTrack(track)]);
     }
 
+    /// One key press with no elapsed time.
+    fn press(scene: &mut LevelScene, key: Key) -> SceneOutput {
+        scene.update(Duration::ZERO, &[KeyEvent::Pressed(key)])
+    }
+
+    /// A temp-dir slot store and its directory guard.
+    fn temp_store() -> (tempfile::TempDir, crate::savestore::SaveStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::savestore::store_at(dir.path().to_path_buf());
+
+        (dir, store)
+    }
+
+    fn race_fixture() -> crate::savegame::SaveGame {
+        crate::savegame::SaveGame::decode(include_bytes!("../../tests/fixtures/l2-race.psg"))
+            .expect("the ground-truth fixture decodes")
+    }
+
     #[test]
-    fn esc_quits() {
+    fn esc_opens_the_menu_and_freezes_the_world() {
         let mut scene = test_scene();
+        press(&mut scene, Key::Esc);
+
+        assert!(scene.menu.is_some());
+
+        // Nothing advances under the menu: the scroll holds where it froze.
+        let column = scene.background_scroll.pixel_column(0);
+        scene.update(TICK * 10, &[]);
+        assert_eq!(scene.background_scroll.pixel_column(0), column);
+        assert!(matches!(scene.flow, Flow::Running));
+    }
+
+    #[test]
+    fn esc_is_blocked_during_the_win_flyout() {
+        let mut scene = test_scene();
+        scene.level_end_countdown = Some(100);
+
+        press(&mut scene, Key::Esc);
+
+        assert!(scene.menu.is_none());
+    }
+
+    #[test]
+    fn the_menu_quit_item_returns_to_the_front_end() {
+        let mut scene = test_scene();
+        press(&mut scene, Key::Esc);
+
+        // Up wraps from NEW GAME to QUIT.
+        press(&mut scene, Key::Up);
+        let output = press(&mut scene, Key::Enter);
+
+        assert_eq!(output.transition, Some(Transition::To(SceneId::MainMenu)));
+    }
+
+    #[test]
+    fn the_menu_new_game_item_restarts_the_chain_fresh() {
+        let mut scene = test_scene();
+        scene.state.score = 9_999;
+        press(&mut scene, Key::Esc);
+
+        let output = press(&mut scene, Key::Enter);
 
         assert_eq!(
-            scene
-                .update(Duration::ZERO, &[KeyEvent::Pressed(Key::Esc)])
-                .transition,
-            Some(Transition::Quit)
+            output.transition,
+            Some(Transition::To(SceneId::Level {
+                level: Level::L1,
+                handoff: Handoff::new_game(),
+            }))
+        );
+    }
+
+    #[test]
+    fn an_inert_item_keeps_the_menu_open() {
+        let mut scene = test_scene();
+        press(&mut scene, Key::Esc);
+
+        // Down 3x lands on GRAPHICS...; Enter does nothing yet.
+        for _ in 0..3 {
+            press(&mut scene, Key::Down);
+        }
+        let output = press(&mut scene, Key::Enter);
+
+        assert_eq!(output.transition, None);
+        assert!(scene.menu.is_some());
+    }
+
+    #[test]
+    fn closing_the_menu_resumes_play_directly_even_from_get_ready() {
+        // A fresh level sits frozen on GET READY.
+        let mut scene = LevelScene::new(
+            Rc::new(test_level_assets()),
+            Level::L1,
+            Handoff::new_game(),
+            0,
+        );
+        assert!(matches!(scene.flow, Flow::GetReady { .. }));
+
+        press(&mut scene, Key::Esc);
+        assert!(scene.menu.is_some());
+        press(&mut scene, Key::Esc);
+
+        // The original's dispatcher clears the freeze wholesale, skipping
+        // the GET READY fire-wait.
+        assert!(scene.menu.is_none());
+        assert!(matches!(scene.flow, Flow::Running));
+    }
+
+    #[test]
+    fn saving_writes_the_slot_and_round_trips() {
+        let (_dir, store) = temp_store();
+        let mut scene = LevelScene::from_save(Rc::new(test_level_assets()), race_fixture());
+        scene.menu = Some(InGameMenu::new(Some(store)));
+
+        // SAVE GAME (third item), then slot 2.
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Enter);
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Enter);
+
+        let menu = scene.menu.as_ref().expect("the menu shows the toast");
+        let written = menu.load_from(1).expect("the slot reads back");
+        assert_eq!(written, scene.to_save());
+    }
+
+    #[test]
+    fn an_in_place_load_swaps_the_world_under_the_menu() {
+        let (_dir, store) = temp_store();
+        store.save(0, &race_fixture()).unwrap();
+
+        let mut scene = LevelScene::new(
+            Rc::new(test_level_assets()),
+            Level::L2,
+            Handoff::new_game(),
+            0,
+        );
+        scene.menu = Some(InGameMenu::new(Some(store)));
+
+        // LOAD GAME (second item), then slot 1.
+        press(&mut scene, Key::Down);
+        let output = press(&mut scene, Key::Enter);
+        assert_eq!(output.transition, None);
+        let output = press(&mut scene, Key::Enter);
+
+        // The save is for this level: the world swaps in place, the menu
+        // stays open on its toast, and the track plays on until the resume
+        // restarts it.
+        assert_eq!(output.transition, None);
+        assert_eq!(scene.state.score, 25_000);
+        assert!(scene.menu.is_some());
+        assert!(scene.music_stopped);
+
+        // The toast blocks keys while it shows; once it expires, resuming
+        // starts the (restarted) track without a stop first, in the same
+        // update that closes the menu.
+        press(&mut scene, Key::Esc);
+        assert!(scene.menu.is_some(), "the toast swallows Esc");
+
+        scene.update(TICK * 84, &[]);
+        let output = press(&mut scene, Key::Esc);
+        assert_eq!(
+            output.audio,
+            vec![AudioCommand::PlayTrack(scene.assets.music.track)]
+        );
+    }
+
+    #[test]
+    fn a_cross_level_load_relaunches_through_the_app() {
+        let (_dir, store) = temp_store();
+        store.save(2, &race_fixture()).unwrap();
+
+        // The running level is L1; the slot holds an L2 save.
+        let mut scene = test_scene();
+        scene.menu = Some(InGameMenu::new(Some(store)));
+
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Enter);
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Down);
+        let output = press(&mut scene, Key::Enter);
+
+        assert_eq!(
+            output.transition,
+            Some(Transition::To(SceneId::LoadGame { slot: 2 }))
         );
     }
 }

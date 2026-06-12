@@ -57,6 +57,25 @@ impl Font {
     /// character. Glyph pixels of index 0 are transparent; out-of-range
     /// characters and out-of-bounds pixels are skipped.
     pub fn draw_into(&self, target: &mut IndexedImage, x: i32, y: i32, text: &str) {
+        self.draw(target, x, y, text, None);
+    }
+
+    /// Composite like [`Font::draw_into`], remapping every glyph pixel through
+    /// `map` first. The level WADs draw dim text this way (their menu blitter
+    /// at LEVEL_2 file `0xb4bb` routes the glyph bytes through the playfield's
+    /// brightness table).
+    pub fn draw_into_mapped(
+        &self,
+        target: &mut IndexedImage,
+        x: i32,
+        y: i32,
+        text: &str,
+        map: &[u8; 256],
+    ) {
+        self.draw(target, x, y, text, Some(map));
+    }
+
+    fn draw(&self, target: &mut IndexedImage, x: i32, y: i32, text: &str, map: Option<&[u8; 256]>) {
         for (cell, byte) in text.bytes().enumerate() {
             if byte < FIRST_CHAR {
                 continue;
@@ -78,6 +97,7 @@ impl Font {
                         continue;
                     }
 
+                    let pixel = map.map_or(pixel, |map| map[usize::from(pixel)]);
                     let tx = origin_x + gx as i32;
                     let ty = y + gy as i32;
 

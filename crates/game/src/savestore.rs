@@ -64,13 +64,15 @@ impl SaveStore {
     }
 }
 
+/// A store rooted at an explicit directory, for tests across the crate.
+#[cfg(test)]
+pub(crate) fn store_at(dir: PathBuf) -> SaveStore {
+    SaveStore { dir }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn store_at(dir: PathBuf) -> SaveStore {
-        SaveStore { dir }
-    }
 
     fn race_save() -> SaveGame {
         SaveGame::decode(include_bytes!("../tests/fixtures/l2-race.psg"))
