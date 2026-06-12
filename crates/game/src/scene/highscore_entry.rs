@@ -3,9 +3,10 @@
 //! Mirrors `START.EXE`'s qualify path inside `0x3f0c`: a black screen with the
 //! boot palette, `"  CONGRATULATIONS=  "` at y 65 and `"  ENTER YOUR NAME   "`
 //! at y 82 (both `FONT.RAW`, full-width padded at x 0), and the 13-character
-//! name field at x 48, y 110, dot-filled. A–Z and space type (lowercase is
-//! uppercased), backspace edits, and Enter or Esc both confirm — the original
-//! has no cancel. The entry then inserts into the table (just below every
+//! name field at x 48, y 110, dot-filled. Lowercase letters and space type
+//! (stored uppercased); Shift/CapsLock letters type nothing, because the
+//! key filter rejects 0x41..0x60 (file 0x4197..0x419f). Backspace edits,
+//! and Enter or Esc both confirm — the original has no cancel. The entry then inserts into the table (just below every
 //! score it doesn't beat), the table persists, and the flow falls into the
 //! high-score view, which shows the new table and returns to the menu.
 
@@ -105,7 +106,7 @@ impl Scene for HighscoreEntry {
                     edited |= self.name.pop().is_some();
                 }
                 Key::Char(c)
-                    if (c == ' ' || c.is_ascii_alphabetic()) && self.name.len() < NAME_CAPACITY =>
+                    if (c == ' ' || c.is_ascii_lowercase()) && self.name.len() < NAME_CAPACITY =>
                 {
                     self.name.push(c.to_ascii_uppercase());
                     edited = true;
@@ -123,5 +124,26 @@ impl Scene for HighscoreEntry {
 
     fn framebuffer(&self) -> &Framebuffer {
         &self.framebuffer
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assets::test_menu_assets;
+    use crate::highscores::test_store;
+
+    #[test]
+    fn shifted_letters_type_nothing() {
+        let mut entry =
+            HighscoreEntry::new(Rc::new(test_menu_assets()), Rc::new(test_store()), 12_345);
+
+        // The original's filter rejects 0x41..0x60, so an uppercase char
+        // (Shift/CapsLock) types nothing; lowercase stores uppercased.
+        entry.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Char('A'))]);
+        assert_eq!(entry.name, "");
+
+        entry.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Char('a'))]);
+        assert_eq!(entry.name, "A");
     }
 }
