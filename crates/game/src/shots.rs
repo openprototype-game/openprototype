@@ -44,7 +44,7 @@ use crate::spawns::{Effect, Entity};
 const MAX_SHOTS: usize = 95;
 
 /// Despawn bounds in 1/16-pixel window coordinates (update loop `0xc35e`).
-const X_MAX: i32 = 0x1200;
+/// The x maximum is per level ([`CombatData::shot_x_max`]).
 const X_MIN: i32 = -0x200;
 const Y_MAX: i32 = 0xa00;
 const Y_MIN: i32 = -0xa0;
@@ -339,6 +339,8 @@ pub struct Weapons {
     trail: [(i32, i32); TRAIL],
     /// The orbs' bob wave, from the level WAD.
     bob_wave: Vec<i32>,
+    /// The level's despawn x bound ([`CombatData::shot_x_max`]).
+    shot_x_max: i32,
     pub shots: Vec<Shot>,
 }
 
@@ -346,7 +348,7 @@ impl Weapons {
     /// `firing` is the initial firing weapon, normally the resolve of the
     /// starting [`GameState`] (so the first tick's re-resolve is a no-op
     /// rather than a spurious switch).
-    pub fn new(bob_wave: Vec<i32>, firing: ActiveWeapon) -> Self {
+    pub fn new(bob_wave: Vec<i32>, firing: ActiveWeapon, shot_x_max: i32) -> Self {
         Self {
             cooldown: 0,
             rate: 6,
@@ -363,6 +365,7 @@ impl Weapons {
             orb_anim_divider: 0,
             trail: [(0, 0); TRAIL],
             bob_wave,
+            shot_x_max,
             shots: Vec::new(),
         }
     }
@@ -427,8 +430,9 @@ impl Weapons {
             shot.y += shot.dy;
         }
 
-        self.shots
-            .retain(|shot| shot.x < X_MAX && shot.x > X_MIN && shot.y < Y_MAX && shot.y > Y_MIN);
+        self.shots.retain(|shot| {
+            shot.x < self.shot_x_max && shot.x > X_MIN && shot.y < Y_MAX && shot.y > Y_MIN
+        });
 
         // The cooldown counts up to the rate and holds there; firing resets
         // it to zero (file 0xb68a). Plasma bypasses the counter entirely.
@@ -780,7 +784,7 @@ mod tests {
 
     #[test]
     fn the_chaingun_fires_two_barrel_shots_on_its_cooldown() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let state = state(Weapon::Multishot, 0); // empty slot -> chaingun
 
         run(&mut weapons, true, &state, 6);
@@ -795,7 +799,7 @@ mod tests {
 
     #[test]
     fn shots_move_and_despawn_at_the_window_bounds() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let state = state(Weapon::Multishot, 0);
 
         run(&mut weapons, true, &state, 6);
@@ -810,13 +814,13 @@ mod tests {
 
     #[test]
     fn max_level_multishot_adds_the_two_backward_shots() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let low = state(Weapon::Multishot, 1);
         run(&mut weapons, false, &low, 1);
         run(&mut weapons, true, &low, 8);
         assert_eq!(weapons.shots.len(), 3);
 
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let max = state(Weapon::Multishot, 4);
         run(&mut weapons, false, &max, 1);
         run(&mut weapons, true, &max, 8);
@@ -826,7 +830,7 @@ mod tests {
 
     #[test]
     fn the_firing_weapon_freezes_while_fire_is_held() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let mut state = state(Weapon::Burning, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -845,7 +849,7 @@ mod tests {
 
     #[test]
     fn plasma_deploys_every_charged_orb_at_once() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let state = state(Weapon::Plasma, 3);
 
         // The first held tick brings out every charged orb, each firing a
@@ -864,7 +868,7 @@ mod tests {
 
     #[test]
     fn a_drained_charge_pulls_deployed_orbs_back_in_step() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let mut state = state(Weapon::Plasma, 3);
 
         run(&mut weapons, false, &state, 1);
@@ -879,7 +883,7 @@ mod tests {
 
     #[test]
     fn releasing_fire_retracts_the_orbs_and_launches_the_ball() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let state = state(Weapon::Plasma, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -915,7 +919,7 @@ mod tests {
 
     #[test]
     fn the_orbs_ride_the_ship_trail() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let state = state(Weapon::Plasma, 4);
         run(&mut weapons, false, &state, 1);
 
@@ -934,7 +938,7 @@ mod tests {
 
     #[test]
     fn the_resolve_reports_a_switch_only_when_the_firing_weapon_changes() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let mut state = state(Weapon::Multishot, 2);
         *state.weapons.get_mut(Weapon::Burning) = WeaponLevel::new(2);
 
@@ -963,7 +967,7 @@ mod tests {
 
     #[test]
     fn the_missile_alternates_its_spawn_row_at_its_slow_rate() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
         let state = state(Weapon::Missile, 1);
 
         // The rate variable still holds the previous weapon's period until the

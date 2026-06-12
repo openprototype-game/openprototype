@@ -182,8 +182,9 @@ pub struct Shot {
 }
 
 /// The enemy shots' cull bounds (the move loop's signed compares, both
-/// exclusive): x in (-0x200, 0x1200), y in (0, 0xa00).
-const SHOT_X: std::ops::Range<i32> = -0x1ff..0x1200;
+/// exclusive): x in (-0x200, the level's [`CombatData::shot_x_max`]),
+/// y in (0, 0xa00).
+const SHOT_X_MIN: i32 = -0x1ff;
 const SHOT_Y: std::ops::Range<i32> = 1..0xa00;
 
 /// The player state the AI functions read: position in pixels plus the
@@ -518,8 +519,9 @@ impl Spawns {
             shot.y += shot.vy;
         }
 
+        let shot_x = SHOT_X_MIN..self.combat.shot_x_max;
         self.shots
-            .retain(|shot| SHOT_X.contains(&shot.x) && SHOT_Y.contains(&shot.y));
+            .retain(|shot| shot_x.contains(&shot.x) && SHOT_Y.contains(&shot.y));
 
         // The effects pass: delayed records burn the step, live ones animate
         // (every `rate`-th sub-step advances the sprite and spends a frame).

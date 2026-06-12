@@ -109,6 +109,13 @@ pub struct CombatData {
     /// x = 358 snake spawns). The y bounds are shared.
     pub cull_x_min: i32,
     pub cull_x_max: i32,
+    /// The shots' despawn x bound in 12.4, exclusive, shared by the player
+    /// and enemy shot move loops (player despawn at L1 file `0xc35e`; one
+    /// bounds-check site per WAD): 0x1200 in L1/L3/L5, 0x1840 in the races
+    /// and L7, whose snake muzzle shots live right of the window. It equals
+    /// `cull_x_max` in every WAD, but the binary compares are distinct
+    /// sites.
+    pub shot_x_max: i32,
     /// Respawn invincibility in ticks (L3 180, the others 300).
     pub respawn_invincibility: u16,
     /// Kinds whose death plays a dedicated sample over the explosion
@@ -137,6 +144,7 @@ const L1_COMBAT: CombatData = CombatData {
     entity_cap: 24,
     cull_x_min: -0x500,
     cull_x_max: 0x1200,
+    shot_x_max: 0x1200,
     respawn_invincibility: 300,
     asteroid_kind: Some(0x3308),
     pod_kind: Some(0x38b0),
@@ -555,6 +563,7 @@ impl Level {
                     entity_cap: 49,
                     cull_x_min: -0x12c0,
                     cull_x_max: 0x1840,
+                    shot_x_max: 0x1840,
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -648,6 +657,7 @@ impl Level {
                     entity_cap: 48,
                     cull_x_min: -0x320,
                     cull_x_max: 0x1200,
+                    shot_x_max: 0x1200,
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -754,6 +764,7 @@ impl Level {
                     entity_cap: 49,
                     cull_x_min: -0x12c0,
                     cull_x_max: 0x1840,
+                    shot_x_max: 0x1840,
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -845,6 +856,7 @@ impl Level {
                     entity_cap: 24,
                     cull_x_min: -0x780,
                     cull_x_max: 0x1200,
+                    shot_x_max: 0x1200,
                     respawn_invincibility: 300,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -946,6 +958,7 @@ impl Level {
                     entity_cap: 49,
                     cull_x_min: -0x12c0,
                     cull_x_max: 0x1840,
+                    shot_x_max: 0x1840,
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
@@ -1043,6 +1056,7 @@ impl Level {
                     entity_cap: 49,
                     cull_x_min: -0x3c0,
                     cull_x_max: 0x1840,
+                    shot_x_max: 0x1840,
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,

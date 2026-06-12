@@ -224,7 +224,11 @@ impl LevelScene {
         });
         let mut ship = Ship::new(assets.ship);
         ship.arm_shield(i32::from(assets.combat.respawn_invincibility));
-        let weapons = Weapons::new(assets.bob_wave.clone(), state.active_weapon());
+        let weapons = Weapons::new(
+            assets.bob_wave.clone(),
+            state.active_weapon(),
+            assets.combat.shot_x_max,
+        );
         let camera_y = assets.camera_min;
         // The lose-on-entry edge: a one-life carry without the 10,000-point
         // refund nets zero lives, and the original exits to game over before
