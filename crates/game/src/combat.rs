@@ -78,11 +78,15 @@ pub fn player_shots(
             events.chaingun_impact |= shot.is_chaingun();
             events.missile_impact |= shot.is_missile();
 
-            // The hit spark by shot family (plasma sparks nothing).
+            // The hit spark by shot SPRITE family, like the dispatch at L1
+            // 0xc0df: everything below the burning threshold -- the chaingun
+            // AND all four multishot levels -- takes the chaingun spark;
+            // the burning window its own; missiles theirs; plasma none.
+            let effects = spawns.combat.effects;
             let x = shot.x >> 4;
             let y = shot.y >> 4;
-            let spark = if shot.is_chaingun() {
-                Some((0x356a, x - 0x20, y - 3, 6))
+            let spark = if shot.is_chaingun() || shot.is_multishot() {
+                Some((effects.chaingun_spark, x - 0x20, y - 3, 6))
             } else if shot.is_missile() {
                 // The down/left/up octant sprites pull the spark 7 px left
                 // (file 0xbeff's 0x32d8..0x32f8 sprite check).
@@ -92,11 +96,11 @@ pub fn player_shots(
                     x
                 };
 
-                Some((0x3522, spark_x, y, 9))
+                Some((effects.missile_spark, spark_x, y, 9))
             } else if shot.is_plasma() {
                 None
             } else {
-                Some((0x359a, x + 0x37, y - 3, 8))
+                Some((effects.burning_spark, x + 0x37, y - 3, 8))
             };
 
             if let Some((sprite, x, y, frames)) = spark {
@@ -567,7 +571,7 @@ pub fn enemy_shots_vs_ship(
 
         if hit {
             sparks.push(Effect {
-                sprite: 0x34da,
+                sprite: spawns.combat.effects.ship_hit,
                 x: x - 5,
                 y: y - 3,
                 frames: 9,

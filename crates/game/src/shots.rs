@@ -196,10 +196,13 @@ impl Shot {
     pub fn is_missile(&self) -> bool {
         matches!(self.kind, ShotKind::Missile)
     }
-}
 
-/// The missile trail puff's sprite descriptor (`0x365a`).
-const MISSILE_TRAIL: u16 = 0x365a;
+    /// Whether this is a multishot round (sprite below the burning
+    /// threshold, sharing the chaingun's spark family).
+    pub fn is_multishot(&self) -> bool {
+        matches!(self.kind, ShotKind::Multishot(_))
+    }
+}
 
 /// The missile's per-octant draw offsets in pixels (the shot draw at file
 /// `0xbc2d` adds these, 12.4-scaled, before the blit). The record position
@@ -643,6 +646,7 @@ impl Weapons {
         entities: &[Entity],
         wad: &[u8],
         cs_base: usize,
+        trail_sprite: u16,
         effects: &mut Vec<Effect>,
     ) {
         for shot in &mut self.shots {
@@ -659,7 +663,7 @@ impl Weapons {
             }
 
             effects.push(Effect {
-                sprite: MISSILE_TRAIL,
+                sprite: trail_sprite,
                 x: shot.x >> 4,
                 y: (shot.y >> 4) + 4,
                 frames: 0x12,

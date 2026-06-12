@@ -128,6 +128,28 @@ pub struct CombatData {
     /// Race mode: a respawn restarts the course (the spawn cursor rewinds,
     /// the live entities wipe, the scroll resets).
     pub course_restart: bool,
+    /// The engine's effect sprite descriptors (cs offsets), per WAD.
+    pub effects: EffectData,
+}
+
+/// The spark/trail effect descriptors the engine's spawn helpers pre-write
+/// (cs offsets). Every WAD has its own set, located by an independent
+/// `64 c7 05` effect-record writer scan; the spark dispatch picks by shot
+/// sprite family: below the burning threshold (chaingun AND all four
+/// multishot levels) takes the chaingun spark, the burning window its own,
+/// missiles theirs.
+#[derive(Clone, Copy)]
+pub struct EffectData {
+    /// The chaingun-family hit spark (every multishot hit too; L1 `0x356a`).
+    pub chaingun_spark: u16,
+    /// The burning beam's hit spark (L1 `0x359a`).
+    pub burning_spark: u16,
+    /// The missile's hit spark (L1 `0x3522`).
+    pub missile_spark: u16,
+    /// The missile trail puff (L1 `0x365a`).
+    pub missile_trail: u16,
+    /// The enemy-shot-hits-ship spark (L1 `0x34da`).
+    pub ship_hit: u16,
 }
 
 /// L1's combat data, also the placeholder for the race levels until their
@@ -150,6 +172,13 @@ const L1_COMBAT: CombatData = CombatData {
     pod_kind: Some(0x38b0),
     contact_grace: None,
     course_restart: false,
+    effects: EffectData {
+        chaingun_spark: 0x356A,
+        burning_spark: 0x359A,
+        missile_spark: 0x3522,
+        missile_trail: 0x365A,
+        ship_hit: 0x34DA,
+    },
 };
 
 /// Where a level's WAD keeps the player-fire data: the shot sprites' directory
@@ -574,6 +603,13 @@ impl Level {
                     pod_kind: None,
                     contact_grace: Some(0x78),
                     course_restart: true,
+                    effects: EffectData {
+                        chaingun_spark: 0x3718,
+                        burning_spark: 0x3748,
+                        missile_spark: 0x3790,
+                        missile_trail: 0x3808,
+                        ship_hit: 0x3BE0,
+                    },
                 },
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
@@ -669,6 +705,13 @@ impl Level {
                     pod_kind: None,
                     contact_grace: None,
                     course_restart: false,
+                    effects: EffectData {
+                        chaingun_spark: 0x4F8C,
+                        burning_spark: 0x4FBC,
+                        missile_spark: 0x5004,
+                        missile_trail: 0x507C,
+                        ship_hit: 0x5454,
+                    },
                 },
                 background: Sp::Wald,
                 catalog: Bin::Wald,
@@ -777,6 +820,13 @@ impl Level {
                     pod_kind: None,
                     contact_grace: Some(0x78),
                     course_restart: true,
+                    effects: EffectData {
+                        chaingun_spark: 0x3790,
+                        burning_spark: 0x37C0,
+                        missile_spark: 0x3808,
+                        missile_trail: 0x3880,
+                        ship_hit: 0x3C58,
+                    },
                 },
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
@@ -870,6 +920,13 @@ impl Level {
                     pod_kind: None,
                     contact_grace: None,
                     course_restart: false,
+                    effects: EffectData {
+                        chaingun_spark: 0x3508,
+                        burning_spark: 0x3538,
+                        missile_spark: 0x3580,
+                        missile_trail: 0x35F8,
+                        ship_hit: 0x39D0,
+                    },
                 },
                 background: Sp::Alienbg,
                 catalog: Bin::Techno,
@@ -973,6 +1030,13 @@ impl Level {
                     pod_kind: None,
                     contact_grace: Some(0x78),
                     course_restart: true,
+                    effects: EffectData {
+                        chaingun_spark: 0x3C90,
+                        burning_spark: 0x3CC0,
+                        missile_spark: 0x3D08,
+                        missile_trail: 0x3D80,
+                        ship_hit: 0x4158,
+                    },
                 },
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
@@ -1072,6 +1136,13 @@ impl Level {
                     pod_kind: None,
                     contact_grace: None,
                     course_restart: false,
+                    effects: EffectData {
+                        chaingun_spark: 0x4035,
+                        burning_spark: 0x4065,
+                        missile_spark: 0x40AD,
+                        missile_trail: 0x4125,
+                        ship_hit: 0x44FD,
+                    },
                 },
                 background: Sp::Lavah,
                 catalog: Bin::Lava,

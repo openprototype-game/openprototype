@@ -845,8 +845,13 @@ impl LevelScene {
 
         // The missiles steer between the hit test and their move (the
         // original runs file 0xc114 per movement sub-step in the shot pass).
-        self.weapons
-            .steer_missiles(&spawns.entities, wad, cs_base, &mut spawns.effects);
+        self.weapons.steer_missiles(
+            &spawns.entities,
+            wad,
+            cs_base,
+            self.assets.combat.effects.missile_trail,
+            &mut spawns.effects,
+        );
 
         // While the death explosion plays, the ship has no presence: the
         // original gates the ship hit test and body contact off the dying
