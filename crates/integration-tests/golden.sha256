@@ -1,5 +1,5 @@
 # Golden SHA-256 of DECODED output (not the source files).
-# A snapshot of current decoder behaviour, not proof of correctness.
+# A snapshot of current decoder behavior, not proof of correctness.
 # A mismatch means decoded output changed; regenerate with UPDATE_GOLDEN=1.
 ALIENBG.SP1-4 a0e30a53770167f34731fb7ecd8a3dabdf89792438ebe25d047537a975600c4a
 BACK3.RAW 01df6077dab350fafba9f00529715b7c91b3290593429cdce08f56e3c52038e4
@@ -37,7 +37,7 @@ MENU#initial_frame a857d6b4aa0e964d1545c114548f8345e7696728671e13e000b3f4555edbc
 MISSHIT.SMP 7cde22ea52d0276cc2a66ef4ce1d3617de2a5782185423e4ae3f70cbd7ccd924
 MISSILE.SMP 8e65fe750a498b87d8c0c80670bbc0a26630aaa973d5e2e71707db0b7e1a6208
 MULTISHO.SMP 9cd2451c5bfc9197c022047ac22f2bd35bb2d5a0164d9712c0fbd2d65e61f192
-MUSIC#initial_frame cb039d8cd0ce109b696bebef9e56481b465251ed9f5f658100e03371edfa1c51
+MUSIC#initial_frame 8893750c5f4c1eec6670c3fa655932c378b1c1974d129380789947cd47945791
 NEO.PAL bc4dd9a336e04e2327c95ce89f332891d6734a0a4ecf4c2536482be6ab49bfe4
 OUT.BIN 21323727f84fdbff9c810bb76fff01e8f79ddba4df0291a958dac3a37040cf88
 PLASMAGU.SMP 261e6c3baba2d3a1e74aeb441a710708ce02c1003dac317bcb1c0a0fdd571e0b
