@@ -75,7 +75,10 @@ pub fn player_shots(
         );
 
         if outcome != ShotOutcome::Missed {
-            events.chaingun_impact |= shot.is_chaingun();
+            // The impact-sound helper covers the whole chaingun-spark
+            // family (every sprite below the burning threshold, multishot
+            // included); the scene gates it on the firing weapon.
+            events.chaingun_impact |= shot.is_chaingun() || shot.is_multishot();
             events.missile_impact |= shot.is_missile();
 
             // The hit spark by shot SPRITE family, like the dispatch at L1

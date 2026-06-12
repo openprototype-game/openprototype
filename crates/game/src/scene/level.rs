@@ -923,7 +923,11 @@ impl LevelScene {
         // Impact sounds first, then the death sounds: the original's frame
         // runs the collision pass (sparks) before the update loop (deaths),
         // so a kill's explosion replaces the impact on their shared channel.
-        if events.chaingun_impact {
+        // The helper bails unless the firing weapon resolves to the bare
+        // chaingun at impact time (cmpw $0, cs:0xcb5 at L1 0xad83), so
+        // in-flight rounds go silent across a weapon resolve and multishot
+        // hits only sound while the slot reads chaingun.
+        if events.chaingun_impact && self.weapons.firing() == ActiveWeapon::Chaingun {
             self.sfx.chaingun_impact(&self.assets.sfx, audio);
         }
 
