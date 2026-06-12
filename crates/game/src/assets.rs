@@ -785,8 +785,11 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
 ///
 /// Each layer's stream ends in a jump back to its own start, so the strip is a
 /// short repeating pattern (the original loops it under the level forever).
-/// Following the stream until an offset repeats yields one clean loop, which the
-/// layer then wraps at its true period rather than at an arbitrary cut.
+/// Following the stream until an offset repeats yields one full pass; the
+/// layer's effective loop is 9 tiles shorter, because the walker zeroes the
+/// scroll accumulator the moment its 10-cell window reads the jump byte (see
+/// [`crate::scenery::SceneryLayer`]); most streams carry a matching 9-tile
+/// head/tail overlap so the seam is invisible.
 fn decode_scenery_tilemap(
     wad: &[u8],
     cs_base: usize,

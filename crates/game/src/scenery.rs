@@ -41,10 +41,20 @@ impl SceneryLayer {
         Self { tiles, top, speed }
     }
 
-    /// The strip's full length in 1/16-pixel units; the scroll wraps here so it
-    /// loops.
+    /// The strip's full length in 1/16-pixel units; restored savegame
+    /// accumulators wrap here as a bounds guard.
     fn span(&self) -> u32 {
         self.tiles.len() as u32 * TILE_WIDTH as u32 * SUBPIXEL
+    }
+
+    /// The scroll position whose 10-cell window first reads the stream's
+    /// terminating 0xFF jump byte: the walker zeroes the accumulator there
+    /// (remainder included), so the strip loops at `len - 9` tiles and the
+    /// streams' designed 9-tile head/tail overlap shows exactly once
+    /// (reset re-derived at L1 file `0x9299`, L3 `0xcc51`; the idiom is in
+    /// all seven WADs).
+    fn reset_at(&self) -> u32 {
+        self.tiles.len().saturating_sub(9) as u32 * TILE_WIDTH as u32 * SUBPIXEL
     }
 }
 
@@ -88,15 +98,21 @@ impl Scenery {
         }
     }
 
-    /// Advance every layer's scroll by `ticks` of its own speed, wrapping so each
-    /// strip loops.
+    /// Advance every layer's scroll by `ticks` of its own speed. A layer
+    /// whose previous frame reached [`SceneryLayer::reset_at`] restarts from
+    /// zero first: the original resets mid-draw, after the frame composed,
+    /// so the touching frame renders un-reset and the next one starts over.
     pub fn advance(&self, scroll: &mut SceneryScroll, ticks: u32) {
         for (layer, offset) in self.layers.iter().zip(&mut scroll.offsets) {
             if layer.tiles.is_empty() {
                 continue;
             }
 
-            *offset = (*offset + layer.speed * ticks) % layer.span();
+            if *offset >= layer.reset_at() {
+                *offset = 0;
+            }
+
+            *offset += layer.speed * ticks;
         }
     }
 
@@ -201,5 +217,52 @@ fn render_layer(
         let x = playfield::LEFT + column * TILE_WIDTH - sub + sprite.origin.0;
         let y = layer.top - camera_y + sprite.origin.1;
         frame.blit_transparent(&sprite.pixels, sprite.size, x, y);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scenery(tiles: usize, speed: u32) -> Scenery {
+        let layer = SceneryLayer::new(vec![None; tiles], 0, speed);
+
+        Scenery::new(vec![layer], 0)
+    }
+
+    #[test]
+    fn the_scroll_loops_nine_tiles_before_the_stream_end() {
+        let scenery = scenery(12, 512);
+        let mut scroll = scenery.scroll();
+
+        // Three advances reach (12 - 9) * 512: the 10-cell window now reads
+        // the stream's jump byte, and that frame still draws un-reset.
+        for _ in 0..3 {
+            scenery.advance(&mut scroll, 1);
+        }
+
+        assert_eq!(scroll.offset(0), 1536);
+
+        // The next advance restarts the strip instead of running on to the
+        // decoded end.
+        scenery.advance(&mut scroll, 1);
+        assert_eq!(scroll.offset(0), 512);
+    }
+
+    #[test]
+    fn the_reset_drops_the_subtile_remainder() {
+        let scenery = scenery(12, 500);
+        let mut scroll = scenery.scroll();
+
+        // 4 x 500 = 2000 passes the 1536 threshold mid-tile; the reset
+        // zeroes the whole accumulator, remainder included.
+        for _ in 0..4 {
+            scenery.advance(&mut scroll, 1);
+        }
+
+        assert_eq!(scroll.offset(0), 2000);
+
+        scenery.advance(&mut scroll, 1);
+        assert_eq!(scroll.offset(0), 500);
     }
 }
