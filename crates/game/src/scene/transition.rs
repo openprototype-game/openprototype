@@ -3,11 +3,15 @@
 //! `START.EXE`'s chain loop plays an interstitial movie before launching
 //! every level past the first (file `0x3d0a`): mode 13h, the file from the
 //! drive-patched table at vaddr `0x36f4` indexed by the incoming level, paced
-//! per movie by `cs:[0x3022]` timer ticks per frame. There is no key skip:
-//! the player's abort flag (`cs:[0x34f2]`) is cleared at the menu loop and
-//! never armed. Nothing touches the CD either, so the tail of the finished
-//! level's track keeps playing underneath; the next level starts its own
-//! music at its GET READY dismissal.
+//! per movie by `cs:[0x3022]` timer ticks per frame. The chain stops the CD
+//! before playing the movie (file `0x4df8`, and again on the common launch
+//! path `0x4798` -> `0x4781`); the next level starts its own music at its
+//! GET READY dismissal.
+//!
+//! A key skips the movie: the shared player polls the int9 key-down counter
+//! (`cs:[0x2dea]`) every frame and aborts when it reads exactly 1 (file
+//! `0x3485`), so two keys held at once do NOT skip. (The often-cited
+//! `cs:[0x34f2]` is a different gate, written 0 everywhere and never armed.)
 //!
 //! The movie past the last level (`LAVA.FLI`) leads into the ending
 //! sequence.
@@ -20,6 +24,7 @@ use crate::flic_player::FlicPlayer;
 use crate::levels::Level;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game_state::Handoff;
 use openprototype_core::input::KeyEvent;
@@ -47,6 +52,11 @@ pub struct LevelTransition {
     after: Level,
     handoff: Handoff,
     framebuffer: Framebuffer,
+    /// The port's view of the int9 key-down counter `cs:[0x2dea]`: presses
+    /// increment, releases decrement. The skip poll wants exactly 1.
+    keys_down: u32,
+    /// The CD stop before the movie has been issued.
+    music_stopped: bool,
 }
 
 impl LevelTransition {
@@ -63,6 +73,8 @@ impl LevelTransition {
                     colors: [Rgb::default(); 256],
                 },
             ),
+            keys_down: 0,
+            music_stopped: false,
         };
         scene.render_fli_frame();
 
@@ -92,8 +104,20 @@ impl LevelTransition {
 }
 
 impl Scene for LevelTransition {
-    fn update(&mut self, dt: Duration, _input: &[KeyEvent]) -> SceneOutput {
+    fn update(&mut self, dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
+
+        if !self.music_stopped {
+            self.music_stopped = true;
+            output.audio.push(AudioCommand::StopMusic);
+        }
+
+        for event in input {
+            match event {
+                KeyEvent::Pressed(_) => self.keys_down += 1,
+                KeyEvent::Released(_) => self.keys_down = self.keys_down.saturating_sub(1),
+            }
+        }
 
         let finished = match &mut self.player {
             Some(player) => {
@@ -105,7 +129,8 @@ impl Scene for LevelTransition {
 
         self.render_fli_frame();
 
-        if finished {
+        // The per-frame skip poll: exactly one key down aborts the movie.
+        if finished || self.keys_down == 1 {
             output.transition = Some(Transition::To(self.destination()));
         }
 
@@ -124,6 +149,48 @@ impl Scene for LevelTransition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openprototype_core::input::Key;
+
+    /// A minimal valid FLI: the 128-byte header plus `frames` empty frames.
+    fn synthetic_fli(frames: u16) -> Vec<u8> {
+        let mut bytes = vec![0u8; 128];
+        bytes[4..6].copy_from_slice(&0xAF11u16.to_le_bytes());
+        bytes[6..8].copy_from_slice(&frames.to_le_bytes());
+        bytes[8..10].copy_from_slice(&320u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&200u16.to_le_bytes());
+
+        for _ in 0..frames {
+            let mut frame = [0u8; 16];
+            frame[0..4].copy_from_slice(&16u32.to_le_bytes());
+            frame[4..6].copy_from_slice(&0xF1FAu16.to_le_bytes());
+            bytes.extend_from_slice(&frame);
+        }
+
+        bytes
+    }
+
+    #[test]
+    fn the_movie_stops_the_music_on_its_first_frame() {
+        let mut scene = LevelTransition::new(&synthetic_fli(10), Level::L1, Handoff::new_game());
+        let output = scene.update(Duration::ZERO, &[]);
+
+        assert!(output.audio.contains(&AudioCommand::StopMusic));
+        assert_eq!(scene.update(Duration::ZERO, &[]).audio, vec![]);
+    }
+
+    #[test]
+    fn exactly_one_held_key_skips_the_movie() {
+        let mut scene = LevelTransition::new(&synthetic_fli(100), Level::L1, Handoff::new_game());
+        assert_eq!(scene.update(Duration::ZERO, &[]).transition, None);
+
+        // Two keys down: the counter reads 2, no skip.
+        let two = [KeyEvent::Pressed(Key::Enter), KeyEvent::Pressed(Key::Esc)];
+        assert_eq!(scene.update(Duration::ZERO, &two).transition, None);
+
+        // One comes back up: the per-frame poll reads exactly 1 and aborts.
+        let release = [KeyEvent::Released(Key::Esc)];
+        assert!(scene.update(Duration::ZERO, &release).transition.is_some());
+    }
 
     #[test]
     fn an_undecodable_fli_moves_straight_to_the_next_level() {

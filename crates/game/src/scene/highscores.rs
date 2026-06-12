@@ -15,9 +15,12 @@
 //! work, with no retrace or timer wait. The absolute per-step pace is set
 //! from a recording (see `STEP_DURATION`).
 //!
-//! The fly-in cannot be interrupted. A key aborts the FLI playback and stays
-//! pending until the final blocking key read consumes it, so a key pressed
-//! any time before the table settles exits the moment the last entry lands.
+//! Neither the FLI nor the fly-in can be interrupted. The routine restores
+//! the DOS int9 before playing the FLI and reinstalls its own ISR after
+//! (file `0x412a`/`0x427a`), so keys during the movie do nothing at all.
+//! During the fly-in the ISR writes the press flag on both edges (press 1,
+//! release 0), so only a key still held when the last entry lands exits
+//! instantly; a tapped-and-released key waits for a fresh press.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -71,9 +74,11 @@ pub struct HighscoreScreen {
     scores: Highscores,
     framebuffer: Framebuffer,
     phase: Phase,
-    /// A key arrived before the table settled. It stays pending, like the
-    /// original's key flag, and exits the screen once the last entry lands.
-    exit_when_landed: bool,
+    /// The original's press flag: the ISR writes it on both edges, so it
+    /// mirrors "a key is currently down". Set during the fly-in only (the
+    /// DOS int9 owns the keyboard while the FLI plays); a key still down
+    /// when the last entry lands exits the screen instantly.
+    key_down: bool,
 }
 
 impl HighscoreScreen {
@@ -83,7 +88,7 @@ impl HighscoreScreen {
             scores,
             framebuffer: Framebuffer::new(Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT), black()),
             phase: Phase::Resting,
-            exit_when_landed: false,
+            key_down: false,
         };
 
         match FlicPlayer::decode_at(&screen.assets.fli, FLI_FRAME_DELAY) {
@@ -150,20 +155,22 @@ impl Scene for HighscoreScreen {
     fn update(&mut self, dt: Duration, input: &[KeyEvent]) -> SceneOutput {
         let mut output = SceneOutput::default();
 
-        if input.iter().any(|event| event.pressed().is_some()) {
-            match self.phase {
-                // A key aborts the FLI playback; the fly-in itself cannot be
-                // interrupted. Either way the key stays pending and exits the
-                // screen once the table settles.
-                Phase::Playing(_) => {
-                    self.exit_when_landed = true;
-                    self.start_fly_in();
+        match self.phase {
+            // The DOS int9 owns the keyboard during the movie: no abort, no
+            // pending flag.
+            Phase::Playing(_) => {}
+            // The press flag tracks both edges, so a tapped key clears again.
+            Phase::FlyingIn(_) => {
+                for event in input {
+                    self.key_down = event.pressed().is_some();
                 }
-                Phase::FlyingIn(_) => self.exit_when_landed = true,
-                Phase::Resting => output.transition = Some(Transition::To(SceneId::MainMenu)),
             }
-
-            return output;
+            Phase::Resting => {
+                if input.iter().any(|event| event.pressed().is_some()) {
+                    output.transition = Some(Transition::To(SceneId::MainMenu));
+                    return output;
+                }
+            }
         }
 
         match &mut self.phase {
@@ -181,9 +188,8 @@ impl Scene for HighscoreScreen {
             Phase::Resting => {}
         }
 
-        // The final blocking key read consumes a key pressed earlier the
-        // moment the table settles.
-        if self.exit_when_landed && matches!(self.phase, Phase::Resting) {
+        // A key still held when the table settles exits instantly.
+        if self.key_down && matches!(self.phase, Phase::Resting) {
             output.transition = Some(Transition::To(SceneId::MainMenu));
         }
 
@@ -342,10 +348,10 @@ mod tests {
     }
 
     #[test]
-    fn a_key_during_the_fly_in_stays_pending_and_exits_once_landed() {
+    fn a_key_held_through_the_fly_in_exits_once_landed() {
         let mut screen = test_screen();
 
-        // The key does not interrupt the fly-in.
+        // The key does not interrupt the fly-in (and is never released).
         let output = screen.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
         assert!(matches!(screen.phase, Phase::FlyingIn(_)));
         assert_eq!(output.transition, None);
@@ -370,6 +376,29 @@ mod tests {
 
         assert_eq!(transition, Some(Transition::To(SceneId::MainMenu)));
         assert!(matches!(screen.phase, Phase::Resting));
+    }
+
+    #[test]
+    fn a_tapped_key_during_the_fly_in_does_not_exit_at_landing() {
+        let mut screen = test_screen();
+
+        // Press and release: the press flag clears on the release edge.
+        screen.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        screen.update(Duration::ZERO, &[KeyEvent::Released(Key::Enter)]);
+
+        for _ in 0..4000 {
+            let output = screen.update(Duration::from_millis(16), &[]);
+            assert_eq!(output.transition, None, "must wait for a fresh press");
+
+            if matches!(screen.phase, Phase::Resting) {
+                break;
+            }
+        }
+
+        assert!(matches!(screen.phase, Phase::Resting));
+
+        let output = screen.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        assert_eq!(output.transition, Some(Transition::To(SceneId::MainMenu)));
     }
 
     #[test]

@@ -592,9 +592,10 @@ impl LevelScene {
     /// original's timer ISR.
     ///
     /// Whatever was playing stops first: START.EXE calls into the resident
-    /// CD driver before each level launch, so the previous track's tail
-    /// (which runs under the transition movie) dies at the level's GET
-    /// READY. The start itself waits for the first GET READY dismissal: the
+    /// CD driver before each level launch (the chain also stops it before
+    /// the transition movie, START.EXE file 0x4df8), so a directly entered
+    /// level never inherits a stale track. The start itself waits for the
+    /// first GET READY dismissal: the
     /// original bakes a pending-start flag (`cs:0x736c`) that the first
     /// unfreeze consumes (file `0x9e65`), so the opening GET READY is silent
     /// and respawn freezes don't restart the track.
