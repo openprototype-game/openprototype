@@ -35,7 +35,6 @@ pub(super) struct AiContext<'a> {
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
 /// runs at a time, so the original keeps these outside the entity.
-#[derive(Default)]
 pub(super) struct BossState {
     anchor_x: i32,
     anchor_y: i32,
@@ -45,6 +44,24 @@ pub(super) struct BossState {
     explosion_timer: i32,
     form2: bool,
     dying: bool,
+}
+
+impl Default for BossState {
+    fn default() -> Self {
+        Self {
+            anchor_x: 0,
+            anchor_y: 0,
+            saved_a: 0,
+            saved_b: 0,
+            // The WAD image bakes both timers' starting values (cs:0x26a5 =
+            // 0x3c, cs:0x26a7 = 0x28); zero defaults fired the first volley
+            // 0x3b sub-steps early and the first death burst 0x27 early.
+            fire_timer: 0x3c,
+            explosion_timer: 0x28,
+            form2: false,
+            dying: false,
+        }
+    }
 }
 
 /// The carrier pod's deploy sample (gegrocke, the per-level slot 8).
