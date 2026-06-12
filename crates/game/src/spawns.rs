@@ -143,7 +143,11 @@ pub struct Effect {
 }
 
 /// The effects cap, the original's buffer bound.
-const MAX_EFFECTS: usize = 0x18f;
+const MAX_EFFECTS: usize = 0x18F;
+
+/// The enemy-shot pool's cap (the original raises fatal error 2 when 0x5f
+/// shots survive a frame, L1 0xc5d1).
+const MAX_SHOTS: usize = 0x5F;
 
 /// Reads an entity's death-debris template pointer (descriptor +0x14).
 pub(crate) fn descriptor_debris(wad: &[u8], cs_base: usize, sprite: u16) -> u16 {
@@ -378,7 +382,10 @@ impl Spawns {
                 continue;
             };
 
-            if self.entities.len() >= self.combat.entity_cap {
+            // The original ERROR-TRAPS to DOS when the cap-th survivor is
+            // written, so its sustained max is cap - 1 live entities; the
+            // port degrades by dropping the spawn instead of crashing.
+            if self.entities.len() + 1 >= self.combat.entity_cap {
                 continue;
             }
 
@@ -533,6 +540,15 @@ impl Spawns {
         });
 
         let appended = self.shots.len().saturating_sub(shots_before);
+
+        // The AI handlers push effects raw; the original fatals at 0x18f
+        // live effects (error 3, e.g. L1 0xc73e), the port drops the
+        // overflow instead.
+        self.effects.truncate(MAX_EFFECTS);
+
+        // The same trap exists for the shot pool (error 2 at 0x5f
+        // survivors, L1 0xc5d1); drop the overflow.
+        self.shots.truncate(MAX_SHOTS);
 
         for shot in &mut self.shots {
             shot.x += shot.vx;
@@ -753,7 +769,9 @@ mod tests {
         let mut spawns = Spawns::new(records, None, crate::levels::Level::L1.data().combat);
 
         spawns.tick(&rows(), &[], 0);
-        assert_eq!(spawns.entities.len(), spawns.combat.entity_cap);
+        // The original's sustained max is one below the cap (the cap-th
+        // write is its fatal).
+        assert_eq!(spawns.entities.len(), spawns.combat.entity_cap - 1);
     }
 
     #[test]
