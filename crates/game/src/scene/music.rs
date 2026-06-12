@@ -57,7 +57,8 @@ impl Scene for MusicMenu {
                     let track = FIRST_MUSIC_TRACK + self.list.selected() as u8;
                     output.audio.push(AudioCommand::PlayTrack(track));
                 }
-                Key::Left | Key::Right | Key::Ctrl | Key::Shift | Key::Backspace | Key::Char(_) => {}
+                Key::Left | Key::Right | Key::Ctrl | Key::Shift | Key::Backspace | Key::Char(_) => {
+                }
             }
         }
 

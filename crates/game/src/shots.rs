@@ -772,6 +772,7 @@ mod tests {
             weapons,
             selected,
             invincible_ticks: 0,
+            contact_grace_ticks: 0,
         }
     }
 

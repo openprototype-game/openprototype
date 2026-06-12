@@ -42,9 +42,13 @@ pub enum SceneId {
     Highscores,
     /// The game-over sequence (`GO2.FLI` under CD track 8), carrying the
     /// final score toward the high-score check.
-    GameOver { score: u32 },
+    GameOver {
+        score: u32,
+    },
     /// The high-score name entry, for a score that made the table.
-    HighscoreEntry { score: u32 },
+    HighscoreEntry {
+        score: u32,
+    },
     /// The developer level-render scene, reached only via `--scene level`.
     Level,
 }

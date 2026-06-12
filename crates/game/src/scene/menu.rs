@@ -89,7 +89,12 @@ impl Scene for Menu {
                         output.transition = item.activate();
                     }
                 }
-                Key::Esc | Key::Left | Key::Right | Key::Ctrl | Key::Shift | Key::Backspace
+                Key::Esc
+                | Key::Left
+                | Key::Right
+                | Key::Ctrl
+                | Key::Shift
+                | Key::Backspace
                 | Key::Char(_) => {}
             }
         }

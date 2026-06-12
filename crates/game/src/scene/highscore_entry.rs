@@ -105,8 +105,7 @@ impl Scene for HighscoreEntry {
                     edited |= self.name.pop().is_some();
                 }
                 Key::Char(c)
-                    if (c == ' ' || c.is_ascii_alphabetic())
-                        && self.name.len() < NAME_CAPACITY =>
+                    if (c == ' ' || c.is_ascii_alphabetic()) && self.name.len() < NAME_CAPACITY =>
                 {
                     self.name.push(c.to_ascii_uppercase());
                     edited = true;
