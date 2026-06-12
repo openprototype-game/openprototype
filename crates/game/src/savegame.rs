@@ -94,6 +94,14 @@ struct BlockMap {
     /// The races' contact-grace word between invincibility and the camera
     /// pair; the shooters have no contact grace.
     has_grace: bool,
+    /// The pod/orb stage byte. `0xcde` in the unshifted WADs; L3 and L7
+    /// insert extra prefix fields that shift their fire var block (L3
+    /// flags 0xcfa..0xcfd, L7 +0x1c across the cluster).
+    stage_at: usize,
+    /// The fire reload byte (`incb cooldown; cmp reload; jb` pair), where
+    /// its offset is pinned: `0xcc8` unshifted, L7 `0xce4` (+0x1c). L3's
+    /// insertion point inside the cluster is unpinned, so `None` there.
+    reload_at: Option<usize>,
 }
 
 impl BlockMap {
@@ -110,6 +118,8 @@ impl BlockMap {
                 win_at: 0xCC3,
                 parity_at: 0xCC5,
                 has_grace: false,
+                stage_at: 0xCDE,
+                reload_at: Some(0xCC8),
             },
             // The races share every delta, but each WAD's spawn table has its
             // own length, shifting the cursor and everything after it (L4
@@ -132,6 +142,8 @@ impl BlockMap {
                     win_at: 0xCC3,
                     parity_at: 0xCC5,
                     has_grace: true,
+                    stage_at: 0xCDE,
+                    reload_at: Some(0xCC8),
                 }
             }
             Level::L3 => BlockMap {
@@ -145,6 +157,8 @@ impl BlockMap {
                 win_at: 0xCC3,
                 parity_at: 0xCC5,
                 has_grace: false,
+                stage_at: 0xCFE,
+                reload_at: None,
             },
             Level::L5 => BlockMap {
                 level_byte: 5,
@@ -157,6 +171,8 @@ impl BlockMap {
                 win_at: 0xCC3,
                 parity_at: 0xCC5,
                 has_grace: false,
+                stage_at: 0xCDE,
+                reload_at: Some(0xCC8),
             },
             Level::L7 => BlockMap {
                 level_byte: 7,
@@ -169,6 +185,8 @@ impl BlockMap {
                 win_at: 0xCDF,
                 parity_at: 0xCE1,
                 has_grace: false,
+                stage_at: 0xCFA,
+                reload_at: Some(0xCE4),
             },
         }
     }
@@ -460,8 +478,29 @@ impl SaveGame {
         put_word(block, 0xCC1, u16::from(self.state.smart_bombs.get()));
         block[map.win_at - BLOCK_BASE] = u8::from(self.level_end);
         // Parities: both copies are written identically, current = 0.
-        // TODO at 0xcc7..0xccc: fire cooldown and muzzle-flash state
-        // (ground truth shows the firing weapon's authored cooldown here).
+
+        // The fire/pod engine prefix restores to its baked image state
+        // rather than zeros. Reload = 6 (the consumer is incb cooldown/
+        // cmp reload/jb at L2 0x9211, so a written 0 means every-tick fire
+        // until the next weapon resolve); the pod/orb stage byte = 1 (the
+        // hold stage -- all 14 consumers in L2 0x8b76..0x8c50 compare
+        // against 1..4 and nothing else ever writes it, so a 0 kills the
+        // orb machine for the rest of an original-engine session).
+        // Cooldown, flash and the orb flags stay 0 like a fresh level.
+        // TODO: carry the live cooldown/flash/stage instead.
+        if let Some(reload_at) = map.reload_at {
+            block[reload_at - BLOCK_BASE] = 6;
+        }
+
+        block[map.stage_at - BLOCK_BASE] = 1;
+
+        if map.has_grace {
+            // The races' HUD alternation flag (L2 cs:0x2862, score - 0x11
+            // in every race WAD; baked 1): the original notb-toggles it,
+            // so a written 0 sticks the alternation off-phase forever.
+            // The bookkeeping words before it are baked 0.
+            block[map.score_at - 0x11 - BLOCK_BASE] = 1;
+        }
 
         for (index, record) in self.records.iter().enumerate() {
             let at = map.table_base - BLOCK_BASE + index * 8;
