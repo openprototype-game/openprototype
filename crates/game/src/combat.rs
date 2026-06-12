@@ -254,7 +254,10 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             entity.mode = 0;
             entity.arg = orb_arg;
             entity.health = 0x15e;
-            entity.seen = false;
+            // The conversion writes seen=1 (byte-identical in all 7 WADs),
+            // so an off-screen kill's orb culls immediately instead of
+            // surviving until first sight.
+            entity.seen = true;
             entity.anim = 0;
             entity.tick = 0;
             entity.phase_a = 0;
@@ -463,6 +466,11 @@ mod tests {
 
             let converted = spawns.entities.first().is_some_and(|e| e.kind == 0x36ea);
             assert_eq!(converted, kill == 3, "kill {kill}");
+
+            // The conversion writes seen=1, so an off-screen orb culls.
+            if converted {
+                assert!(spawns.entities[0].seen);
+            }
 
             spawns.entities.clear();
         }
