@@ -6,11 +6,13 @@
 //! **persistent canvas** and applies each frame's chunks on top. Clearing the
 //! canvas between frames corrupts every delta frame.
 //!
-//! Only three chunk types appear across every file:
+//! Only four chunk types appear across the shipped files:
 //!
 //! - `COLOR64` (11): incremental 6-bit palette update.
 //! - `BRUN` (15): full-frame byte-run RLE (the keyframe).
 //! - `LC` (12): line-compressed delta.
+//! - `COPY` (16): uncompressed full frame. LAVA.FLI only (28 chunks, frames
+//!   20-23, 67, 71-93); see [`apply_copy`] for its overread quirk.
 //!
 //! `BRUN` and `LC` use **opposite** sign conventions for their packet count
 //! byte (run vs literal); see the two `apply_*` functions.
@@ -29,6 +31,7 @@ const FRAME_MAGIC: u16 = 0xF1FA;
 const CHUNK_COLOR64: u16 = 11;
 const CHUNK_LC: u16 = 12;
 const CHUNK_BRUN: u16 = 15;
+const CHUNK_COPY: u16 = 16;
 
 /// The fixed facts from a FLI file header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +166,7 @@ impl<'a> Flic<'a> {
                 CHUNK_COLOR64 => apply_color64(&mut self.palette, body)?,
                 CHUNK_BRUN => apply_brun(&mut self.canvas, body)?,
                 CHUNK_LC => apply_lc(&mut self.canvas, body)?,
+                CHUNK_COPY => apply_copy(&mut self.canvas, data, body_start)?,
                 _ => {} // no other types appear in these files
             }
 
@@ -283,6 +287,22 @@ fn apply_lc(canvas: &mut IndexedImage, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// `COPY`: an uncompressed full frame, width x height bytes row-major.
+///
+/// LAVA.FLI's COPY chunks declare a 63998-byte body, but the original handler
+/// (START.EXE file 0x31ca) copies 64000 bytes regardless, so the last 2 pixels
+/// come from past the chunk (the next frame header's size field). Reading from
+/// the full file slice instead of the bounded body reproduces that overread.
+fn apply_copy(canvas: &mut IndexedImage, data: &[u8], body_start: usize) -> Result<()> {
+    let pixel_count = canvas.size.pixel_count();
+    let source = data
+        .get(body_start..body_start + pixel_count)
+        .ok_or(DecodeError::TruncatedRun)?;
+
+    canvas.pixels.copy_from_slice(source);
+    Ok(())
+}
+
 /// Write `value` at `row + x`, advancing `x`. Errors if the pixel is past width.
 fn put(
     canvas: &mut IndexedImage,
@@ -363,6 +383,27 @@ mod tests {
         apply_brun(&mut image, &data).unwrap();
 
         assert_eq!(image.pixels, vec![9, 9, 9, 5]);
+    }
+
+    #[test]
+    fn copy_reads_a_full_frame_past_the_declared_body() {
+        let mut image = canvas(2, 2, 0);
+        // 4-pixel canvas, body starts at 1; the slice deliberately extends past
+        // a hypothetical 3-byte body, mirroring the original's overread into
+        // the next frame header.
+        let data = [0xAA, 1, 2, 3, 4, 0xBB];
+
+        apply_copy(&mut image, &data, 1).unwrap();
+
+        assert_eq!(image.pixels, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn copy_errors_when_the_file_ends_inside_the_frame() {
+        let mut image = canvas(2, 2, 0);
+        let data = [1, 2, 3];
+
+        assert!(apply_copy(&mut image, &data, 0).is_err());
     }
 
     #[test]

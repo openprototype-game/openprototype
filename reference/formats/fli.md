@@ -21,7 +21,7 @@ prior attempt hit).
 
 ## Chunk types
 
-Only three appear across every file:
+Four appear across the shipped files:
 
 - **COLOR64** (11): `u16` packet count, then `(skip, count)` packets. `skip`
   advances the color index, `count` colors follow as 6-bit RGB triples
@@ -33,6 +33,14 @@ Only three appear across every file:
   packet count and `(skip, count)` packets. Sign is the **opposite** of BRUN:
   **positive → literal** copy, **negative → run** of the next byte. Lines outside
   the range and skipped pixels keep their previous-frame values.
+- **COPY** (16): an uncompressed full frame, 64000 bytes row-major. Only
+  LAVA.FLI has them: 28 chunks at frames 20-23, 67 and 71-93 (the last 23 are
+  COPY-only frames). Quirk: every one of those chunks declares its size as
+  64004 (a 63998-byte body), but the handler (START.EXE file `0x31ca`,
+  `rep movsl` of 0x3e80 dwords) copies 64000 bytes regardless, so the frame's
+  last 2 pixels come from past the chunk: the low word of the next frame
+  header's size field. A pixel-faithful decoder must read those 2 bytes from
+  the file, not clamp to the declared body.
 
 The flipped sign convention between BRUN and LC is the easy bug to write.
 
@@ -47,6 +55,8 @@ frame. Details in `reference/start-exe.md`.
 
 ## Notes
 
-- No `COLOR256` (4), `SS2` (7), `BLACK` (13), or `COPY` (16) chunks are present,
-  so the decoder handles the three above and ignores any other type.
+- No `COLOR256` (4), `SS2` (7), or `BLACK` (13) chunks are present in any file,
+  so the decoder handles the four above and ignores any other type. (The
+  original aborts the whole animation on an unknown type; unreachable on
+  shipped data.)
 - The palette comes from the COLOR64 chunk in frame 0; it is not a separate file.
