@@ -104,34 +104,37 @@ mod tests {
 
         let disc = DiscImage::open_default().expect("disc image");
 
-        for (level, expected_count, header_word3) in [
-            (Level::L2, 67, 200),
-            (Level::L4, 82, 200),
-            (Level::L6, 242, 100),
+        for (level, expected_count, first_delay, first_row) in [
+            (Level::L2, 67, 200, 21),
+            (Level::L4, 82, 200, 17),
+            (Level::L6, 242, 100, 9),
         ] {
             let data = level.data();
             let wad = disc.read(data.wad).expect("reading the race WAD");
-            let SpawnSource::StaticTable { table } = data.spawns else {
-                panic!("race level without a static table");
-            };
-
-            // The header slot pins the table offset: three zero words, then a
-            // per-level word3 (200 in L2/L4, 100 in L6; meaning unknown).
-            assert_eq!(
-                &wad[table..table + 8],
-                &[0, 0, 0, 0, 0, 0, header_word3, 0],
-                "{}: header slot",
-                data.wad
+            assert!(
+                matches!(data.spawns, SpawnSource::StaticTable { .. }),
+                "race level without a static table"
             );
 
             let records = data.spawns.records(&wad, 0);
             assert_eq!(records.len(), expected_count, "{}", data.wad);
 
-            // Every run ends with the shared trailer record.
+            // The head record pins the table base: the opening obstacle
+            // with the races' symbolic 32000 health.
+            let first = records.first().expect("populated run");
+            assert_eq!(
+                (first.delay, first.health, first.spawn_row),
+                (first_delay, 32000, first_row),
+                "{}",
+                data.wad
+            );
+
+            // Every run ends with the finish entity's record: delay 400,
+            // health 0x14, spawn row 209.
             let last = records.last().expect("populated run");
             assert_eq!(
-                (last.sprite, last.health, last.spawn_row),
-                (20, 209, 20),
+                (last.delay, last.health, last.spawn_row),
+                (400, 20, 209),
                 "{}",
                 data.wad
             );
