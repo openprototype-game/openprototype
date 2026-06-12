@@ -18,10 +18,12 @@
 //! The plasma weapon is the satellite orbs: they trail the ship, riding its
 //! position history (delays 0/2/5/7 ticks) with a bobbing wave sampled at
 //! staggered phases and growing amplitude down the trail. Holding fire
-//! deploys the first orb immediately and one more every 2nd held tick up to
-//! the charge level (deploy machine at file `0xafe2`, stage `cs:[0xcde]`);
-//! each deployed orb fires an instant bolt every tick. Releasing fire
-//! retracts the orbs back to front, one every 2nd tick, and launches the
+//! deploys every charged orb at once -- the fire dispatch re-sets all four
+//! orb flags from the charge bar on each held tick (L1 file `0x9b48`,
+//! congruent in all 7 WADs), overriding the stage machine at `0xafe2`,
+//! which only paces the retract (stage `cs:[0xcde]`); each deployed orb
+//! fires an instant bolt every tick. Releasing fire retracts the orbs back
+//! to front, one every 2nd tick, and launches the
 //! last one forward as a slow orb projectile (`cs:[0xce3]`, the launch shot
 //! bypasses the fire-held gate).
 //!
@@ -454,11 +456,13 @@ impl Weapons {
         }
     }
 
-    /// The orb deploy/retract machine (file `0xafe2`): holding plasma fire
-    /// brings out one orb immediately and one more every 2nd tick up to the
-    /// charge level; releasing retracts one every 2nd tick and launches the
-    /// last as a forward orb projectile. Returns whether the ball launched
-    /// this tick.
+    /// The orb deploy/retract machine: while fire is held, the dispatch
+    /// re-sets every orb flag from the charge bar (L1 file `0x9b48`), so all
+    /// charged orbs are out from the first tick and a drained charge pulls
+    /// them back in step; the stage machine (file `0xafe2`) only paces the
+    /// retract, one orb every 2nd tick after release, launching the last as
+    /// a forward orb projectile. Returns whether the ball launched this
+    /// tick.
     fn step_orbs(&mut self, plasma_held: bool, state: &GameState, (x, y): (i32, i32)) -> bool {
         let mut launched = false;
 
@@ -469,18 +473,10 @@ impl Weapons {
         }
 
         if plasma_held {
-            self.orbs = self.orbs.max(1);
+            // The held dispatch is the last writer of the orb flags every
+            // tick; re-pressing mid-retract snaps back to full deployment.
+            self.orbs = charge_index(state, Weapon::Plasma) + 1;
             self.launch_armed = true;
-            self.orb_step_divider += 1;
-
-            if self.orb_step_divider == 2 {
-                self.orb_step_divider = 0;
-                let deployable = charge_index(state, Weapon::Plasma) + 1;
-
-                if self.orbs < deployable {
-                    self.orbs += 1;
-                }
-            }
         } else if self.launch_armed {
             self.orb_step_divider += 1;
 
@@ -848,27 +844,37 @@ mod tests {
     }
 
     #[test]
-    fn plasma_deploys_orbs_progressively_and_fires_a_bolt_per_orb() {
+    fn plasma_deploys_every_charged_orb_at_once() {
         let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
         let state = state(Weapon::Plasma, 3);
 
-        // The first held tick brings out orb 1; one more joins every 2nd
-        // tick, capped at the charge level.
+        // The first held tick brings out every charged orb, each firing a
+        // bolt.
         run(&mut weapons, false, &state, 1);
         run(&mut weapons, true, &state, 1);
-        assert_eq!(weapons.orbs, 1);
-        assert_eq!(weapons.shots.len(), 1);
-
-        run(&mut weapons, true, &state, 2);
-        assert_eq!(weapons.orbs, 2);
-        run(&mut weapons, true, &state, 2);
         assert_eq!(weapons.orbs, 3);
-        run(&mut weapons, true, &state, 10);
-        assert_eq!(weapons.orbs, 3);
+        assert_eq!(weapons.shots.len(), 3);
 
         // The bolts cross the window in one tick, so the pool holds exactly
         // one volley while fire is held: plasma bypasses the cooldown.
+        run(&mut weapons, true, &state, 10);
+        assert_eq!(weapons.orbs, 3);
         assert_eq!(weapons.shots.len(), 3);
+    }
+
+    #[test]
+    fn a_drained_charge_pulls_deployed_orbs_back_in_step() {
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun);
+        let mut state = state(Weapon::Plasma, 3);
+
+        run(&mut weapons, false, &state, 1);
+        run(&mut weapons, true, &state, 1);
+        assert_eq!(weapons.orbs, 3);
+
+        // The flags re-set from the charge bar every held tick.
+        *state.weapons.get_mut(Weapon::Plasma) = WeaponLevel::new(1);
+        run(&mut weapons, true, &state, 1);
+        assert_eq!(weapons.orbs, 1);
     }
 
     #[test]
