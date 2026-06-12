@@ -53,12 +53,10 @@ const SCREEN: Dimensions = Dimensions {
 /// animation both advance on this tick.
 const TICK: Duration = Duration::from_nanos(1_000_000_000 / 60);
 
-/// Ticks the weapon pod holds on each open/settle frame.
-///
-/// TODO: 4 ticks (~67ms) is an unverified placeholder, picked so the animation
-/// is visible. The faithful divider on the anim counter `cs:0x2699` is not yet
-/// traced.
-const POD_FRAME_TICKS: u32 = 4;
+/// Ticks the weapon pod holds on each open/settle frame: the animator steps
+/// its phase on every 6th tick (the divider on `cs:0x269b`, L1 file `0xab4a`,
+/// byte-identical in all seven WADs).
+const POD_FRAME_TICKS: u32 = 6;
 
 /// The overlay's x. Pinned against footage; it lands on the weapon pod's column
 /// (the pod draws at screen x 252, `di` 0x3f), so the cut-off weapon top sits
