@@ -510,11 +510,16 @@ impl LevelScene {
                 let mut menu = self.menu.take().expect("the menu is open");
                 menu.loaded();
 
+                // A same-level load swaps the world in place and never
+                // touches the music routines (the in-WAD loader at L1
+                // 0xa029 -> 0xf470 has no play/stop call): the track keeps
+                // playing and its loop countdown carries over.
+                let music_started = self.music_started;
+                let music_countdown = self.music_countdown;
                 *self = LevelScene::from_save(Rc::clone(&self.assets), save);
-                // The track keeps playing under the menu; the resume restarts
-                // it from the top (the original's reload at file 0xfe4), which
-                // the rebuilt scene's pending-start does once play resumes.
                 self.music_stopped = true;
+                self.music_started = music_started;
+                self.music_countdown = music_countdown;
                 self.menu = Some(menu);
             }
             Ok(_) => {
@@ -1860,17 +1865,17 @@ mod tests {
         assert_eq!(output.transition, None);
         let output = press(&mut scene, Key::Enter);
 
-        // The save is for this level: the world swaps in place, the menu
-        // stays open on its toast, and the track plays on until the resume
-        // restarts it.
+        // The save is for this level: the world swaps in place and the menu
+        // stays open on its toast. This scene never started its track (it
+        // sat frozen on GET READY), so that state carries over too.
         assert_eq!(output.transition, None);
         assert_eq!(scene.state.score, 25_000);
         assert!(scene.menu.is_some());
         assert!(scene.music_stopped);
 
         // The toast blocks keys while it shows; once it expires, resuming
-        // starts the (restarted) track without a stop first, in the same
-        // update that closes the menu.
+        // is this scene's first unfreeze, which consumes the baked
+        // pending-start (the load itself never touches the music).
         press(&mut scene, Key::Esc);
         assert!(scene.menu.is_some(), "the toast swallows Esc");
 
@@ -1880,6 +1885,37 @@ mod tests {
             output.audio,
             vec![AudioCommand::PlayTrack(scene.assets.music.track)]
         );
+    }
+
+    #[test]
+    fn an_in_place_load_keeps_a_playing_track_running() {
+        let (_dir, store) = temp_store();
+        store.save(0, &race_fixture()).unwrap();
+
+        let mut scene = LevelScene::new(
+            Rc::new(test_level_assets()),
+            Level::L2,
+            Handoff::new_game(),
+            0,
+        );
+        scene.menu = Some(InGameMenu::new(Some(store)));
+        // Mid-level state: the track is already playing.
+        scene.music_started = true;
+        scene.music_stopped = true;
+        scene.music_countdown = 500;
+
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Enter);
+        press(&mut scene, Key::Enter);
+
+        // The in-place load keeps the track and its loop countdown; the
+        // resume after the toast emits no stop and no restart.
+        assert!(scene.music_started);
+        assert_eq!(scene.music_countdown, 500);
+
+        scene.update(TICK * 84, &[]);
+        let output = press(&mut scene, Key::Esc);
+        assert_eq!(output.audio, vec![]);
     }
 
     #[test]
