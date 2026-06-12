@@ -850,9 +850,8 @@ impl LevelScene {
 
         spawns.tick(rows, wad, cs_base);
 
-        let shots_before = spawns.shots.len();
         let (ship_x, ship_y) = self.ship.position();
-        spawns.step_movement(
+        let shots_appended = spawns.step_movement(
             wad,
             PlayerInput {
                 x: ship_x,
@@ -862,7 +861,10 @@ impl LevelScene {
             },
         );
 
-        if spawns.shots.len() > shots_before {
+        // Per appended shot, not per surviving shot: the original triggers
+        // the sample inside each spawn call, so an append the same
+        // sub-step's cull removes still sounds.
+        if shots_appended > 0 {
             self.sfx.enemy_fired(&self.assets.sfx, audio);
         }
 

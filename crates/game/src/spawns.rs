@@ -398,7 +398,14 @@ impl Spawns {
     /// The original runs this `elapsed_ticks` times per rendered frame (the
     /// catch-up stepping); the caller loops accordingly. `player` is the
     /// ship's pixel position (the aimed shooters lead on it).
-    pub fn step_movement(&mut self, wad: &[u8], player: PlayerInput) {
+    ///
+    /// Returns how many enemy shots the AI pass APPENDED, counted before
+    /// this sub-step's cull: the original triggers the enemy-fire sample
+    /// per spawn call (L7 `0x116bf`), so an append the same sub-step's cull
+    /// removes still sounds.
+    pub fn step_movement(&mut self, wad: &[u8], player: PlayerInput) -> usize {
+        let shots_before = self.shots.len();
+
         match self.ai {
             Some(SpawnAi::L1) => {
                 let mut context = ai_l1::AiContext {
@@ -514,6 +521,8 @@ impl Spawns {
             in_bounds || !entity.seen
         });
 
+        let appended = self.shots.len().saturating_sub(shots_before);
+
         for shot in &mut self.shots {
             shot.x += shot.vx;
             shot.y += shot.vy;
@@ -549,6 +558,8 @@ impl Spawns {
 
             true
         });
+
+        appended
     }
 
     /// The level-end death's boss cascade: L7's death handler zeroes the
