@@ -525,6 +525,11 @@ impl BackgroundScroll {
         }
     }
 
+    /// One strip's raw scroll position (the savegame's accumulator view).
+    pub fn offset(&self, strip: usize) -> u32 {
+        self.offsets[strip]
+    }
+
     /// The whole-pixel scroll column of strip `strip` (the sub-pixel dropped).
     pub fn pixel_column(&self, strip: usize) -> i32 {
         (self.offsets[strip] >> self.subpixel_shift) as i32

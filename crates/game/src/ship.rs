@@ -160,6 +160,11 @@ impl Ship {
         self.roll as usize
     }
 
+    /// The spawn fly-in ramp counter, for the savegame snapshot.
+    pub fn ramp(&self) -> i32 {
+        self.ramp
+    }
+
     /// Arms the shield visual for `ticks` (the invincibility pickup relights
     /// it; the original drives both off the same `cs:0x266a` counter).
     pub fn arm_shield(&mut self, ticks: i32) {

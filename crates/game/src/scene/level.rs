@@ -291,6 +291,64 @@ impl LevelScene {
         scene
     }
 
+    /// Snapshot the running level as a savegame, the inverse of
+    /// [`LevelScene::from_save`].
+    ///
+    /// The schedule stores the head record's delay decayed to the live
+    /// countdown, the way the original's ISR-mutated table reads when the
+    /// writer dumps it. The accumulator mapping mirrors the restore (race
+    /// only so far): accumulator 3 is the SP background strip, 0 the nebula
+    /// scenery layer. The star-plane accumulators 1 and 2 are not tracked by
+    /// the port; they derive from the background by their rate ratio, which
+    /// matches the original until its first wrap (and their scatter is
+    /// clock-seeded on every load anyway).
+    pub fn to_save(&self) -> crate::savegame::SaveGame {
+        let (records, cursor, orb_drop_countdown, level_end, entities, enemy_shots, effects) =
+            match &self.spawns {
+                Some(spawns) => {
+                    let (records, cursor) = spawns.save_schedule();
+
+                    (
+                        records,
+                        cursor,
+                        spawns.orb_drop_countdown(),
+                        spawns.level_end,
+                        spawns.entities.clone(),
+                        spawns.shots.clone(),
+                        spawns.effects.clone(),
+                    )
+                }
+                None => (Vec::new(), 0, 0, false, Vec::new(), Vec::new(), Vec::new()),
+            };
+
+        let background = self.background_scroll.offset(0);
+        let elapsed_ticks = background / 0x20;
+        let (ship_x, ship_y) = self.ship.position();
+
+        crate::savegame::SaveGame {
+            level: self.level,
+            state: self.state.clone(),
+            records,
+            cursor,
+            orb_drop_countdown,
+            level_end,
+            entities,
+            enemy_shots,
+            effects,
+            ship_x,
+            ship_y,
+            ship_ramp: self.ship.ramp(),
+            ship_roll: self.ship.roll_frame() as i32,
+            scroll_accums: [
+                self.scenery_scroll.offset(0),
+                elapsed_ticks * 6,
+                elapsed_ticks * 0xa,
+                background,
+            ],
+            speed_level: self.camera_y as u16,
+        }
+    }
+
     /// Dev fast-forward (`--skip`): pre-simulates `ticks` of the level with
     /// the ship parked and shielded, then leaves the respawn shield up so the
     /// player can orient. Sounds from the skipped span are dropped.
@@ -1076,6 +1134,25 @@ mod tests {
         assert_eq!(spawns.entities.len(), 5);
         assert_eq!(spawns.entities[0].kind, 0x3e1c);
         assert_eq!(spawns.entities[0].health, 31_964);
+    }
+
+    #[test]
+    fn to_save_round_trips_the_restored_level() {
+        let save =
+            crate::savegame::SaveGame::decode(include_bytes!("../../tests/fixtures/l2-race.psg"))
+                .expect("the ground-truth fixture decodes");
+        let expected = save.clone();
+
+        let scene = LevelScene::from_save(Rc::new(test_level_assets()), save);
+        let mut resaved = scene.to_save();
+
+        // The synthetic assets carry no scenery layer, so the nebula
+        // accumulator has nowhere to live across the round trip; with real
+        // assets it restores like the background's (same mechanism, see the
+        // scenery tests).
+        resaved.scroll_accums[0] = expected.scroll_accums[0];
+
+        assert_eq!(resaved, expected);
     }
 
     #[test]

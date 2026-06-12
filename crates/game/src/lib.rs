@@ -26,6 +26,7 @@ pub mod level;
 pub mod levels;
 pub mod playfield;
 pub mod savegame;
+pub mod savestore;
 pub mod scene;
 pub mod scenery;
 pub mod screen;

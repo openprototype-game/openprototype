@@ -315,6 +315,25 @@ impl Spawns {
         spawns
     }
 
+    /// The schedule as a savegame stores it: the records with the head
+    /// record's delay decayed to the live countdown (the original's ISR
+    /// mutates the table in place, so that word IS the countdown in a
+    /// written file), plus the cursor.
+    pub fn save_schedule(&self) -> (Vec<Record>, usize) {
+        let mut records = self.records.clone();
+
+        if let Some(head) = records.get_mut(self.cursor) {
+            head.delay = self.countdown.max(0) as u16;
+        }
+
+        (records, self.cursor)
+    }
+
+    /// The orb-drop countdown, for the savegame snapshot.
+    pub fn orb_drop_countdown(&self) -> i32 {
+        self.orb_drop_countdown
+    }
+
     /// One PIT tick of the spawn clock: decrement the head delay and pull
     /// every due record into a live entity.
     ///

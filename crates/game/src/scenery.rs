@@ -157,6 +157,14 @@ pub struct SceneryScroll {
     offsets: Vec<u32>,
 }
 
+impl SceneryScroll {
+    /// One layer's raw scroll position (the savegame's accumulator view), or
+    /// 0 when the layer does not exist (synthetic test assets carry none).
+    pub fn offset(&self, layer: usize) -> u32 {
+        self.offsets.get(layer).copied().unwrap_or(0)
+    }
+}
+
 /// Blit one layer's visible columns at scroll `offset` (1/16-pixel).
 fn render_layer(
     layer: &SceneryLayer,
