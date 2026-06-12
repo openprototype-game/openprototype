@@ -7,8 +7,11 @@
 //! offset `0x5130` — the menu palette), then twelve 20-character lines
 //! (the string table at vaddr `0x5dd`, rows 16 pixels apart from y 4)
 //! land one by one. A key then starts the menu theme and runs the same
-//! high-score check as the game-over flow. Keys during the fade and the
-//! text are ignored (the player's abort flag is never armed).
+//! high-score check as the game-over flow. During the fade and the text
+//! the int9 press flag (`[0x2dec]`) is written on both edges, so a key
+//! still held when the last line lands exits instantly through the
+//! blocking read at `0x4f0f`, while a tapped-and-released key clears the
+//! flag and waits for a fresh press.
 //!
 //! Each line lands with a 25-step zoom (the scaler at file `0x2870`, shared
 //! with the high-score zoom; see [`crate::zoom`]): per line the screen is
@@ -80,6 +83,10 @@ enum Phase {
 pub struct EndingScene {
     assets: std::rc::Rc<EndingAssets>,
     phase: Phase,
+    /// The int9 press flag's port view (`[0x2dec]`, written on both edges):
+    /// true while a key is down. A key still held when the last line lands
+    /// exits the moment AwaitKey begins.
+    key_down: bool,
     /// Where the key takes the player: the name entry on a qualifying
     /// score, the menu otherwise (decided by the app at build time).
     next: SceneId,
@@ -101,6 +108,7 @@ impl EndingScene {
         Self {
             assets,
             phase: Phase::FadeIn { step: 0 },
+            key_down: false,
             next,
             framebuffer,
             tick_elapsed: Duration::ZERO,
@@ -200,9 +208,13 @@ impl Scene for EndingScene {
             output.audio.push(AudioCommand::StopMusic);
         }
 
-        if matches!(self.phase, Phase::AwaitKey)
-            && input.iter().any(|event| event.pressed().is_some())
-        {
+        let pressed = input.iter().any(|event| event.pressed().is_some());
+
+        for event in input {
+            self.key_down = event.pressed().is_some();
+        }
+
+        if matches!(self.phase, Phase::AwaitKey) && pressed {
             output.audio.push(AudioCommand::PlayTrack(MENU_TRACK));
             output.transition = Some(Transition::To(self.next));
 
@@ -214,6 +226,13 @@ impl Scene for EndingScene {
         while self.tick_elapsed >= TICK {
             self.tick_elapsed -= TICK;
             self.advance_tick();
+        }
+
+        // A key still down when the last line lands exits instantly (the
+        // blocking read finds the pending press).
+        if matches!(self.phase, Phase::AwaitKey) && self.key_down {
+            output.audio.push(AudioCommand::PlayTrack(MENU_TRACK));
+            output.transition = Some(Transition::To(self.next));
         }
 
         output
@@ -257,6 +276,25 @@ mod tests {
         let mut scene = test_scene();
 
         let output = scene.update(TICK, &[KeyEvent::Pressed(Key::Enter)]);
+        assert_eq!(output.transition, None);
+    }
+
+    #[test]
+    fn a_key_held_through_the_run_exits_the_moment_it_ends() {
+        let mut scene = test_scene();
+        scene.update(TICK, &[KeyEvent::Pressed(Key::Enter)]);
+
+        let output = scene.update(TICK * FULL_RUN, &[]);
+        assert_eq!(output.transition, Some(Transition::To(SceneId::MainMenu)));
+    }
+
+    #[test]
+    fn a_tapped_key_during_the_run_waits_for_a_fresh_press() {
+        let mut scene = test_scene();
+        scene.update(TICK, &[KeyEvent::Pressed(Key::Enter)]);
+        scene.update(TICK, &[KeyEvent::Released(Key::Enter)]);
+
+        let output = scene.update(TICK * FULL_RUN, &[]);
         assert_eq!(output.transition, None);
     }
 
