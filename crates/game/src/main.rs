@@ -15,8 +15,8 @@ mod desktop {
     use clap::Parser;
     use openprototype::app::App;
     use openprototype::assets::{
-        load_fli_bytes, load_gameover_assets, load_highscore_assets, load_intro_assets,
-        load_level_assets, load_menu_assets,
+        load_ending_assets, load_fli_bytes, load_gameover_assets, load_highscore_assets,
+        load_intro_assets, load_level_assets, load_menu_assets,
     };
     use openprototype::highscores::HighscoreStore;
     use openprototype::levels::Level;
@@ -108,6 +108,7 @@ mod desktop {
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
         let gameover_assets = load_gameover_assets(&disc)?;
+        let ending_assets = load_ending_assets(&disc)?;
         let highscore_store = HighscoreStore::open(&disc)?;
         let loader_disc = disc.clone();
         let fli_disc = disc.clone();
@@ -116,6 +117,7 @@ mod desktop {
             intro_assets,
             highscore_assets,
             gameover_assets,
+            ending_assets,
             Box::new(move |level| load_level_assets(&loader_disc, level)),
             Box::new(move |name| load_fli_bytes(&fli_disc, name)),
             highscore_store,

@@ -1,0 +1,238 @@
+//! The ending sequence.
+//!
+//! `START.EXE`'s chain loop branches here past the last level (file
+//! `0x4e06`), after `LAVA.FLI`: the CD stops, the screen fades the
+//! `PVESSEL.RAW` backdrop in from black over 90 steps of one tick each
+//! (the palette interpolation at file `0x30c4`, target palette at image
+//! offset `0x5130` — the menu palette), then twelve 20-character lines
+//! (the string table at vaddr `0x5dd`, rows 16 pixels apart from y 4)
+//! land one by one. A key then starts the menu theme and runs the same
+//! high-score check as the game-over flow. Keys during the fade and the
+//! text are ignored (the player's abort flag is never armed).
+//!
+//! Each line lands with a 25-step zoom in the original (the scaler at file
+//! `0x2870`, shared with the high-score zoom); the zoom visuals are not
+//! reproduced yet, but its duration paces the lines.
+
+use std::time::Duration;
+
+use prototype_formats::{Palette, Rgb};
+
+use crate::assets::EndingAssets;
+use crate::scene::{Scene, SceneId, SceneOutput, Transition};
+use openprototype_core::audio::AudioCommand;
+use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::input::KeyEvent;
+
+/// One front-end timer tick (the mode 13h ~70Hz frame).
+const TICK: Duration = Duration::from_micros(14_286);
+
+/// Palette fade-in steps (`dl = 0x5a` at the call site, one tick each).
+const FADE_STEPS: u32 = 90;
+
+/// Ticks each line's landing takes (the zoom's 25 steps of one tick).
+const LINE_TICKS: u32 = 25;
+
+/// The twelve ending lines (vaddr `0x5dd`, 22-byte records skipping the
+/// leading marker byte), pre-padded to center in the 20-column screen.
+/// The font maps `=` to the exclamation mark, as everywhere else.
+const LINES: [&str; 12] = [
+    "                    ",
+    " WITH BLAZING GUNS  ",
+    " YOU BLEW EVEN THE  ",
+    "  LAST ALIEN AWAY   ",
+    " BEFORE THEY COULD  ",
+    " ENSLAVE HUMANITY=  ",
+    "                    ",
+    "       BUT          ",
+    "   BE AWARE OF      ",
+    "    THE EVIL=       ",
+    "                    ",
+    "                    ",
+];
+
+/// First text row and the per-line stride (`di = 0x500`, `+0x1400`).
+const FIRST_ROW_Y: i32 = 4;
+const ROW_STRIDE: i32 = 16;
+
+/// The menu music, started by the key that leaves the ending.
+const MENU_TRACK: u8 = 2;
+
+/// Where the sequence is, advanced one tick at a time.
+enum Phase {
+    /// Fading the backdrop in from black; the step scales the palette.
+    FadeIn { step: u32 },
+    /// Landing line `line`; `ticks` of its hold have elapsed.
+    Lines { line: usize, ticks: u32 },
+    /// Everything shown; the next key leaves.
+    AwaitKey,
+}
+
+pub struct EndingScene {
+    assets: std::rc::Rc<EndingAssets>,
+    phase: Phase,
+    /// Where the key takes the player: the name entry on a qualifying
+    /// score, the menu otherwise (decided by the app at build time).
+    next: SceneId,
+    framebuffer: Framebuffer,
+    tick_elapsed: Duration,
+    music_stopped: bool,
+}
+
+impl EndingScene {
+    pub fn new(assets: std::rc::Rc<EndingAssets>, next: SceneId) -> Self {
+        let mut framebuffer = Framebuffer::new(
+            assets.backdrop.size,
+            Palette {
+                colors: [Rgb::default(); 256],
+            },
+        );
+        framebuffer.blit_screen(&assets.backdrop);
+
+        Self {
+            assets,
+            phase: Phase::FadeIn { step: 0 },
+            next,
+            framebuffer,
+            tick_elapsed: Duration::ZERO,
+            music_stopped: false,
+        }
+    }
+
+    /// The fade's palette: the target scaled by `step / FADE_STEPS`.
+    fn fade_palette(&self, step: u32) -> Palette {
+        let scale = |channel: u8| (u32::from(channel) * step / FADE_STEPS) as u8;
+        let mut palette = self.assets.palette.clone();
+
+        for color in &mut palette.colors {
+            *color = Rgb {
+                r: scale(color.r),
+                g: scale(color.g),
+                b: scale(color.b),
+            };
+        }
+
+        palette
+    }
+
+    fn advance_tick(&mut self) {
+        match &mut self.phase {
+            Phase::FadeIn { step } => {
+                *step += 1;
+                let step = *step;
+                self.framebuffer.palette = self.fade_palette(step);
+
+                if step >= FADE_STEPS {
+                    self.phase = Phase::Lines { line: 0, ticks: 0 };
+                }
+            }
+            Phase::Lines { line, ticks } => {
+                if *ticks == 0 {
+                    self.assets.font.draw_into(
+                        &mut self.framebuffer.image,
+                        0,
+                        FIRST_ROW_Y + *line as i32 * ROW_STRIDE,
+                        LINES[*line],
+                    );
+                }
+
+                *ticks += 1;
+
+                if *ticks >= LINE_TICKS {
+                    if *line + 1 < LINES.len() {
+                        self.phase = Phase::Lines {
+                            line: *line + 1,
+                            ticks: 0,
+                        };
+                    } else {
+                        self.phase = Phase::AwaitKey;
+                    }
+                }
+            }
+            Phase::AwaitKey => {}
+        }
+    }
+}
+
+impl Scene for EndingScene {
+    fn update(&mut self, dt: Duration, input: &[KeyEvent]) -> SceneOutput {
+        let mut output = SceneOutput::default();
+
+        // The entry stops the CD (the resident-driver call at 0x4e06), so
+        // LAVA.FLI's music tail dies here.
+        if !self.music_stopped {
+            self.music_stopped = true;
+            output.audio.push(AudioCommand::StopMusic);
+        }
+
+        if matches!(self.phase, Phase::AwaitKey)
+            && input.iter().any(|event| event.pressed().is_some())
+        {
+            output.audio.push(AudioCommand::PlayTrack(MENU_TRACK));
+            output.transition = Some(Transition::To(self.next));
+
+            return output;
+        }
+
+        self.tick_elapsed += dt;
+
+        while self.tick_elapsed >= TICK {
+            self.tick_elapsed -= TICK;
+            self.advance_tick();
+        }
+
+        output
+    }
+
+    fn framebuffer(&self) -> &Framebuffer {
+        &self.framebuffer
+    }
+
+    fn is_animating(&self) -> bool {
+        !matches!(self.phase, Phase::AwaitKey)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assets::test_ending_assets;
+    use openprototype_core::input::Key;
+    use std::rc::Rc;
+
+    fn test_scene() -> EndingScene {
+        EndingScene::new(Rc::new(test_ending_assets()), SceneId::MainMenu)
+    }
+
+    /// The whole timed run: the fade plus all twelve lines.
+    const FULL_RUN: u32 = FADE_STEPS + LINES.len() as u32 * LINE_TICKS;
+
+    #[test]
+    fn the_first_update_stops_the_leftover_music() {
+        let mut scene = test_scene();
+
+        assert_eq!(
+            scene.update(Duration::ZERO, &[]).audio,
+            vec![AudioCommand::StopMusic]
+        );
+    }
+
+    #[test]
+    fn keys_are_ignored_until_everything_has_shown() {
+        let mut scene = test_scene();
+
+        let output = scene.update(TICK, &[KeyEvent::Pressed(Key::Enter)]);
+        assert_eq!(output.transition, None);
+    }
+
+    #[test]
+    fn a_key_after_the_run_starts_the_menu_theme_and_leaves() {
+        let mut scene = test_scene();
+        scene.update(TICK * FULL_RUN, &[]);
+        assert!(!scene.is_animating(), "the run has finished");
+
+        let output = scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)]);
+        assert_eq!(output.audio, vec![AudioCommand::PlayTrack(MENU_TRACK)]);
+        assert_eq!(output.transition, Some(Transition::To(SceneId::MainMenu)));
+    }
+}

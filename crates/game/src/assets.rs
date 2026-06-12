@@ -1014,6 +1014,42 @@ pub fn load_gameover_assets(disc: &DiscImage) -> Result<GameOverAssets> {
     })
 }
 
+/// The ending sequence's assets.
+pub struct EndingAssets {
+    /// `PVESSEL.RAW`, the 320x200 backdrop behind the ending text.
+    pub backdrop: IndexedImage,
+    /// The backdrop's palette (the menu palette; the ending's DAC upload
+    /// reads the same image segment).
+    pub palette: Palette,
+    /// The front-end font the ending lines draw with.
+    pub font: Font,
+}
+
+/// Load and decode the ending sequence's assets from the disc image.
+pub fn load_ending_assets(disc: &DiscImage) -> Result<EndingAssets> {
+    let backdrop_bytes = disc.read("PVESSEL.RAW").context("reading PVESSEL.RAW")?;
+    let backdrop = raw::decode(
+        &backdrop_bytes,
+        Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+    )
+    .context("decoding PVESSEL.RAW")?;
+
+    let font_bytes = disc.read("FONT.RAW").context("reading FONT.RAW")?;
+    let font = Font::decode(&font_bytes).context("decoding FONT.RAW")?;
+
+    let start_exe_bytes = disc.read("START.EXE").context("reading START.EXE")?;
+    let palette = StartExe::new(&start_exe_bytes)
+        .context("parsing START.EXE")?
+        .menu_palette()
+        .context("decoding the ending palette")?;
+
+    Ok(EndingAssets {
+        backdrop,
+        palette,
+        font,
+    })
+}
+
 /// Load and decode the high-score screen's assets from the disc image.
 pub fn load_highscore_assets(disc: &DiscImage) -> Result<HighscoreAssets> {
     let fli = load_fli_bytes(disc, "FLI/HIGHSCOR.FLI")?;
@@ -1194,6 +1230,25 @@ pub(crate) fn test_highscore_assets() -> HighscoreAssets {
 
     HighscoreAssets {
         fli: Vec::new(),
+        font,
+    }
+}
+
+/// Synthetic ending assets (blank backdrop, zero palette) for headless tests.
+#[cfg(test)]
+pub(crate) fn test_ending_assets() -> EndingAssets {
+    let backdrop = IndexedImage::new(
+        Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+        vec![0u8; (SCREEN_WIDTH * SCREEN_HEIGHT) as usize],
+    )
+    .expect("synthetic backdrop matches its dimensions");
+    let font_sheet = vec![0u8; 320 * 62];
+    let font = Font::decode(&font_sheet).expect("synthetic font sheet decodes");
+    let palette = Palette::from_vga_6bit(&[0u8; 768]).expect("synthetic palette decodes");
+
+    EndingAssets {
+        backdrop,
+        palette,
         font,
     }
 }

@@ -9,9 +9,8 @@
 //! level's track keeps playing underneath; the next level starts its own
 //! music at its GET READY dismissal.
 //!
-//! The movie past the last level (`LAVA.FLI`) leads into the ending sequence
-//! in the original; until that is traced, it closes out through the
-//! game-over flow so the score still reaches the high-score table.
+//! The movie past the last level (`LAVA.FLI`) leads into the ending
+//! sequence.
 
 use std::time::Duration;
 
@@ -85,8 +84,7 @@ impl LevelTransition {
                 level: next,
                 handoff: self.handoff,
             },
-            // TODO: the real ending sequence (START.EXE file 0x4e06).
-            None => SceneId::GameOver {
+            None => SceneId::Ending {
                 score: self.handoff.score,
             },
         }
@@ -143,14 +141,14 @@ mod tests {
     }
 
     #[test]
-    fn the_movie_past_the_last_level_exits_through_the_game_over_flow() {
+    fn the_movie_past_the_last_level_leads_into_the_ending() {
         let mut handoff = Handoff::new_game();
         handoff.score = 4_321;
         let mut scene = LevelTransition::new(&[], Level::L7, handoff);
 
         assert_eq!(
             scene.update(Duration::ZERO, &[]).transition,
-            Some(Transition::To(SceneId::GameOver { score: 4_321 }))
+            Some(Transition::To(SceneId::Ending { score: 4_321 }))
         );
     }
 }

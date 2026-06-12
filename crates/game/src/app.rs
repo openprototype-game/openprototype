@@ -9,12 +9,14 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::assets::{GameOverAssets, HighscoreAssets, IntroAssets, LevelAssets, MenuAssets};
+use crate::assets::{
+    EndingAssets, GameOverAssets, HighscoreAssets, IntroAssets, LevelAssets, MenuAssets,
+};
 use crate::highscores::HighscoreStore;
 use crate::levels::Level;
 use crate::scene::{
-    GameOverScene, HighscoreEntry, HighscoreScreen, Intro, LevelScene, LevelTransition, Menu,
-    MusicMenu, Scene, SceneId, Transition,
+    EndingScene, GameOverScene, HighscoreEntry, HighscoreScreen, Intro, LevelScene,
+    LevelTransition, Menu, MusicMenu, Scene, SceneId, Transition,
 };
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game::{Game, StepOutput};
@@ -33,6 +35,7 @@ pub struct App {
     intro_assets: Rc<IntroAssets>,
     highscore_assets: Rc<HighscoreAssets>,
     gameover_assets: Rc<GameOverAssets>,
+    ending_assets: Rc<EndingAssets>,
     level_loader: LevelLoader,
     fli_loader: FliLoader,
     /// Dev fast-forward (`--skip`), in logic ticks; consumed by the first
@@ -48,6 +51,7 @@ impl App {
         intro_assets: IntroAssets,
         highscore_assets: HighscoreAssets,
         gameover_assets: GameOverAssets,
+        ending_assets: EndingAssets,
         level_loader: LevelLoader,
         fli_loader: FliLoader,
         highscore_store: HighscoreStore,
@@ -61,6 +65,7 @@ impl App {
             intro_assets,
             highscore_assets: Rc::new(highscore_assets),
             gameover_assets: Rc::new(gameover_assets),
+            ending_assets: Rc::new(ending_assets),
             level_loader,
             fli_loader,
             level_skip_ticks: 0,
@@ -78,6 +83,21 @@ impl App {
         self.current = self.build(id);
     }
 
+    /// The end-of-run high-score routing, shared by the game-over and ending
+    /// flows: the original's qualify test is strict (`0x4bde`), so the score
+    /// must beat the table's lowest entry to reach the name entry; anything
+    /// else returns to the menu.
+    fn after_run(&self, score: u32) -> SceneId {
+        let scores = self.highscore_store.load();
+        let lowest = scores.entries().last().map_or(0, |entry| entry.score);
+
+        if score > lowest {
+            SceneId::HighscoreEntry { score }
+        } else {
+            SceneId::MainMenu
+        }
+    }
+
     fn build(&mut self, id: SceneId) -> Box<dyn Scene> {
         match id {
             SceneId::Intro => Box::new(Intro::new(
@@ -90,20 +110,14 @@ impl App {
                 self.highscore_assets.clone(),
                 self.highscore_store.load(),
             )),
-            SceneId::GameOver { score } => {
-                // The original's qualify test is strict: the score must beat
-                // the lowest entry (`0x4bde`); otherwise the sequence skips
-                // the name entry and returns to the menu.
-                let scores = self.highscore_store.load();
-                let lowest = scores.entries().last().map_or(0, |entry| entry.score);
-                let next = if score > lowest {
-                    SceneId::HighscoreEntry { score }
-                } else {
-                    SceneId::MainMenu
-                };
-
-                Box::new(GameOverScene::new(self.gameover_assets.clone(), next))
-            }
+            SceneId::GameOver { score } => Box::new(GameOverScene::new(
+                self.gameover_assets.clone(),
+                self.after_run(score),
+            )),
+            SceneId::Ending { score } => Box::new(EndingScene::new(
+                self.ending_assets.clone(),
+                self.after_run(score),
+            )),
             SceneId::HighscoreEntry { score } => Box::new(HighscoreEntry::new(
                 self.menu_assets.clone(),
                 self.highscore_store.clone(),
@@ -176,8 +190,8 @@ impl Game for App {
 mod tests {
     use super::*;
     use crate::assets::{
-        test_gameover_assets, test_highscore_assets, test_intro_assets, test_level_assets,
-        test_menu_assets,
+        test_ending_assets, test_gameover_assets, test_highscore_assets, test_intro_assets,
+        test_level_assets, test_menu_assets,
     };
     use crate::highscores::test_store;
     use openprototype_core::audio::AudioCommand;
@@ -191,6 +205,7 @@ mod tests {
             test_intro_assets(),
             test_highscore_assets(),
             test_gameover_assets(),
+            test_ending_assets(),
             Box::new(|_| Ok(test_level_assets())),
             Box::new(|_| Ok(Vec::new())),
             test_store(),

@@ -9,6 +9,7 @@
 //!
 //! [`App`]: crate::app::App
 
+pub mod ending;
 pub mod gameover;
 pub mod highscore_entry;
 pub mod highscores;
@@ -19,6 +20,7 @@ pub mod menu;
 pub mod music;
 pub mod transition;
 
+pub use ending::EndingScene;
 pub use gameover::GameOverScene;
 pub use highscore_entry::HighscoreEntry;
 pub use highscores::HighscoreScreen;
@@ -61,10 +63,15 @@ pub enum SceneId {
         handoff: Handoff,
     },
     /// The interstitial FLI after a finished level, leading to its
-    /// successor (or out of the game past the last level).
+    /// successor (or into the ending past the last level).
     LevelTransition {
         after: crate::levels::Level,
         handoff: Handoff,
+    },
+    /// The ending sequence past the last level, carrying the final score
+    /// toward the high-score check.
+    Ending {
+        score: u32,
     },
 }
 
