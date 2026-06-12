@@ -22,6 +22,7 @@ mod desktop {
     use openprototype::levels::Level;
     use openprototype::scene::SceneId;
     use openprototype_backend::run;
+    use openprototype_core::game_state::Handoff;
     use prototype_disc::{DiscImage, manifest};
     use tracing_subscriber::EnvFilter;
 
@@ -107,21 +108,24 @@ mod desktop {
         let intro_assets = load_intro_assets(&disc)?;
         let highscore_assets = load_highscore_assets(&disc)?;
         let gameover_assets = load_gameover_assets(&disc)?;
-        let level = Level::from_number(cli.level).expect("--level is validated to 1..=7");
-        let level_assets = load_level_assets(&disc, level)?;
         let highscore_store = HighscoreStore::open(&disc)?;
+        let loader_disc = disc.clone();
         let mut app = App::new(
             menu_assets,
             intro_assets,
             highscore_assets,
             gameover_assets,
-            level_assets,
+            Box::new(move |level| load_level_assets(&loader_disc, level)),
             highscore_store,
         );
 
         if let Some(DevScene::Level) = cli.scene {
+            let level = Level::from_number(cli.level).expect("--level is validated to 1..=7");
             app.set_level_skip((cli.skip * 60.0) as u32);
-            app.start_on(SceneId::Level);
+            app.start_on(SceneId::Level {
+                level,
+                handoff: Handoff::new_game(),
+            });
         }
 
         run(Box::new(app), disc)

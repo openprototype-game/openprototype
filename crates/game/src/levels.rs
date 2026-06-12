@@ -422,6 +422,20 @@ pub enum SpawnAi {
 }
 
 impl Level {
+    /// The level after this one in play order, `None` past the last
+    /// (START.EXE's chain loop branches into the ending instead).
+    pub fn next(self) -> Option<Level> {
+        match self {
+            Level::L1 => Some(Level::L2),
+            Level::L2 => Some(Level::L3),
+            Level::L3 => Some(Level::L4),
+            Level::L4 => Some(Level::L5),
+            Level::L5 => Some(Level::L6),
+            Level::L6 => Some(Level::L7),
+            Level::L7 => None,
+        }
+    }
+
     /// The level numbered `1..=7`, if in range.
     pub fn from_number(number: u8) -> Option<Level> {
         match number {

@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use crate::assets::{GameOverAssets, HighscoreAssets, IntroAssets, LevelAssets, MenuAssets};
 use crate::highscores::HighscoreStore;
+use crate::levels::Level;
 use crate::scene::{
     GameOverScene, HighscoreEntry, HighscoreScreen, Intro, LevelScene, Menu, MusicMenu, Scene,
     SceneId, Transition,
@@ -19,14 +20,19 @@ use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game::{Game, StepOutput};
 use openprototype_core::input::KeyEvent;
 
+/// Loads one level's assets on demand, when the chain reaches it (the
+/// original loads each level as its own executable).
+pub type LevelLoader = Box<dyn Fn(Level) -> anyhow::Result<LevelAssets>>;
+
 pub struct App {
     current: Box<dyn Scene>,
     menu_assets: Rc<MenuAssets>,
     intro_assets: Rc<IntroAssets>,
     highscore_assets: Rc<HighscoreAssets>,
     gameover_assets: Rc<GameOverAssets>,
-    level_assets: Rc<LevelAssets>,
-    /// Dev fast-forward for the level scene (`--skip`), in logic ticks.
+    level_loader: LevelLoader,
+    /// Dev fast-forward (`--skip`), in logic ticks; consumed by the first
+    /// level scene built, so a chained next level starts normally.
     level_skip_ticks: u32,
     highscore_store: Rc<HighscoreStore>,
 }
@@ -38,7 +44,7 @@ impl App {
         intro_assets: IntroAssets,
         highscore_assets: HighscoreAssets,
         gameover_assets: GameOverAssets,
-        level_assets: LevelAssets,
+        level_loader: LevelLoader,
         highscore_store: HighscoreStore,
     ) -> Self {
         let menu_assets = Rc::new(menu_assets);
@@ -50,7 +56,7 @@ impl App {
             intro_assets,
             highscore_assets: Rc::new(highscore_assets),
             gameover_assets: Rc::new(gameover_assets),
-            level_assets: Rc::new(level_assets),
+            level_loader,
             level_skip_ticks: 0,
             highscore_store: Rc::new(highscore_store),
         }
@@ -66,7 +72,7 @@ impl App {
         self.current = self.build(id);
     }
 
-    fn build(&self, id: SceneId) -> Box<dyn Scene> {
+    fn build(&mut self, id: SceneId) -> Box<dyn Scene> {
         match id {
             SceneId::Intro => Box::new(Intro::new(
                 self.intro_assets.clone(),
@@ -97,10 +103,22 @@ impl App {
                 self.highscore_store.clone(),
                 score,
             )),
-            SceneId::Level => Box::new(LevelScene::new(
-                self.level_assets.clone(),
-                self.level_skip_ticks,
-            )),
+            SceneId::Level { level, handoff } => {
+                // A load failure mid-chain means the disc went away under a
+                // verified image; there is no graceful continuation.
+                let assets = (self.level_loader)(level)
+                    .unwrap_or_else(|error| panic!("loading {level:?} assets: {error:#}"));
+
+                let scene = Box::new(LevelScene::new(
+                    Rc::new(assets),
+                    level,
+                    handoff,
+                    self.level_skip_ticks,
+                ));
+                self.level_skip_ticks = 0;
+
+                scene
+            }
         }
     }
 }
@@ -156,7 +174,7 @@ mod tests {
             test_intro_assets(),
             test_highscore_assets(),
             test_gameover_assets(),
-            test_level_assets(),
+            Box::new(|_| Ok(test_level_assets())),
             test_store(),
         )
     }

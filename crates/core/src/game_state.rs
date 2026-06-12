@@ -161,11 +161,34 @@ pub enum HitOutcome {
     GameOver,
 }
 
+/// The between-levels carry: the original's `f:message` payload (`{score,
+/// lives, bombs, weapon levels}`). START.EXE seeds it for a new game, every
+/// level writes it back at exit, and the next level reads it at entry
+/// through [`GameState::enter_level`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Handoff {
+    pub score: u32,
+    /// The raw carried counter; the entry decrement is not applied yet, so a
+    /// fresh game carries 4 and the first level displays 3.
+    pub lives: Lives,
+    pub smart_bombs: SmartBombs,
+    pub weapons: PerWeapon<WeaponLevel>,
+}
+
+impl Handoff {
+    /// START.EXE's new-game payload (its writer at file `0x3c9e`): score 0,
+    /// lives 4, one smart bomb, bare weapons.
+    pub fn new_game() -> Handoff {
+        Handoff {
+            score: 0,
+            lives: Lives::new(4),
+            smart_bombs: SmartBombs::new(1),
+            weapons: PerWeapon::splat(WeaponLevel::new(0)),
+        }
+    }
+}
+
 /// The level HUD's data source and the player-state rules that drive it.
-///
-/// The starting values for a fresh game are not encoded here — the original's
-/// new-game init is not traced yet, so constructing a `GameState` is the
-/// caller's responsibility for now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GameState {
     /// Points, shown as the six-digit LCD readout.
@@ -192,6 +215,46 @@ pub struct GameState {
 }
 
 impl GameState {
+    /// Builds the level-entry state from the carried payload.
+    ///
+    /// The original's level init runs two unfrozen warm-up frames in which
+    /// the per-tick score updater grants the 10,000-point extra life (the
+    /// threshold is per-level state that resets to zero), and only then does
+    /// the spawn handler take its entry decrement — so entering a level nets
+    /// `lives + (score >= 10,000) - 1`. A carry of one life with under
+    /// 10,000 points nets zero: the original exits straight to game over
+    /// before the level even shows (verified in DOSBox), surfaced here as a
+    /// zero-lives state for the scene to route. The warm-up refund's jingle
+    /// is not reproduced.
+    ///
+    /// Invincibility is left unarmed: the spawn shield is per-level data the
+    /// scene applies on top.
+    pub fn enter_level(handoff: Handoff) -> GameState {
+        let refund = u8::from(handoff.score >= EXTRA_LIFE_INTERVAL);
+
+        GameState {
+            score: handoff.score,
+            lives: handoff.lives.saturating_add(refund).saturating_sub(1),
+            smart_bombs: handoff.smart_bombs,
+            weapons: handoff.weapons,
+            selected: Weapon::Multishot,
+            invincible_ticks: 0,
+            contact_grace_ticks: 0,
+        }
+    }
+
+    /// The level-exit writeback: the carry for the next level, with the
+    /// lives counter raw (the original's writer at file `0xbb8e` stores it
+    /// as-is; the next entry applies its own decrement).
+    pub fn handoff(&self) -> Handoff {
+        Handoff {
+            score: self.score,
+            lives: self.lives,
+            smart_bombs: self.smart_bombs,
+            weapons: self.weapons,
+        }
+    }
+
     /// Returns the charge level of one weapon.
     pub fn level(&self, weapon: Weapon) -> WeaponLevel {
         *self.weapons.get(weapon)
@@ -320,6 +383,54 @@ mod tests {
         state.selected = selected;
         *state.weapons.get_mut(selected) = WeaponLevel::new(level);
         state
+    }
+
+    #[test]
+    fn entering_a_new_game_nets_three_lives_and_one_bomb() {
+        let state = GameState::enter_level(Handoff::new_game());
+
+        assert_eq!(state.score, 0);
+        assert_eq!(state.lives.get(), 3);
+        assert_eq!(state.smart_bombs.get(), 1);
+        assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
+        assert_eq!(state.invincible_ticks, 0);
+    }
+
+    #[test]
+    fn entering_with_a_ten_thousand_score_refunds_the_entry_decrement() {
+        let mut carry = Handoff::new_game();
+        carry.score = 25_000;
+        carry.lives = Lives::new(3);
+
+        assert_eq!(GameState::enter_level(carry).lives.get(), 3);
+    }
+
+    #[test]
+    fn entering_under_ten_thousand_pays_the_entry_decrement() {
+        let mut carry = Handoff::new_game();
+        carry.score = 5_000;
+        carry.lives = Lives::new(3);
+
+        assert_eq!(GameState::enter_level(carry).lives.get(), 2);
+    }
+
+    #[test]
+    fn entering_on_the_last_life_without_the_refund_is_a_lost_game() {
+        let mut carry = Handoff::new_game();
+        carry.score = 5_000;
+        carry.lives = Lives::new(1);
+
+        assert_eq!(GameState::enter_level(carry).lives.get(), 0);
+    }
+
+    #[test]
+    fn the_handoff_writes_the_lives_counter_raw() {
+        let mut state = fresh();
+        state.score = 12_345;
+        let carry = state.handoff();
+
+        assert_eq!(carry.score, 12_345);
+        assert_eq!(carry.lives.get(), 3);
     }
 
     #[test]

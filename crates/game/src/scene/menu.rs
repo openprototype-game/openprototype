@@ -3,10 +3,10 @@
 //! Mirrors `START.EXE`'s menu loop: a [`ListMenu`] over NEW GAME, LOAD GAME,
 //! HIGHSCORES, MUSIC MENU, QUIT. Up/Down move the cursor (wrapping); Enter
 //! dispatches; every other key, Esc included, is ignored (the original's loop
-//! only handles those three scancodes, so quitting is the QUIT item). Only
-//! MUSIC MENU and QUIT do something so far; the rest get their scenes later.
-//! The menu emits no audio. The title theme is started once at boot, and the
-//! original never restarts it from the menu.
+//! only handles those three scancodes, so quitting is the QUIT item). LOAD
+//! GAME waits on the savegame system; everything else is wired. The menu
+//! emits no audio. The title theme is started once at boot, and the original
+//! never restarts it from the menu.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -14,9 +14,11 @@ use std::time::Duration;
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 use crate::assets::MenuAssets;
+use crate::levels::Level;
 use crate::scene::list_menu::{ListMenu, MenuLayout};
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::game_state::Handoff;
 use openprototype_core::input::{Key, KeyEvent};
 
 /// The main menu's positions: labels at x=90 (`di = 0x4b5a`, ... in the setup
@@ -46,7 +48,12 @@ impl MenuItem {
     /// no scene yet.
     fn activate(self) -> Option<Transition> {
         match self {
-            MenuItem::NewGame => None,
+            MenuItem::NewGame => Some(Transition::To(SceneId::Level {
+                level: Level::L1,
+                handoff: Handoff::new_game(),
+            })),
+            // TODO: the savegame system (the original's protosgN.psg slots,
+            // full mid-level snapshots loaded by the level itself).
             MenuItem::LoadGame => None,
             MenuItem::Highscores => Some(Transition::To(SceneId::Highscores)),
             MenuItem::MusicMenu => Some(Transition::To(SceneId::MusicMenu)),
@@ -161,9 +168,25 @@ mod tests {
     }
 
     #[test]
-    fn enter_on_an_unwired_item_does_nothing() {
+    fn new_game_starts_the_chain_at_level_1() {
         let mut menu = test_menu(); // starts on NEW GAME
 
+        assert_eq!(
+            menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
+                .transition,
+            Some(Transition::To(SceneId::Level {
+                level: Level::L1,
+                handoff: Handoff::new_game(),
+            }))
+        );
+    }
+
+    #[test]
+    fn enter_on_an_unwired_item_does_nothing() {
+        let mut menu = test_menu();
+
+        // LOAD GAME (the second item) waits on the savegame system.
+        menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Down)]);
         assert_eq!(
             menu.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Enter)])
                 .transition,

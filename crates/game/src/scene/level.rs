@@ -22,6 +22,7 @@ use crate::background::BackgroundScroll;
 use crate::combat::{self, CombatEvents};
 use crate::hud::{self, POD_SETTLED_FRAME};
 use crate::level::prng::{EngineRng, clock_seed};
+use crate::levels::Level;
 use crate::playfield;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
@@ -32,11 +33,9 @@ use crate::spawns::{PlayerInput, Spawns};
 use crate::stars::StarField;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
-use openprototype_core::game_state::{HitOutcome, Severity};
+use openprototype_core::game_state::{Handoff, HitOutcome, Severity};
 use openprototype_core::input::{Key, KeyEvent};
-use openprototype_core::{
-    ActiveWeapon, GameState, Lives, PerWeapon, SmartBombs, Weapon, WeaponLevel,
-};
+use openprototype_core::{ActiveWeapon, GameState, Weapon};
 
 /// The level's frame: hand-programmed Mode X 320x160 (480 scanlines, each row
 /// tripled to give 160 logical rows), shown on a 4:3 CRT so pixels are 1.5x
@@ -102,6 +101,8 @@ enum Flow {
 
 pub struct LevelScene {
     assets: Rc<LevelAssets>,
+    /// Which level this is, for the end-of-level chain to the next.
+    level: Level,
     state: GameState,
     frame: Framebuffer,
     /// Per-strip scroll positions for the level's parallax background.
@@ -159,13 +160,12 @@ pub struct LevelScene {
 }
 
 impl LevelScene {
-    pub fn new(assets: Rc<LevelAssets>, skip_ticks: u32) -> Self {
+    pub fn new(assets: Rc<LevelAssets>, level: Level, handoff: Handoff, skip_ticks: u32) -> Self {
         // The level start runs the original's spawn handler on its respawn
         // path (the handoff flag `cs:0xb12b` bakes 0 and only an `f:message`
-        // mode byte changes it), so it arms the same invincibility a death
-        // respawn does. The baked lives byte is 4 for the same reason: the
-        // start pass decrements it to the displayed 3.
-        let mut state = new_game_state();
+        // mode byte changes it), so on top of the carried payload's entry
+        // math it arms the same invincibility a death respawn does.
+        let mut state = GameState::enter_level(handoff);
         state.invincible_ticks = assets.combat.respawn_invincibility;
 
         eprintln!(
@@ -191,8 +191,19 @@ impl LevelScene {
         ship.arm_shield(i32::from(assets.combat.respawn_invincibility));
         let weapons = Weapons::new(assets.bob_wave.clone(), state.active_weapon());
         let camera_y = assets.camera_min;
+        // The lose-on-entry edge: a one-life carry without the 10,000-point
+        // refund nets zero lives, and the original exits to game over before
+        // the level even shows.
+        let flow = if state.lives.get() == 0 {
+            Flow::GameOver
+        } else {
+            Flow::GetReady {
+                fire_released: false,
+            }
+        };
         let mut scene = Self {
             assets,
+            level,
             state,
             frame,
             background_scroll,
@@ -216,11 +227,13 @@ impl LevelScene {
             paused: false,
             turbo: false,
             level_end_countdown: None,
-            flow: Flow::GetReady {
-                fire_released: false,
-            },
+            flow,
         };
-        scene.fast_forward(skip_ticks);
+
+        if !matches!(scene.flow, Flow::GameOver) {
+            scene.fast_forward(skip_ticks);
+        }
+
         scene.render();
 
         scene
@@ -882,9 +895,8 @@ impl Scene for LevelScene {
 
         // The level-end sequence (file 0xf866): the boss died, the game runs
         // on for 460 frames, and for the last 300 the ship's controls lock
-        // and it flies off the right edge. Then the level hands back (the
-        // original exits to the front-end; the next-level flow is not built
-        // yet).
+        // and it flies off the right edge. Then the level hands its
+        // writeback to the next one in the chain.
         if let Some(countdown) = &mut self.level_end_countdown {
             *countdown = countdown.saturating_sub(ticks);
 
@@ -893,7 +905,19 @@ impl Scene for LevelScene {
             }
 
             if *countdown == 0 {
-                output.transition = Some(Transition::To(SceneId::MainMenu));
+                output.transition = Some(match self.level.next() {
+                    Some(next) => Transition::To(SceneId::Level {
+                        level: next,
+                        handoff: self.state.handoff(),
+                    }),
+                    // TODO: the real ending sequence (START.EXE branches to
+                    // file 0x4e06 past the last level); until it is traced,
+                    // the run closes out through the game-over flow so the
+                    // score still reaches the high-score table.
+                    None => Transition::To(SceneId::GameOver {
+                        score: self.state.score,
+                    }),
+                });
             }
         }
 
@@ -919,23 +943,6 @@ impl Scene for LevelScene {
     }
 }
 
-/// The fresh-game player state, matching START.EXE's new-game handoff
-/// (`{score 0, lives 4, bombs 1, weapons bare}`) with the spawn handler's
-/// level-entry decrement folded into the lives. The spawn invincibility is
-/// the scene's to arm: the level start runs the spawn handler's respawn
-/// path, which grants it on top of this state.
-fn new_game_state() -> GameState {
-    GameState {
-        score: 0,
-        lives: Lives::new(3),
-        smart_bombs: SmartBombs::new(1),
-        weapons: PerWeapon::splat(WeaponLevel::new(0)),
-        selected: Weapon::Multishot,
-        invincible_ticks: 0,
-        contact_grace_ticks: 0,
-    }
-}
-
 /// Keeps the worse of two ship outcomes across the tick's passes.
 fn merge_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<HitOutcome> {
     match (current, new) {
@@ -948,10 +955,16 @@ fn merge_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<HitOutc
 mod tests {
     use super::*;
     use crate::assets::test_level_assets;
+    use openprototype_core::{PerWeapon, WeaponLevel};
 
     /// A scene past the GET READY freeze, so ticks advance the world.
     fn test_scene() -> LevelScene {
-        let mut scene = LevelScene::new(Rc::new(test_level_assets()), 0);
+        let mut scene = LevelScene::new(
+            Rc::new(test_level_assets()),
+            Level::L1,
+            Handoff::new_game(),
+            0,
+        );
         scene.flow = Flow::Running;
 
         scene
@@ -988,6 +1001,52 @@ mod tests {
         assert_eq!(scene.state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
         assert_eq!(scene.camera_y, 0);
+    }
+
+    #[test]
+    fn the_level_end_chains_to_the_next_level_with_the_writeback() {
+        let mut scene = test_scene();
+        scene.state.score = 12_345;
+        scene.level_end_countdown = Some(1);
+
+        let output = scene.update(TICK, &[]);
+
+        assert_eq!(
+            output.transition,
+            Some(Transition::To(SceneId::Level {
+                level: Level::L2,
+                handoff: scene.state.handoff(),
+            }))
+        );
+    }
+
+    #[test]
+    fn the_last_level_end_exits_through_the_game_over_flow() {
+        let mut scene = test_scene();
+        scene.level = Level::L7;
+        scene.state.score = 12_345;
+        scene.level_end_countdown = Some(1);
+
+        let output = scene.update(TICK, &[]);
+
+        assert_eq!(
+            output.transition,
+            Some(Transition::To(SceneId::GameOver { score: 12_345 }))
+        );
+    }
+
+    #[test]
+    fn a_one_life_carry_without_the_refund_is_game_over_on_entry() {
+        let mut carry = Handoff::new_game();
+        carry.lives = openprototype_core::Lives::new(1);
+        carry.score = 5_000;
+
+        let mut scene = LevelScene::new(Rc::new(test_level_assets()), Level::L3, carry, 0);
+
+        assert_eq!(
+            scene.update(TICK, &[]).transition,
+            Some(Transition::To(SceneId::GameOver { score: 5_000 }))
+        );
     }
 
     #[test]

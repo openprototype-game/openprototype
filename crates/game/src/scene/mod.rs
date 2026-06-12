@@ -31,6 +31,7 @@ use std::time::Duration;
 
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
+use openprototype_core::game_state::Handoff;
 use openprototype_core::input::KeyEvent;
 
 /// The scenes the [`App`](crate::app::App) can switch to.
@@ -49,8 +50,14 @@ pub enum SceneId {
     HighscoreEntry {
         score: u32,
     },
-    /// The developer level-render scene, reached only via `--scene level`.
-    Level,
+    /// One level of the game chain, carrying the between-levels payload
+    /// (the original's `f:message`). NEW GAME enters at L1 with the
+    /// new-game carry; a completed level chains to the next with its
+    /// writeback.
+    Level {
+        level: crate::levels::Level,
+        handoff: Handoff,
+    },
 }
 
 /// A scene's request to change the app state, returned from [`Scene::update`].
