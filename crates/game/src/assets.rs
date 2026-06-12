@@ -190,6 +190,8 @@ pub struct LevelAssets {
     pub spawn_ai: Option<SpawnAi>,
     /// The level's combat constants, straight from the registry.
     pub combat: crate::levels::CombatData,
+    /// The level's missile spawn rows ([`crate::levels::FireData::missile_rows`]).
+    pub missile_rows: (i32, i32),
     /// The glyph sheet (`FONT.RAW`), for the GET READY overlay.
     pub font: Font,
     /// Per palette index, the index of the nearest color to one third of its
@@ -439,6 +441,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         spawns: data.spawns,
         spawn_ai: data.spawn_positions.and_then(|positions| positions.ai),
         combat: data.combat,
+        missile_rows: data.fire.missile_rows,
         font,
         dim_table,
         dim_text_table,
@@ -1233,6 +1236,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         spawns: SpawnSource::StaticTable { table: 0 },
         spawn_ai: None,
         combat: Level::L1.data().combat,
+        missile_rows: (11, 7),
         font: Font::decode(&[0u8; 320 * 16]).expect("synthetic font sheet decodes"),
         dim_table: [0; 256],
         dim_text_table: [0; 256],

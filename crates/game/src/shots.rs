@@ -53,6 +53,14 @@ const Y_MIN: i32 = -0xa0;
 /// restarted on every shot.
 const FLASH_END: i32 = 0x30;
 
+/// Per-orb plasma bolt collision widths (the dispatch pre-writes them into
+/// the staging record before each orb's spawner call; all heights are 15).
+const BOLT_WIDTHS: [i32; 4] = [21, 22, 28, 28];
+
+/// The burning beam's extra spawn rows per charge level, on top of the
+/// shared `y + 16` (the rate selector at file `0x983b`, all 7 WADs).
+const BEAM_CHARGE_DY: [i32; 4] = [3, 3, 2, 0];
+
 /// The orbs' bob phase (`cs:[0xcdf]`) steps 2 bytes per tick, wrapping at the
 /// wave's 14 words.
 const BOB_WRAP: i32 = 0x1c;
@@ -108,7 +116,9 @@ enum ShotKind {
     /// Charge level 1..=4 picks the sprite.
     Multishot(usize),
     Burning(usize),
-    PlasmaBolt,
+    /// An orb's instant bolt; carries which orb (0..4) fired it, because the
+    /// dispatch pre-writes a per-orb collision width.
+    PlasmaBolt(usize),
     /// The launched orb itself, flying forward after fire is released.
     PlasmaBall,
     Missile,
@@ -162,9 +172,11 @@ impl Shot {
             ShotKind::Chaingun | ShotKind::Missile => (13, 4),
             ShotKind::Multishot(_) => (5, 4),
             ShotKind::Burning(_) => (135, 12),
-            // TODO: the launched ball's record sizes are unverified; the bolt's
-            // (22, 15) is from the spawner at file 0x9924.
-            ShotKind::PlasmaBolt | ShotKind::PlasmaBall => (22, 15),
+            // The dispatch pre-writes each orb's bolt width before the
+            // spawner runs; the ball's (22, 15) is the spawner's own write
+            // at file 0x9924.
+            ShotKind::PlasmaBolt(orb) => (BOLT_WIDTHS[orb.min(3)], 15),
+            ShotKind::PlasmaBall => (22, 15),
             ShotKind::BombWave => (0, 0),
         }
     }
@@ -172,7 +184,7 @@ impl Shot {
     /// Whether the damage path skips the hit spark (the original's `0x32c0`
     /// plasma type check at file 0xc0df).
     pub fn is_plasma(&self) -> bool {
-        matches!(self.kind, ShotKind::PlasmaBolt | ShotKind::PlasmaBall)
+        matches!(self.kind, ShotKind::PlasmaBolt(_) | ShotKind::PlasmaBall)
     }
 
     /// Whether a hit by this shot plays the chaingun impact (`0xad83`).
@@ -294,7 +306,7 @@ fn initial_damage(kind: ShotKind) -> i32 {
         ShotKind::Chaingun => 12,
         ShotKind::Multishot(level) => [15, 18, 20, 22][level],
         ShotKind::Burning(level) => [60, 70, 90, 125][level],
-        ShotKind::PlasmaBolt | ShotKind::PlasmaBall => 30,
+        ShotKind::PlasmaBolt(_) | ShotKind::PlasmaBall => 30,
         ShotKind::Missile => 80,
         ShotKind::BombWave => 0,
     }
@@ -341,6 +353,8 @@ pub struct Weapons {
     bob_wave: Vec<i32>,
     /// The level's despawn x bound ([`CombatData::shot_x_max`]).
     shot_x_max: i32,
+    /// The level's missile spawn rows ([`FireData::missile_rows`]).
+    missile_rows: (i32, i32),
     pub shots: Vec<Shot>,
 }
 
@@ -348,7 +362,12 @@ impl Weapons {
     /// `firing` is the initial firing weapon, normally the resolve of the
     /// starting [`GameState`] (so the first tick's re-resolve is a no-op
     /// rather than a spurious switch).
-    pub fn new(bob_wave: Vec<i32>, firing: ActiveWeapon, shot_x_max: i32) -> Self {
+    pub fn new(
+        bob_wave: Vec<i32>,
+        firing: ActiveWeapon,
+        shot_x_max: i32,
+        missile_rows: (i32, i32),
+    ) -> Self {
         Self {
             cooldown: 0,
             rate: 6,
@@ -366,6 +385,7 @@ impl Weapons {
             trail: [(0, 0); TRAIL],
             bob_wave,
             shot_x_max,
+            missile_rows,
             shots: Vec::new(),
         }
     }
@@ -535,7 +555,8 @@ impl Weapons {
             }
             ActiveWeapon::Selected(Weapon::Burning) => {
                 let level = charge_index(state, Weapon::Burning);
-                self.spawn(ShotKind::Burning(level), x, y + 16, 224, 0);
+                let dy = 16 + BEAM_CHARGE_DY[level];
+                self.spawn(ShotKind::Burning(level), x, y + dy, 224, 0);
                 self.rate = [19, 18, 17, 16][level];
             }
             ActiveWeapon::Selected(Weapon::Plasma) => {
@@ -543,13 +564,14 @@ impl Weapons {
                 // its position, every tick (plasma bypasses the cooldown).
                 let positions = self.orb_positions();
 
-                for &(x, y) in positions.iter().take(self.orbs) {
-                    self.spawn(ShotKind::PlasmaBolt, x, y - 10, 5120, 0);
+                for (orb, &(x, y)) in positions.iter().take(self.orbs).enumerate() {
+                    self.spawn(ShotKind::PlasmaBolt(orb), x, y - 10, 5120, 0);
                 }
             }
             ActiveWeapon::Selected(Weapon::Missile) => {
                 let level = charge_index(state, Weapon::Missile);
-                let dy = if self.missile_toggle { 7 } else { 0 };
+                let (base_dy, alt_dy) = self.missile_rows;
+                let dy = if self.missile_toggle { alt_dy } else { 0 };
                 self.missile_toggle = !self.missile_toggle;
 
                 // The lock counter pre-increments and wraps into the live
@@ -568,7 +590,7 @@ impl Weapons {
 
                 let target = self.missile_target;
                 let before = self.shots.len();
-                self.spawn(ShotKind::Missile, x + 35, y + 11 + dy, 48, 0);
+                self.spawn(ShotKind::Missile, x + 35, y + base_dy + dy, 48, 0);
 
                 if self.shots.len() > before
                     && let Some(missile) = self.shots.last_mut()
@@ -688,7 +710,7 @@ impl Weapons {
                 ShotKind::Chaingun => (&sprites.chaingun, (0, 0)),
                 ShotKind::Multishot(level) => (&sprites.multishot[level], (0, 0)),
                 ShotKind::Burning(level) => (&sprites.burning[level], (0, 0)),
-                ShotKind::PlasmaBolt => (&sprites.plasma_bolt, (0, 0)),
+                ShotKind::PlasmaBolt(_) => (&sprites.plasma_bolt, (0, 0)),
                 ShotKind::PlasmaBall => (&sprites.plasma_orbs[1][0], (0, 0)),
                 ShotKind::Missile => (
                     &sprites.missile[shot.octant],
@@ -787,7 +809,7 @@ mod tests {
 
     #[test]
     fn the_chaingun_fires_two_barrel_shots_on_its_cooldown() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Multishot, 0); // empty slot -> chaingun
 
         run(&mut weapons, true, &state, 6);
@@ -802,7 +824,7 @@ mod tests {
 
     #[test]
     fn shots_move_and_despawn_at_the_window_bounds() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Multishot, 0);
 
         run(&mut weapons, true, &state, 6);
@@ -817,13 +839,13 @@ mod tests {
 
     #[test]
     fn max_level_multishot_adds_the_two_backward_shots() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let low = state(Weapon::Multishot, 1);
         run(&mut weapons, false, &low, 1);
         run(&mut weapons, true, &low, 8);
         assert_eq!(weapons.shots.len(), 3);
 
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let max = state(Weapon::Multishot, 4);
         run(&mut weapons, false, &max, 1);
         run(&mut weapons, true, &max, 8);
@@ -833,7 +855,7 @@ mod tests {
 
     #[test]
     fn the_firing_weapon_freezes_while_fire_is_held() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let mut state = state(Weapon::Burning, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -852,7 +874,7 @@ mod tests {
 
     #[test]
     fn plasma_deploys_every_charged_orb_at_once() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Plasma, 3);
 
         // The first held tick brings out every charged orb, each firing a
@@ -871,7 +893,7 @@ mod tests {
 
     #[test]
     fn a_drained_charge_pulls_deployed_orbs_back_in_step() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let mut state = state(Weapon::Plasma, 3);
 
         run(&mut weapons, false, &state, 1);
@@ -886,7 +908,7 @@ mod tests {
 
     #[test]
     fn releasing_fire_retracts_the_orbs_and_launches_the_ball() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Plasma, 2);
 
         run(&mut weapons, false, &state, 1);
@@ -922,7 +944,7 @@ mod tests {
 
     #[test]
     fn the_orbs_ride_the_ship_trail() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Plasma, 4);
         run(&mut weapons, false, &state, 1);
 
@@ -941,7 +963,7 @@ mod tests {
 
     #[test]
     fn the_resolve_reports_a_switch_only_when_the_firing_weapon_changes() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let mut state = state(Weapon::Multishot, 2);
         *state.weapons.get_mut(Weapon::Burning) = WeaponLevel::new(2);
 
@@ -970,7 +992,7 @@ mod tests {
 
     #[test]
     fn the_first_missile_locks_the_first_entity() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Missile, 1);
         run(&mut weapons, false, &state, 1);
         weapons.cooldown = 100;
@@ -987,7 +1009,7 @@ mod tests {
 
     #[test]
     fn the_missile_alternates_its_spawn_row_at_its_slow_rate() {
-        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
         let state = state(Weapon::Missile, 1);
 
         // The rate variable still holds the previous weapon's period until the

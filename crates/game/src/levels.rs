@@ -171,6 +171,10 @@ pub struct FireData {
     pub plasma_bolt: usize,
     /// The missile's record.
     pub missile: usize,
+    /// The missile spawn's `(base dy, alternating extra dy)` from the ship
+    /// row: `(11, 7)` in six WADs, but L5's dispatch (file `0xb35b`) spawns
+    /// at `(14, 1)`.
+    pub missile_rows: (i32, i32),
     /// The smart-bomb wave's velocity table (`cs:0x26bf` in L1): 32 signed
     /// `(vx, vy)` 12.4 pairs around a circle, one per ring record. The bytes
     /// are identical in all seven WADs, at different offsets.
@@ -499,6 +503,7 @@ impl Level {
                     burning: [0x5c10, 0x5c18, 0x5c20, 0x5c28],
                     plasma_bolt: 0x5cb0,
                     missile: 0x5cb8,
+                    missile_rows: (11, 7),
                     bomb_wave: 0x50af,
                     bomb_sprite: 0x5c00,
                     muzzle_flash: 0x6266,
@@ -608,6 +613,7 @@ impl Level {
                     burning: [0x3fe8, 0x3ff0, 0x3ff8, 0x4000],
                     plasma_bolt: 0x3f90,
                     missile: 0x4088,
+                    missile_rows: (11, 7),
                     bomb_wave: 0x3247,
                     bomb_sprite: 0x3fd4,
                     muzzle_flash: 0x4188,
@@ -702,6 +708,7 @@ impl Level {
                     burning: [0x95bc, 0x95c4, 0x95cc, 0x95d4],
                     plasma_bolt: 0x9564,
                     missile: 0x965c,
+                    missile_rows: (11, 7),
                     bomb_wave: 0x8075,
                     bomb_sprite: 0x95a8,
                     muzzle_flash: 0x975c,
@@ -809,6 +816,7 @@ impl Level {
                     burning: [0x4060, 0x4068, 0x4070, 0x4078],
                     plasma_bolt: 0x4008,
                     missile: 0x4100,
+                    missile_rows: (11, 7),
                     bomb_wave: 0x32bf,
                     bomb_sprite: 0x404c,
                     muzzle_flash: 0x4200,
@@ -901,6 +909,7 @@ impl Level {
                     burning: [0x73b8, 0x73c0, 0x73c8, 0x73d0],
                     plasma_bolt: 0x7360,
                     missile: 0x7458,
+                    missile_rows: (14, 1),
                     bomb_wave: 0x6630,
                     bomb_sprite: 0x73a4,
                     muzzle_flash: 0x7558,
@@ -1003,6 +1012,7 @@ impl Level {
                     burning: [0x4560, 0x4568, 0x4570, 0x4578],
                     plasma_bolt: 0x4508,
                     missile: 0x4600,
+                    missile_rows: (11, 7),
                     bomb_wave: 0x37bf,
                     bomb_sprite: 0x454c,
                     muzzle_flash: 0x4700,
@@ -1101,6 +1111,7 @@ impl Level {
                     burning: [0x9135, 0x913d, 0x9145, 0x914d],
                     plasma_bolt: 0x90dd,
                     missile: 0x91d5,
+                    missile_rows: (11, 7),
                     bomb_wave: 0x80cb,
                     bomb_sprite: 0x9121,
                     muzzle_flash: 0x92d5,

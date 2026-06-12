@@ -244,6 +244,7 @@ impl LevelScene {
             assets.bob_wave.clone(),
             state.active_weapon(),
             assets.combat.shot_x_max,
+            assets.missile_rows,
         );
         let camera_y = assets.camera_min;
         // The lose-on-entry edge: a one-life carry without the 10,000-point
