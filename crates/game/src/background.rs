@@ -67,6 +67,17 @@ impl Sp {
         }
     }
 
+    /// The palette index the renderer fills rows below the strips with.
+    /// L5's strip pass paints its 23 sub-strip rows solid dark brown every
+    /// frame (`0x5f`, the fill loop at file `0xa330`); the others leave the
+    /// cleared buffer (black).
+    fn below_strips_fill(self) -> u8 {
+        match self {
+            Sp::Alienbg => 0x5F,
+            _ => 0,
+        }
+    }
+
     /// The fixed-point shift of this background's scroll positions. Most
     /// compositors keep 1/16-pixel positions (`shr eax, 4`, wrap `0x2800`);
     /// L7's lava keeps 1/256 (`shr eax, 8`, wrap `0x28000`) so its 65 wave
@@ -424,6 +435,8 @@ const LAVAH_STRIPS: [Strip; 65] = [
 pub struct Background {
     image: IndexedImage,
     strips: &'static [Strip],
+    /// Fill index for rows below the strips ([`Sp::below_strips_fill`]).
+    below_strips_fill: u8,
     /// The scroll positions' fixed-point shift (see [`Sp::subpixel_shift`]).
     subpixel_shift: u32,
     /// Every strip's starting position (see [`Sp::initial_offset`]).
@@ -435,6 +448,7 @@ impl Background {
         Self {
             image,
             strips: sp.strips(),
+            below_strips_fill: sp.below_strips_fill(),
             subpixel_shift: sp.subpixel_shift(),
             initial_offset: sp.initial_offset(),
         }
@@ -482,15 +496,16 @@ impl Background {
             let image_y = dest_y + camera_y;
             let dest_row = (dest_y * frame_width) as usize;
 
-            // Rows past the strips are not composited by the original (the
-            // forest and alien strips cover less than the playfield); they
-            // show the cleared buffer.
+            // Rows past the strips: L5 paints them solid dark brown every
+            // frame; L3's stay uncomposited (black here pending the DOSBox
+            // check on what its stale buffer shows through the trees).
             let strip = (image_y >= 0 && image_y < image_height)
                 .then(|| strip_at(self.strips, image_y))
                 .flatten();
 
             let Some(strip) = strip else {
-                frame.image.pixels[dest_row..dest_row + frame_width as usize].fill(0);
+                frame.image.pixels[dest_row..dest_row + frame_width as usize]
+                    .fill(self.below_strips_fill);
                 continue;
             };
 
