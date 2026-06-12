@@ -255,10 +255,12 @@ impl LevelScene {
     /// play resumes frozen on GET READY. The shield bubble tracks whatever
     /// invincibility the snapshot carried.
     ///
-    /// Only the race accumulators are mapped so far: accumulator 3 drives
-    /// the SP background strip, accumulator 0 the nebula scenery layer; 1
-    /// and 2 are the star planes, whose scatter is clock-seeded at init and
-    /// not restorable in the original either.
+    /// The scroll accumulators: the SP background strips start at index 3
+    /// in every level's saved list and restore one-to-one; accumulator 0
+    /// drives the first scenery layer. TODO: the remaining leading
+    /// accumulators (further scenery layers; the races' star planes, whose
+    /// scatter is clock-seeded and not restorable in the original either)
+    /// are not mapped yet.
     pub fn from_save(assets: Rc<LevelAssets>, save: crate::savegame::SaveGame) -> Self {
         let mut scene = Self::new(assets, save.level, save.handoff(), 0);
 
@@ -283,9 +285,10 @@ impl LevelScene {
             &scene.assets.wad,
             scene.assets.cs_base,
         ));
-        scene
-            .background_scroll
-            .restore_offset(0, save.scroll_accums[3]);
+        for (strip, accum) in save.scroll_accums.iter().skip(3).enumerate() {
+            scene.background_scroll.restore_offset(strip, *accum);
+        }
+
         scene
             .assets
             .scenery
@@ -343,7 +346,7 @@ impl LevelScene {
             ship_y,
             ship_ramp: self.ship.ramp(),
             ship_roll: self.ship.roll_frame() as i32,
-            scroll_accums: [
+            scroll_accums: vec![
                 self.scenery_scroll.offset(0),
                 elapsed_ticks * 6,
                 elapsed_ticks * 0xa,
