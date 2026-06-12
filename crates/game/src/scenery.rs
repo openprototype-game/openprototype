@@ -78,6 +78,16 @@ impl Scenery {
         }
     }
 
+    /// Place one layer's raw scroll position (a savegame's accumulator, in
+    /// 1/16-pixel units), wrapped to the layer's tile span.
+    pub fn restore_offset(&self, scroll: &mut SceneryScroll, layer: usize, offset: u32) {
+        if let (Some(slot), Some(layer)) = (scroll.offsets.get_mut(layer), self.layers.get(layer))
+            && !layer.tiles.is_empty()
+        {
+            *slot = offset % layer.span();
+        }
+    }
+
     /// Advance every layer's scroll by `ticks` of its own speed, wrapping so each
     /// strip loops.
     pub fn advance(&self, scroll: &mut SceneryScroll, ticks: u32) {

@@ -20,6 +20,7 @@ mod desktop {
     };
     use openprototype::highscores::HighscoreStore;
     use openprototype::levels::Level;
+    use openprototype::savegame::SaveGame;
     use openprototype::scene::SceneId;
     use openprototype_backend::run;
     use openprototype_core::game_state::Handoff;
@@ -54,6 +55,10 @@ mod desktop {
         /// starts mid-action.
         #[arg(long, default_value_t = 0.0)]
         skip: f32,
+
+        /// Boot straight into a `.psg` savegame (race levels only so far).
+        #[arg(long, conflicts_with = "scene")]
+        load: Option<PathBuf>,
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
@@ -120,6 +125,14 @@ mod desktop {
             Box::new(move |name| load_fli_bytes(&fli_disc, name)),
             highscore_store,
         );
+
+        if let Some(path) = &cli.load {
+            let bytes = std::fs::read(path)
+                .with_context(|| format!("reading savegame {}", path.display()))?;
+            let save = SaveGame::decode(&bytes)
+                .with_context(|| format!("decoding savegame {}", path.display()))?;
+            app.start_on_save(save);
+        }
 
         if let Some(DevScene::Level) = cli.scene {
             let level = Level::from_number(cli.level).expect("--level is validated to 1..=7");

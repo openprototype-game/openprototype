@@ -88,6 +88,15 @@ impl App {
         self.current = self.build(id);
     }
 
+    /// Boot straight into a loaded savegame (the `--load` dev flag; the
+    /// save/load menus route here once they land).
+    pub fn start_on_save(&mut self, save: crate::savegame::SaveGame) {
+        let level = save.level;
+        let assets = (self.level_loader)(level)
+            .unwrap_or_else(|error| panic!("loading {level:?}: {error:#}"));
+        self.current = Box::new(LevelScene::from_save(Rc::new(assets), save));
+    }
+
     /// The end-of-run high-score routing, shared by the game-over and ending
     /// flows: the original's qualify test is strict (`0x4bde`), so the score
     /// must beat the table's lowest entry to reach the name entry; anything

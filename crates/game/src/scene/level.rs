@@ -243,6 +243,54 @@ impl LevelScene {
         scene
     }
 
+    /// Rebuild a level mid-action from a savegame snapshot.
+    ///
+    /// Mirrors the original's load path: the spawn handler's entry
+    /// decrement and spawn shield are skipped (the handoff flag is nonzero
+    /// on a load), the player state and live objects restore verbatim, and
+    /// play resumes frozen on GET READY. The shield bubble tracks whatever
+    /// invincibility the snapshot carried.
+    ///
+    /// Only the race accumulators are mapped so far: accumulator 3 drives
+    /// the SP background strip, accumulator 0 the nebula scenery layer; 1
+    /// and 2 are the star planes, whose scatter is clock-seeded at init and
+    /// not restorable in the original either.
+    pub fn from_save(assets: Rc<LevelAssets>, save: crate::savegame::SaveGame) -> Self {
+        let mut scene = Self::new(assets, save.level, save.handoff(), 0);
+
+        scene.state = save.state;
+        scene
+            .ship
+            .restore(save.ship_x, save.ship_y, save.ship_ramp, save.ship_roll);
+        scene
+            .ship
+            .arm_shield(i32::from(scene.state.invincible_ticks));
+        scene.camera_y = i32::from(save.speed_level);
+        scene.spawns = Some(Spawns::from_save(
+            save.records,
+            save.cursor,
+            save.entities,
+            save.enemy_shots,
+            save.effects,
+            save.orb_drop_countdown,
+            save.level_end,
+            scene.assets.spawn_ai,
+            scene.assets.combat,
+            &scene.assets.wad,
+            scene.assets.cs_base,
+        ));
+        scene
+            .background_scroll
+            .restore_offset(0, save.scroll_accums[3]);
+        scene
+            .assets
+            .scenery
+            .restore_offset(&mut scene.scenery_scroll, 0, save.scroll_accums[0]);
+        scene.render();
+
+        scene
+    }
+
     /// Dev fast-forward (`--skip`): pre-simulates `ticks` of the level with
     /// the ship parked and shielded, then leaves the respawn shield up so the
     /// player can orient. Sounds from the skipped span are dropped.
@@ -1004,6 +1052,30 @@ mod tests {
         assert_eq!(scene.state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
         assert_eq!(scene.camera_y, 0);
+    }
+
+    #[test]
+    fn a_savegame_restores_the_level_mid_action() {
+        let save =
+            crate::savegame::SaveGame::decode(include_bytes!("../../tests/fixtures/l2-race.psg"))
+                .expect("the ground-truth fixture decodes");
+        let expected = save.clone();
+
+        let scene = LevelScene::from_save(Rc::new(test_level_assets()), save);
+
+        assert_eq!(scene.state, expected.state);
+        assert!(
+            matches!(scene.flow, Flow::GetReady { .. }),
+            "a load resumes frozen on GET READY"
+        );
+        assert_eq!(scene.ship.position(), (120, 23));
+        assert_eq!(scene.ship.roll_frame(), 8);
+        assert_eq!(scene.camera_y, 0);
+
+        let spawns = scene.spawns.as_ref().expect("the spawn layer restores");
+        assert_eq!(spawns.entities.len(), 5);
+        assert_eq!(spawns.entities[0].kind, 0x3e1c);
+        assert_eq!(spawns.entities[0].health, 31_964);
     }
 
     #[test]

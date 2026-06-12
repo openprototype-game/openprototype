@@ -517,6 +517,14 @@ pub struct BackgroundScroll {
 }
 
 impl BackgroundScroll {
+    /// Place one strip's raw scroll position (a savegame's accumulator,
+    /// already in this background's fixed point), wrapped to the image.
+    pub fn restore_offset(&mut self, strip: usize, offset: u32) {
+        if let Some(slot) = self.offsets.get_mut(strip) {
+            *slot = offset % (BACKGROUND_WIDTH << self.subpixel_shift);
+        }
+    }
+
     /// The whole-pixel scroll column of strip `strip` (the sub-pixel dropped).
     pub fn pixel_column(&self, strip: usize) -> i32 {
         (self.offsets[strip] >> self.subpixel_shift) as i32

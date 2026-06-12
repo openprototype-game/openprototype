@@ -166,6 +166,16 @@ impl Ship {
         self.shield_ticks = ticks;
     }
 
+    /// Place the ship from a savegame snapshot: position, the fly-in ramp
+    /// counter, and the roll frame. The roll divider and idle phase are
+    /// engine scratch the snapshot does not model.
+    pub fn restore(&mut self, x: i32, y: i32, ramp: i32, roll: i32) {
+        self.x = x;
+        self.y = y;
+        self.ramp = ramp;
+        self.roll = roll.clamp(0, ROLL_FRAMES - 1);
+    }
+
     /// One tick of the level-end flyout: pins the ramp below the unlock
     /// threshold so [`Self::update`] drifts the ship right with input
     /// ignored. The original's flyout loop (file `0xf866`) re-forces

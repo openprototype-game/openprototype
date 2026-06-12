@@ -274,6 +274,47 @@ impl Spawns {
         }
     }
 
+    /// Rebuild the spawn layer from a savegame snapshot.
+    ///
+    /// The original decays the head record's delay in the table itself, so
+    /// the saved `records[cursor].delay` IS the live countdown; everything
+    /// else restores verbatim. The orb RNG reseeds from the clock (its state
+    /// lives outside the original's saved block too), and the entities'
+    /// debris pointers re-derive from their type descriptors (the saved
+    /// record has no debris field; the death handler reads the descriptor).
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_save(
+        records: Vec<Record>,
+        cursor: usize,
+        mut entities: Vec<Entity>,
+        shots: Vec<Shot>,
+        effects: Vec<Effect>,
+        orb_drop_countdown: i32,
+        level_end: bool,
+        ai: Option<SpawnAi>,
+        combat: CombatData,
+        wad: &[u8],
+        cs_base: usize,
+    ) -> Self {
+        for entity in &mut entities {
+            entity.debris = descriptor_debris(wad, cs_base, entity.kind);
+        }
+
+        let mut spawns = Self::new(records, ai, combat);
+        spawns.countdown = spawns
+            .records
+            .get(cursor)
+            .map_or(0, |record| i32::from(record.delay));
+        spawns.cursor = cursor;
+        spawns.entities = entities;
+        spawns.shots = shots;
+        spawns.effects = effects;
+        spawns.orb_drop_countdown = orb_drop_countdown;
+        spawns.level_end = level_end;
+
+        spawns
+    }
+
     /// One PIT tick of the spawn clock: decrement the head delay and pull
     /// every due record into a live entity.
     ///
