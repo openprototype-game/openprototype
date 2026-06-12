@@ -1374,7 +1374,14 @@ impl Scene for LevelScene {
         if self.menu.is_none()
             && let Flow::GetReady { fire_released } = &mut self.flow
         {
-            if !self.fire_held {
+            // The press-wait has a level-end escape (the 0x3af check at
+            // L1 0x9e3b -> 0x9e77): a level completing during the wait --
+            // a boss death racing the player's -- skips it so the flyout
+            // plays out unfrozen.
+            if self.level_end_countdown.is_some() {
+                self.flow = Flow::Running;
+                self.esc_debounce = ESC_DEBOUNCE_TICKS;
+            } else if !self.fire_held {
                 *fire_released = true;
             } else if *fire_released {
                 self.flow = Flow::Running;
