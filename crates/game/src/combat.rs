@@ -267,7 +267,10 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             continue;
         }
 
-        spawns.entities.swap_remove(index);
+        // The original's compaction preserves order (the survivor copy tail
+        // at L1 0xd972..0xd99e): buffer order is draw order, 1-based missile
+        // lock order, and first-overlap hit priority, so removal must too.
+        spawns.entities.remove(index);
     }
 }
 
@@ -640,20 +643,20 @@ pub fn body_contact(
         if kind == orb {
             state.level_up();
             events.pickup = true;
-            spawns.entities.swap_remove(index);
+            spawns.entities.remove(index);
         } else if kind == smart_bomb {
             state.smart_bombs = state.smart_bombs.saturating_add(1);
             events.pickup = true;
-            spawns.entities.swap_remove(index);
+            spawns.entities.remove(index);
         } else if kind == invincibility {
             state.invincible_ticks = 600;
             events.pickup = true;
             events.shield_pickup = true;
-            spawns.entities.swap_remove(index);
+            spawns.entities.remove(index);
         } else if kind == extra_life {
             state.lives = state.lives.saturating_add(1);
             events.pickup = true;
-            spawns.entities.swap_remove(index);
+            spawns.entities.remove(index);
         } else if spawns.combat.contact_grace.is_some() && state.contact_grace_ticks > 0 {
             // Race mode: an earlier contact's grace window is still open.
             index += 1;
