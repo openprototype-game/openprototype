@@ -36,3 +36,4 @@ pub mod ship;
 pub mod shots;
 pub mod spawns;
 pub mod stars;
+pub mod zoom;

@@ -10,16 +10,21 @@
 //! high-score check as the game-over flow. Keys during the fade and the
 //! text are ignored (the player's abort flag is never armed).
 //!
-//! Each line lands with a 25-step zoom in the original (the scaler at file
-//! `0x2870`, shared with the high-score zoom); the zoom visuals are not
-//! reproduced yet, but its duration paces the lines.
+//! Each line lands with a 25-step zoom (the scaler at file `0x2870`, shared
+//! with the high-score zoom; see [`crate::zoom`]): per line the screen is
+//! snapshotted, the line is drawn at its final position on a transparent
+//! page, and the page zooms out from 25x over the snapshot. Blank records
+//! run the full zoom with no visual change — deliberate pauses. The original
+//! leaves the steps unpaced (no tick wait, CPU-bound); one tick per step
+//! approximates real hardware here.
 
 use std::time::Duration;
 
-use prototype_formats::{Palette, Rgb};
+use prototype_formats::{IndexedImage, Palette, Rgb};
 
 use crate::assets::EndingAssets;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
+use crate::zoom;
 use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
@@ -29,9 +34,6 @@ const TICK: Duration = Duration::from_micros(14_286);
 
 /// Palette fade-in steps (`dl = 0x5a` at the call site, one tick each).
 const FADE_STEPS: u32 = 90;
-
-/// Ticks each line's landing takes (the zoom's 25 steps of one tick).
-const LINE_TICKS: u32 = 25;
 
 /// The twelve ending lines (vaddr `0x5dd`, 22-byte records skipping the
 /// leading marker byte), pre-padded to center in the 20-column screen.
@@ -62,8 +64,15 @@ const MENU_TRACK: u8 = 2;
 enum Phase {
     /// Fading the backdrop in from black; the step scales the palette.
     FadeIn { step: u32 },
-    /// Landing line `line`; `ticks` of its hold have elapsed.
-    Lines { line: usize, ticks: u32 },
+    /// Zooming line `line` in; `step` zoom steps have landed. `src` holds
+    /// the line at its final position (index 0 transparent), `bg` the screen
+    /// snapshot the zoom composites over.
+    Lines {
+        line: usize,
+        step: u32,
+        src: IndexedImage,
+        bg: IndexedImage,
+    },
     /// Everything shown; the next key leaves.
     AwaitKey,
 }
@@ -115,39 +124,65 @@ impl EndingScene {
         palette
     }
 
+    /// Open a line's zoom: snapshot the screen and draw the line at its
+    /// final position on a transparent page (the original copies VGA into
+    /// the bg buffer and zero-fills the src buffer before each line).
+    fn start_line(&self, line: usize) -> Phase {
+        let bg = self.framebuffer.image.clone();
+        let mut src = IndexedImage::new(
+            bg.size,
+            vec![0u8; (bg.size.width * bg.size.height) as usize],
+        )
+        .expect("source page matches its dimensions");
+
+        self.assets.font.draw_into(
+            &mut src,
+            0,
+            FIRST_ROW_Y + line as i32 * ROW_STRIDE,
+            LINES[line],
+        );
+
+        Phase::Lines {
+            line,
+            step: 0,
+            src,
+            bg,
+        }
+    }
+
     fn advance_tick(&mut self) {
-        match &mut self.phase {
+        match std::mem::replace(&mut self.phase, Phase::AwaitKey) {
             Phase::FadeIn { step } => {
-                *step += 1;
-                let step = *step;
+                let step = step + 1;
                 self.framebuffer.palette = self.fade_palette(step);
 
-                if step >= FADE_STEPS {
-                    self.phase = Phase::Lines { line: 0, ticks: 0 };
-                }
+                self.phase = if step >= FADE_STEPS {
+                    self.start_line(0)
+                } else {
+                    Phase::FadeIn { step }
+                };
             }
-            Phase::Lines { line, ticks } => {
-                if *ticks == 0 {
-                    self.assets.font.draw_into(
-                        &mut self.framebuffer.image,
-                        0,
-                        FIRST_ROW_Y + *line as i32 * ROW_STRIDE,
-                        LINES[*line],
-                    );
-                }
+            Phase::Lines {
+                line,
+                step,
+                src,
+                bg,
+            } => {
+                let step = step + 1;
+                zoom::composite_step(&src, &bg, step, &mut self.framebuffer.image);
 
-                *ticks += 1;
-
-                if *ticks >= LINE_TICKS {
-                    if *line + 1 < LINES.len() {
-                        self.phase = Phase::Lines {
-                            line: *line + 1,
-                            ticks: 0,
-                        };
-                    } else {
-                        self.phase = Phase::AwaitKey;
+                self.phase = if step < zoom::STEPS {
+                    Phase::Lines {
+                        line,
+                        step,
+                        src,
+                        bg,
                     }
-                }
+                } else if line + 1 < LINES.len() {
+                    self.start_line(line + 1)
+                } else {
+                    Phase::AwaitKey
+                };
             }
             Phase::AwaitKey => {}
         }
@@ -204,8 +239,8 @@ mod tests {
         EndingScene::new(Rc::new(test_ending_assets()), SceneId::MainMenu)
     }
 
-    /// The whole timed run: the fade plus all twelve lines.
-    const FULL_RUN: u32 = FADE_STEPS + LINES.len() as u32 * LINE_TICKS;
+    /// The whole timed run: the fade plus all twelve lines' zooms.
+    const FULL_RUN: u32 = FADE_STEPS + LINES.len() as u32 * zoom::STEPS;
 
     #[test]
     fn the_first_update_stops_the_leftover_music() {
