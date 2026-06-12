@@ -13,7 +13,7 @@ mod desktop {
 
     use anyhow::{Context, Result};
     use clap::Parser;
-    use openprototype::app::App;
+    use openprototype::app::{App, FrontEndAssets};
     use openprototype::assets::{
         load_ending_assets, load_fli_bytes, load_gameover_assets, load_highscore_assets,
         load_intro_assets, load_level_assets, load_menu_assets,
@@ -104,20 +104,18 @@ mod desktop {
 
         verify_disc(&disc)?;
 
-        let menu_assets = load_menu_assets(&disc)?;
-        let intro_assets = load_intro_assets(&disc)?;
-        let highscore_assets = load_highscore_assets(&disc)?;
-        let gameover_assets = load_gameover_assets(&disc)?;
-        let ending_assets = load_ending_assets(&disc)?;
+        let assets = FrontEndAssets {
+            menu: load_menu_assets(&disc)?,
+            intro: load_intro_assets(&disc)?,
+            highscore: load_highscore_assets(&disc)?,
+            gameover: load_gameover_assets(&disc)?,
+            ending: load_ending_assets(&disc)?,
+        };
         let highscore_store = HighscoreStore::open(&disc)?;
         let loader_disc = disc.clone();
         let fli_disc = disc.clone();
         let mut app = App::new(
-            menu_assets,
-            intro_assets,
-            highscore_assets,
-            gameover_assets,
-            ending_assets,
+            assets,
             Box::new(move |level| load_level_assets(&loader_disc, level)),
             Box::new(move |name| load_fli_bytes(&fli_disc, name)),
             highscore_store,

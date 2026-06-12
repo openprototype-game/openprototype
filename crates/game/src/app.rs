@@ -44,28 +44,33 @@ pub struct App {
     highscore_store: Rc<HighscoreStore>,
 }
 
+/// The front-end's eagerly loaded assets, bundled for [`App::new`].
+pub struct FrontEndAssets {
+    pub menu: MenuAssets,
+    pub intro: IntroAssets,
+    pub highscore: HighscoreAssets,
+    pub gameover: GameOverAssets,
+    pub ending: EndingAssets,
+}
+
 impl App {
     /// Build the app on the intro.
     pub fn new(
-        menu_assets: MenuAssets,
-        intro_assets: IntroAssets,
-        highscore_assets: HighscoreAssets,
-        gameover_assets: GameOverAssets,
-        ending_assets: EndingAssets,
+        assets: FrontEndAssets,
         level_loader: LevelLoader,
         fli_loader: FliLoader,
         highscore_store: HighscoreStore,
     ) -> Self {
-        let menu_assets = Rc::new(menu_assets);
-        let intro_assets = Rc::new(intro_assets);
+        let menu_assets = Rc::new(assets.menu);
+        let intro_assets = Rc::new(assets.intro);
 
         Self {
             current: Box::new(Intro::new(intro_assets.clone(), menu_assets.clone())),
             menu_assets,
             intro_assets,
-            highscore_assets: Rc::new(highscore_assets),
-            gameover_assets: Rc::new(gameover_assets),
-            ending_assets: Rc::new(ending_assets),
+            highscore_assets: Rc::new(assets.highscore),
+            gameover_assets: Rc::new(assets.gameover),
+            ending_assets: Rc::new(assets.ending),
             level_loader,
             fli_loader,
             level_skip_ticks: 0,
@@ -201,11 +206,13 @@ mod tests {
 
     fn test_app() -> App {
         App::new(
-            test_menu_assets(),
-            test_intro_assets(),
-            test_highscore_assets(),
-            test_gameover_assets(),
-            test_ending_assets(),
+            FrontEndAssets {
+                menu: test_menu_assets(),
+                intro: test_intro_assets(),
+                highscore: test_highscore_assets(),
+                gameover: test_gameover_assets(),
+                ending: test_ending_assets(),
+            },
             Box::new(|_| Ok(test_level_assets())),
             Box::new(|_| Ok(Vec::new())),
             test_store(),
