@@ -136,7 +136,11 @@ pub fn clock_seed() -> u16 {
     let sec = secs % 60;
     let centi = u64::from(since_epoch.subsec_millis() / 10);
 
-    (((sec << 8) | centi) as u16).wrapping_add(((hour << 8) | minute) as u16)
+    let seed = (((sec << 8) | centi) as u16).wrapping_add(((hour << 8) | minute) as u16);
+
+    // The time shim substitutes a fixed seed when the formula sums to zero
+    // (byte-identical in all seven WADs, ~1/65536 of level starts).
+    if seed == 0 { 0x8ED2 } else { seed }
 }
 
 #[cfg(test)]
