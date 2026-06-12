@@ -160,7 +160,13 @@ pub struct LevelScene {
 
 impl LevelScene {
     pub fn new(assets: Rc<LevelAssets>, skip_ticks: u32) -> Self {
-        let state = new_game_state(assets.ship.spawn_shield_ticks as u16);
+        // The level start runs the original's spawn handler on its respawn
+        // path (the handoff flag `cs:0xb12b` bakes 0 and only an `f:message`
+        // mode byte changes it), so it arms the same invincibility a death
+        // respawn does. The baked lives byte is 4 for the same reason: the
+        // start pass decrements it to the displayed 3.
+        let mut state = new_game_state();
+        state.invincible_ticks = assets.combat.respawn_invincibility;
 
         eprintln!(
             "level scene: arrows fly the ship, Ctrl fires, Shift cycles weapon, \
@@ -181,7 +187,8 @@ impl LevelScene {
                 assets.combat,
             )
         });
-        let ship = Ship::new(assets.ship);
+        let mut ship = Ship::new(assets.ship);
+        ship.arm_shield(i32::from(assets.combat.respawn_invincibility));
         let weapons = Weapons::new(assets.bob_wave.clone(), state.active_weapon());
         let camera_y = assets.camera_min;
         let mut scene = Self {
@@ -365,6 +372,9 @@ impl LevelScene {
                         self.flow = Flow::GameOver;
                     } else {
                         self.ship = Ship::new(self.assets.ship);
+                        // The shield bubble tracks the invincibility timer
+                        // the respawn handler arms.
+                        self.ship.arm_shield(i32::from(respawn_invincibility));
 
                         // A race respawn restarts the course: the original
                         // restores the ISR-mutated table, rewinds the spawn
@@ -909,18 +919,19 @@ impl Scene for LevelScene {
     }
 }
 
-/// The fresh-game player state (the original's new-game init is untraced;
-/// these are the dev scene's starting values).
-fn new_game_state(spawn_invincibility: u16) -> GameState {
+/// The fresh-game player state, matching START.EXE's new-game handoff
+/// (`{score 0, lives 4, bombs 1, weapons bare}`) with the spawn handler's
+/// level-entry decrement folded into the lives. The spawn invincibility is
+/// the scene's to arm: the level start runs the spawn handler's respawn
+/// path, which grants it on top of this state.
+fn new_game_state() -> GameState {
     GameState {
         score: 0,
         lives: Lives::new(3),
-        smart_bombs: SmartBombs::new(3),
-        weapons: PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX)),
+        smart_bombs: SmartBombs::new(1),
+        weapons: PerWeapon::splat(WeaponLevel::new(0)),
         selected: Weapon::Multishot,
-        // The level start arms the level's baked shield duration (the same
-        // data-image init the ship's shield visual reads).
-        invincible_ticks: spawn_invincibility,
+        invincible_ticks: 0,
         contact_grace_ticks: 0,
     }
 }
@@ -946,21 +957,42 @@ mod tests {
         scene
     }
 
+    /// A running scene with every weapon charged, for the weapon-cycling and
+    /// pod-replay tests (a fresh start carries only the bare chaingun).
+    fn charged_scene() -> LevelScene {
+        let mut scene = test_scene();
+        scene.state.weapons = PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX));
+
+        // One idle tick so the firing weapon re-resolves to the charged
+        // selection, then settle the pod that the resolve replayed.
+        scene.update(TICK, &[]);
+        scene.pod_frame = POD_SETTLED_FRAME;
+
+        scene
+    }
+
     #[test]
-    fn starts_with_all_weapons_charged_and_the_pod_settled() {
+    fn starts_bare_with_the_spawn_shield_and_the_pod_settled() {
         let scene = test_scene();
 
         for weapon in Weapon::ALL {
-            assert_eq!(scene.state.level(weapon).get(), WeaponLevel::MAX);
+            assert_eq!(scene.state.level(weapon).get(), 0);
         }
 
+        // The level start runs the spawn handler's respawn path, so the
+        // spawn shield is armed; the weapons start bare.
+        assert_eq!(
+            scene.state.invincible_ticks,
+            scene.assets.combat.respawn_invincibility
+        );
+        assert_eq!(scene.state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
         assert_eq!(scene.camera_y, 0);
     }
 
     #[test]
     fn shift_cycles_the_weapon_and_the_resolve_restarts_the_pod() {
-        let mut scene = test_scene();
+        let mut scene = charged_scene();
         assert_eq!(
             scene.state.active_weapon(),
             ActiveWeapon::Selected(Weapon::Multishot)
@@ -982,7 +1014,7 @@ mod tests {
 
     #[test]
     fn a_held_burst_freezes_the_panels_firing_weapon() {
-        let mut scene = test_scene();
+        let mut scene = charged_scene();
 
         // Fire held: the selection moves but the resolve (and the pod
         // replay) wait for the release.
@@ -1005,7 +1037,7 @@ mod tests {
 
     #[test]
     fn the_pod_animation_advances_to_settled_then_stops() {
-        let mut scene = test_scene();
+        let mut scene = charged_scene();
         scene.update(TICK, &[KeyEvent::Pressed(Key::Shift)]);
         assert_eq!(scene.pod_frame, 0);
 

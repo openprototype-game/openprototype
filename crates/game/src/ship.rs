@@ -26,11 +26,12 @@
 //! Spawning (`cs:[0x2642]` ramp) flies the ship in from the left at +2/tick
 //! with input ignored until the ramp counter reaches 10; the level-end
 //! flyout reuses the same ramp by re-pinning it each tick ([`Ship::fly_out`])
-//! so the ship exits right under locked controls. Spawning also grants the
-//! level's shield duration (`cs:[0x266a]`; 300 ticks in L1/L5, 180
-//! elsewhere). The shield animates over [`SHIELD_FRAMES`] frames, 4 ticks
-//! each (`cs:[0x8f5c]`/`[0x8f5e]`), and draws at the ship position offset by
-//! `(+4, +6)`.
+//! so the ship exits right under locked controls. The shield bubble lights
+//! when [`Ship::arm_shield`] mirrors the invincibility timer (`cs:[0x266a]`):
+//! every pass through the spawn handler (the level start runs its respawn
+//! path too) and the invincibility pickup. It animates over
+//! [`SHIELD_FRAMES`] frames, 4 ticks each (`cs:[0x8f5c]`/`[0x8f5e]`), and
+//! draws at the ship position offset by `(+4, +6)`.
 
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
@@ -139,7 +140,10 @@ impl Ship {
             roll: 0,
             roll_divider: 0,
             idle_phase: 0,
-            shield_ticks: ship.spawn_shield_ticks,
+            // Unarmed: the scene arms the spawn/respawn shield (and the
+            // invincibility pickup relights it) via [`Self::arm_shield`],
+            // keeping the duration in one place with the hit-state timer.
+            shield_ticks: 0,
             shield_frame: 0,
             shield_hold: SHIELD_FRAME_TICKS,
         }
@@ -325,7 +329,6 @@ mod tests {
         flicker_frame: 27,
         y_min: -2,
         y_max: 110,
-        spawn_shield_ticks: 300,
         explosion: None,
     };
 
@@ -336,7 +339,6 @@ mod tests {
         flicker_frame: 28,
         y_min: -12,
         y_max: 113,
-        spawn_shield_ticks: 300,
         explosion: None,
     };
 
@@ -622,6 +624,10 @@ mod tests {
         let mut ship = Ship::new(TOP_DOWN);
         let mut camera = 0;
 
+        // A fresh spawn carries no shield; arming lights it.
+        assert_eq!(ship.shield_ticks, 0);
+        ship.arm_shield(348);
+
         assert_eq!(ship.shield_frame, 0);
         run(&mut ship, NONE, 4, &mut camera, 0);
         assert_eq!(ship.shield_frame, 1);
@@ -630,7 +636,7 @@ mod tests {
         run(&mut ship, NONE, 44, &mut camera, 0);
         assert_eq!(ship.shield_frame, 1);
 
-        // The spawn shield runs out after 300 ticks total.
+        // The armed shield runs out after its 348 ticks.
         assert!(ship.shield_ticks > 0);
         run(&mut ship, NONE, 300, &mut camera, 0);
         assert_eq!(ship.shield_ticks, 0);

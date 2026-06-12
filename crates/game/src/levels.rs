@@ -71,9 +71,6 @@ pub struct ShipData {
     /// clamps are -12..230 in every level.
     pub y_min: i32,
     pub y_max: i32,
-    /// Shield ticks granted at spawn: 300 (~5s) in L1 and L5, 180 (~3s)
-    /// elsewhere.
-    pub spawn_shield_ticks: i32,
     /// File offset of the ship's 23 death-explosion descriptors (the dying
     /// draw blits `base + frame*8` at the ship position; L1 `cs:0x45e2` =
     /// file `0x6fd2`), `None` until found in that level's WAD.
@@ -475,7 +472,6 @@ impl Level {
                     explosion: Some(0x6fd2),
                     y_min: -2,
                     y_max: 110,
-                    spawn_shield_ticks: 300,
                     idle_frame: 0,
                     flicker_frame: 27,
                 },
@@ -585,7 +581,6 @@ impl Level {
                     explosion: Some(0x4438),
                     y_min: -12,
                     y_max: 120,
-                    spawn_shield_ticks: 180,
                     idle_frame: 0,
                     flicker_frame: 27,
                 },
@@ -680,7 +675,6 @@ impl Level {
                     explosion: Some(0x9a0c),
                     y_min: -2,
                     y_max: 120,
-                    spawn_shield_ticks: 180,
                     idle_frame: 21,
                     flicker_frame: 28,
                 },
@@ -788,7 +782,6 @@ impl Level {
                     explosion: Some(0x44b0),
                     y_min: -12,
                     y_max: 120,
-                    spawn_shield_ticks: 180,
                     idle_frame: 0,
                     flicker_frame: 27,
                 },
@@ -881,7 +874,6 @@ impl Level {
                     explosion: Some(0x7808),
                     y_min: -12,
                     y_max: 113,
-                    spawn_shield_ticks: 300,
                     idle_frame: 21,
                     flicker_frame: 28,
                 },
@@ -984,7 +976,6 @@ impl Level {
                     explosion: Some(0x49b0),
                     y_min: -12,
                     y_max: 120,
-                    spawn_shield_ticks: 180,
                     idle_frame: 0,
                     flicker_frame: 27,
                 },
@@ -1083,7 +1074,6 @@ impl Level {
                     explosion: Some(0x9585),
                     y_min: -12,
                     y_max: 120,
-                    spawn_shield_ticks: 180,
                     idle_frame: 0,
                     flicker_frame: 27,
                 },

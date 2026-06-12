@@ -1136,7 +1136,6 @@ pub(crate) fn test_level_assets() -> LevelAssets {
             flicker_frame: 27,
             y_min: -2,
             y_max: 110,
-            spawn_shield_ticks: 300,
             explosion: None,
         },
         shield_frames: Vec::new(),
