@@ -81,11 +81,17 @@ fn every_level_loads_its_audio_assets() {
             "{level:?} slot count"
         );
 
-        // Every trigger length is shorter than its file, so a loaded sample
-        // is exactly its authored length; a mismatch means the registry's
-        // name-table offset or a length constant is wrong for this WAD.
+        // A loaded sample is its authored length rounded up to the 250-byte
+        // DMA block (capped at the file); a sample outside that window means
+        // the registry's name-table offset or a length constant is wrong
+        // for this WAD.
         for (slot, (sample, &length)) in assets.sfx.samples.iter().zip(lengths).enumerate() {
-            assert_eq!(sample.len(), length, "{level:?} slot {slot}");
+            let rounded = length.div_ceil(250) * 250;
+            assert!(
+                (length..=rounded).contains(&sample.len()),
+                "{level:?} slot {slot}: {} not in {length}..={rounded}",
+                sample.len()
+            );
         }
 
         // The music's loop period comes from the disc TOC; every level song

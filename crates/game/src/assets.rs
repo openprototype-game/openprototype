@@ -512,10 +512,17 @@ fn load_music(disc: &DiscImage, track: u8) -> Result<LevelMusic> {
 /// Bytes per entry in the WAD's `.SMP` filename table.
 const SFX_NAME_STRIDE: usize = 16;
 
+/// The mixer's DMA block size; channel ends snap up to it.
+const SFX_DMA_BLOCK: usize = 250;
+
 /// Load the level's sound-effect samples: read the WAD's NUL-padded filename
 /// table and pull each `.SMP` off the disc, cut to its trigger's authored
-/// length (see [`SfxData`]). The files are raw signed 8-bit mono at 11111 Hz
-/// and are kept that way; the platform's mixer does the format conversion.
+/// length rounded up to the next 250-byte DMA block (the original frees a
+/// channel only at block boundaries -- the position check at L1 0x7b63
+/// compares after each consumed block -- so every trigger plays up to ~249
+/// bytes of real file data past the authored cut, about 22 ms). The files
+/// are raw signed 8-bit mono at 11111 Hz and are kept that way; the
+/// platform's mixer does the format conversion.
 fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
     let table_end = data.name_table + data.sample_lengths.len() * SFX_NAME_STRIDE;
 
@@ -544,7 +551,8 @@ fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
             let bytes = disc
                 .read(&name)
                 .with_context(|| format!("reading {name}"))?;
-            let cut = bytes[..length.min(bytes.len())]
+            let block_end = length.div_ceil(SFX_DMA_BLOCK) * SFX_DMA_BLOCK;
+            let cut = bytes[..block_end.min(bytes.len())]
                 .iter()
                 .map(|&byte| byte as i8)
                 .collect::<Vec<i8>>();
