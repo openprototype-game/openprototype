@@ -335,6 +335,12 @@ impl Spawns {
         self.orb_drop_countdown
     }
 
+    /// Carry the countdown across a race course restart: the respawn
+    /// handler never resets it.
+    pub fn set_orb_drop_countdown(&mut self, countdown: i32) {
+        self.orb_drop_countdown = countdown;
+    }
+
     /// One PIT tick of the spawn clock: decrement the head delay and pull
     /// every due record into a live entity.
     ///

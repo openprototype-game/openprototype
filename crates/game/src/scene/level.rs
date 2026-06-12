@@ -748,6 +748,11 @@ impl LevelScene {
                             );
 
                             if let Some(old) = self.spawns.take() {
+                                // The respawn handler never touches the
+                                // orb-drop countdown (L2 0x788b..0x7935 has
+                                // no cs:0x2848 write): the pebble cadence
+                                // carries across deaths.
+                                fresh.set_orb_drop_countdown(old.orb_drop_countdown());
                                 fresh.effects = old.effects;
                             }
 
