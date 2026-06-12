@@ -627,6 +627,61 @@ mod tests {
         assert_eq!(decoded, save);
     }
 
+    /// A real save created by the original engine in DOSBox (slot 1 of the
+    /// fixture capture session: L2 entered with a 25,000-point carry).
+    const DOSBOX_RACE_SAVE: &[u8] = include_bytes!("../tests/fixtures/l2-race.psg");
+
+    #[test]
+    fn the_dosbox_race_save_decodes() {
+        let save = SaveGame::decode(DOSBOX_RACE_SAVE).expect("ground truth decodes");
+
+        assert_eq!(save.level, Level::L2);
+        assert_eq!(save.state.score, 25_000);
+        assert_eq!(save.state.lives.get(), 4);
+        assert_eq!(save.state.smart_bombs.get(), 2);
+        // The capture entered with a carry of {2, 1, 3, 1} weapon levels.
+        assert_eq!(save.state.level(Weapon::Multishot).get(), 2);
+        assert_eq!(save.state.level(Weapon::Burning).get(), 1);
+        assert_eq!(save.state.level(Weapon::Plasma).get(), 3);
+        assert_eq!(save.state.level(Weapon::Missile).get(), 1);
+        assert_eq!(save.records.len(), 67);
+        assert_eq!(save.cursor, 5);
+        assert_eq!(save.orb_drop_countdown, 3);
+        assert!(!save.level_end);
+        assert_eq!((save.ship_x, save.ship_y), (120, 23));
+        assert_eq!(save.ship_ramp, 10);
+        assert_eq!(save.ship_roll, 8);
+        assert_eq!(save.speed_level, 0);
+        assert_eq!(save.scroll_accums, [0x30c0, 0x618, 0xa28, 0x2080]);
+        // Five live obstacles, two carrying the player's symbolic shot
+        // damage, including the table's stack-of-three thin bars.
+        assert_eq!(save.entities.len(), 5);
+        assert_eq!(save.entities[0].kind, 0x3e1c);
+        assert_eq!(save.entities[0].health, 31_964);
+        assert_eq!(save.entities[1].kind, 0x3f2a);
+        assert_eq!(save.entities[2].kind, 0x3eb2);
+        assert_eq!(save.entities[2].health, 31_928);
+        assert_eq!(save.entities[4].kind, 0x3eb2);
+        assert!(save.enemy_shots.is_empty());
+        assert!(save.effects.is_empty());
+    }
+
+    #[test]
+    fn re_encoding_the_dosbox_save_is_idempotent() {
+        let save = SaveGame::decode(DOSBOX_RACE_SAVE).expect("ground truth decodes");
+        let encoded = save.encode();
+
+        assert_eq!(encoded.len(), DOSBOX_RACE_SAVE.len());
+        assert_eq!(SaveGame::decode(&encoded).expect("re-decodes"), save);
+    }
+
+    #[test]
+    fn the_shooter_saves_are_rejected_until_their_codec_lands() {
+        let bytes = include_bytes!("../tests/fixtures/l1.psg");
+
+        assert!(SaveGame::decode(bytes).is_err());
+    }
+
     #[test]
     fn the_wrong_length_is_rejected() {
         assert!(SaveGame::decode(&[0u8; 100]).is_err());
