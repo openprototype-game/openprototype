@@ -527,6 +527,72 @@ impl SaveGame {
     }
 }
 
+/// What one saved scroll-accumulator slot drives, for the save/restore
+/// mapping between the list and the port's scroll state.
+#[derive(Clone, Copy)]
+pub enum ScrollSlot {
+    /// A scenery layer's accumulator (the port's layer index; the save
+    /// order does not always match the layer order — L1's three layers
+    /// save as {16, 6, 10} against draw order {6, 10, 16}).
+    Scenery(usize),
+    /// A free-running accumulator the port does not model: the races' two
+    /// star planes (clock-scattered on every init, not restorable in the
+    /// original either) and the dead layer slots some levels keep ticking.
+    /// Saved as its rate times the elapsed ticks, which matches the
+    /// original until the reference strip's first wrap.
+    Derived,
+}
+
+/// One level's saved accumulator order: the leading slots, then the SP
+/// background strips one-to-one, then any trailing slots (L3 keeps a dead
+/// slot after its strip).
+pub struct ScrollLayout {
+    pub leading: &'static [ScrollSlot],
+    pub strips: usize,
+    pub trailing: &'static [ScrollSlot],
+}
+
+/// The level's saved accumulator order (ground truth: the fixtures' rate
+/// constants matched against the port's layer and strip tables).
+pub fn scroll_layout(level: Level) -> ScrollLayout {
+    use ScrollSlot::{Derived, Scenery};
+
+    match level {
+        Level::L1 => ScrollLayout {
+            leading: &[Scenery(2), Scenery(0), Scenery(1)],
+            strips: 7,
+            trailing: &[],
+        },
+        Level::L2 | Level::L4 | Level::L6 => ScrollLayout {
+            leading: &[Scenery(0), Derived, Derived],
+            strips: 1,
+            trailing: &[],
+        },
+        Level::L3 => ScrollLayout {
+            leading: &[Scenery(0), Scenery(1), Scenery(2)],
+            strips: 1,
+            trailing: &[Derived],
+        },
+        Level::L5 => ScrollLayout {
+            leading: &[Scenery(0), Scenery(1), Derived],
+            strips: 4,
+            trailing: &[],
+        },
+        Level::L7 => ScrollLayout {
+            leading: &[Scenery(0), Scenery(1), Derived],
+            strips: 65,
+            trailing: &[],
+        },
+    }
+}
+
+/// The per-tick rate of each saved accumulator slot, for the derived
+/// slots and the elapsed-tick estimate (the first strip's rate is at
+/// index `leading.len()`).
+pub fn scroll_consts(level: Level) -> &'static [u32] {
+    BlockMap::of(level).scroll_consts
+}
+
 fn weapon_index(weapon: Weapon) -> u16 {
     match weapon {
         Weapon::Multishot => 1,

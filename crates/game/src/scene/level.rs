@@ -255,12 +255,11 @@ impl LevelScene {
     /// play resumes frozen on GET READY. The shield bubble tracks whatever
     /// invincibility the snapshot carried.
     ///
-    /// The scroll accumulators: the SP background strips start at index 3
-    /// in every level's saved list and restore one-to-one; accumulator 0
-    /// drives the first scenery layer. TODO: the remaining leading
-    /// accumulators (further scenery layers; the races' star planes, whose
-    /// scatter is clock-seeded and not restorable in the original either)
-    /// are not mapped yet.
+    /// The scroll accumulators restore through the level's saved slot
+    /// order ([`crate::savegame::scroll_layout`]): the scenery layers and
+    /// the SP background strips one-to-one. The derived slots (the races'
+    /// star planes, the dead layer slots) have no port state to restore —
+    /// the original cannot restore the star scatter either.
     pub fn from_save(assets: Rc<LevelAssets>, save: crate::savegame::SaveGame) -> Self {
         let mut scene = Self::new(assets, save.level, save.handoff(), 0);
 
@@ -285,14 +284,25 @@ impl LevelScene {
             &scene.assets.wad,
             scene.assets.cs_base,
         ));
-        for (strip, accum) in save.scroll_accums.iter().skip(3).enumerate() {
-            scene.background_scroll.restore_offset(strip, *accum);
+        let layout = crate::savegame::scroll_layout(save.level);
+
+        for (index, slot) in layout.leading.iter().enumerate() {
+            if let (crate::savegame::ScrollSlot::Scenery(layer), Some(&accum)) =
+                (slot, save.scroll_accums.get(index))
+            {
+                scene
+                    .assets
+                    .scenery
+                    .restore_offset(&mut scene.scenery_scroll, *layer, accum);
+            }
         }
 
-        scene
-            .assets
-            .scenery
-            .restore_offset(&mut scene.scenery_scroll, 0, save.scroll_accums[0]);
+        for strip in 0..layout.strips {
+            if let Some(&accum) = save.scroll_accums.get(layout.leading.len() + strip) {
+                scene.background_scroll.restore_offset(strip, accum);
+            }
+        }
+
         scene.render();
 
         scene
@@ -303,12 +313,12 @@ impl LevelScene {
     ///
     /// The schedule stores the head record's delay decayed to the live
     /// countdown, the way the original's ISR-mutated table reads when the
-    /// writer dumps it. The accumulator mapping mirrors the restore (race
-    /// only so far): accumulator 3 is the SP background strip, 0 the nebula
-    /// scenery layer. The star-plane accumulators 1 and 2 are not tracked by
-    /// the port; they derive from the background by their rate ratio, which
-    /// matches the original until its first wrap (and their scatter is
-    /// clock-seeded on every load anyway).
+    /// writer dumps it. The accumulators come from the level's saved slot
+    /// order ([`crate::savegame::scroll_layout`]): scenery layers and SP
+    /// strips from the live scroll state, the derived slots (star planes,
+    /// dead layer slots) as rate times the elapsed-tick estimate, which
+    /// matches the original until the first strip's wrap (their values are
+    /// not restorable noise either way).
     pub fn to_save(&self) -> crate::savegame::SaveGame {
         let (records, cursor, orb_drop_countdown, level_end, entities, enemy_shots, effects) =
             match &self.spawns {
@@ -328,8 +338,32 @@ impl LevelScene {
                 None => (Vec::new(), 0, 0, false, Vec::new(), Vec::new(), Vec::new()),
             };
 
-        let background = self.background_scroll.offset(0);
-        let elapsed_ticks = background / 0x20;
+        let layout = crate::savegame::scroll_layout(self.level);
+        let consts = crate::savegame::scroll_consts(self.level);
+        let elapsed_ticks = self.background_scroll.offset(0) / consts[layout.leading.len()].max(1);
+
+        let slot_value = |index: usize, slot: &crate::savegame::ScrollSlot| match slot {
+            crate::savegame::ScrollSlot::Scenery(layer) => self.scenery_scroll.offset(*layer),
+            crate::savegame::ScrollSlot::Derived => elapsed_ticks * consts[index],
+        };
+
+        let mut scroll_accums = Vec::with_capacity(consts.len());
+
+        for (index, slot) in layout.leading.iter().enumerate() {
+            scroll_accums.push(slot_value(index, slot));
+        }
+
+        for strip in 0..layout.strips {
+            scroll_accums.push(self.background_scroll.offset(strip));
+        }
+
+        for (offset, slot) in layout.trailing.iter().enumerate() {
+            scroll_accums.push(slot_value(
+                layout.leading.len() + layout.strips + offset,
+                slot,
+            ));
+        }
+
         let (ship_x, ship_y) = self.ship.position();
 
         crate::savegame::SaveGame {
@@ -346,12 +380,7 @@ impl LevelScene {
             ship_y,
             ship_ramp: self.ship.ramp(),
             ship_roll: self.ship.roll_frame() as i32,
-            scroll_accums: vec![
-                self.scenery_scroll.offset(0),
-                elapsed_ticks * 6,
-                elapsed_ticks * 0xa,
-                background,
-            ],
+            scroll_accums,
             speed_level: self.camera_y as u16,
         }
     }
@@ -394,14 +423,6 @@ impl LevelScene {
 
     /// Write the running level into a slot.
     fn menu_save(&mut self, slot: usize) {
-        // TODO: lift once the shooter codec lands; only the race levels
-        // encode so far.
-        if !matches!(self.level, Level::L2 | Level::L4 | Level::L6) {
-            tracing::warn!("saving shooter levels is not implemented yet");
-
-            return;
-        }
-
         let save = self.to_save();
 
         if let Some(menu) = &mut self.menu {
@@ -1275,6 +1296,44 @@ mod tests {
         resaved.scroll_accums[0] = expected.scroll_accums[0];
 
         assert_eq!(resaved, expected);
+    }
+
+    #[test]
+    fn to_save_round_trips_a_restored_shooter_level() {
+        let save = crate::savegame::SaveGame::decode(include_bytes!("../../tests/fixtures/l1.psg"))
+            .expect("the ground-truth fixture decodes");
+        let expected = save.clone();
+
+        // The synthetic assets' Canyon background has L1's seven strips, so
+        // the strip accumulators carry across the round trip; the scenery
+        // and derived slots have no synthetic state to live in.
+        let scene = LevelScene::from_save(Rc::new(test_level_assets()), save);
+        let mut resaved = scene.to_save();
+        resaved.scroll_accums[..3].copy_from_slice(&expected.scroll_accums[..3]);
+
+        assert_eq!(resaved, expected);
+    }
+
+    #[test]
+    fn the_menu_saves_a_shooter_level_into_a_loadable_slot() {
+        let (_dir, store) = temp_store();
+        let mut scene = LevelScene::from_save(
+            Rc::new(test_level_assets()),
+            crate::savegame::SaveGame::decode(include_bytes!("../../tests/fixtures/l1.psg"))
+                .expect("the ground-truth fixture decodes"),
+        );
+        scene.menu = Some(InGameMenu::new(Some(store)));
+
+        // SAVE GAME (third item), slot 1.
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Down);
+        press(&mut scene, Key::Enter);
+        press(&mut scene, Key::Enter);
+
+        let menu = scene.menu.as_ref().expect("the menu shows the toast");
+        let written = menu.load_from(0).expect("the slot reads back");
+        assert_eq!(written.level, Level::L1);
+        assert_eq!(written.state.score, 25_170);
     }
 
     #[test]
