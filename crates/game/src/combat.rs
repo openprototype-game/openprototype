@@ -13,7 +13,7 @@
 
 use crate::shots::Weapons;
 use crate::spawns::{Effect, Entity, Spawns, descriptor_debris, descriptor_hitboxes};
-use openprototype_core::game_state::{GameState, HitOutcome, Severity};
+use openprototype_core::game_state::{ActiveWeapon, GameState, HitOutcome, Severity};
 
 /// What a combat pass tells the scene.
 #[derive(Default)]
@@ -418,6 +418,7 @@ mod tests {
             &mut spawns,
             &rects_at(100, 50),
             &mut state,
+            Weapon::Multishot.into(),
             &[],
             0,
             &mut events,
@@ -439,12 +440,13 @@ mod tests {
             &mut spawns,
             &rects_at(100, 50),
             &mut state,
+            Weapon::Multishot.into(),
             &[],
             0,
             &mut events,
         );
 
-        // The selected bar zeroes, the rammed enemy dies and is reaped.
+        // The firing bar zeroes, the rammed enemy dies and is reaped.
         assert_eq!(state.level(Weapon::Multishot).get(), 0);
         assert_eq!(events.ship, Some(HitOutcome::Absorbed));
         assert!(spawns.entities.is_empty() || spawns.entities[0].kind == 0x36ea);
@@ -593,10 +595,17 @@ fn shot_size(wad: &[u8], cs_base: usize, sprite: u16) -> (i32, i32) {
 /// smart-bomb corruption edge case are not reproduced). A rammed enemy costs
 /// the ship a [`Severity::Collision`] hit and dies in place unless it is an
 /// orbiter or the boss; the deaths run through [`reap`] with the rest.
+///
+/// `firing` is the fire system's resolved firing weapon (`cs:0xcb5`). The
+/// original's ram zero-out reverts it to the minigun inside the contact loop
+/// (file `0xdcf1`), so a second contact in the same pass lands on the bare
+/// chaingun and kills; the local revert below reproduces that, while the
+/// fire system's own revert happens off the `ram` event afterwards.
 pub fn body_contact(
     spawns: &mut Spawns,
     rects: &ShipRects,
     state: &mut GameState,
+    mut firing: ActiveWeapon,
     wad: &[u8],
     cs_base: usize,
     events: &mut CombatEvents,
@@ -637,10 +646,14 @@ pub fn body_contact(
             // Race mode: an earlier contact's grace window is still open.
             index += 1;
         } else {
-            match state.take_hit(Severity::Collision) {
+            match state.take_hit(Severity::Collision, firing) {
                 // Invincible: the ram has no effect on either side.
                 HitOutcome::Shielded => {}
                 outcome => {
+                    if outcome == HitOutcome::Absorbed {
+                        firing = ActiveWeapon::Chaingun;
+                    }
+
                     events.ship = merge_ship_outcome(events.ship, outcome);
                     events.ram = merge_ship_outcome(events.ram, outcome);
                     rammed = true;

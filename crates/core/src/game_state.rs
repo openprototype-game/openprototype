@@ -319,26 +319,32 @@ impl GameState {
         self.invincible_ticks > 0
     }
 
-    /// Applies a hit. While invincible nothing happens; otherwise a charged
-    /// weapon absorbs it (zeroed by a [`Collision`](Severity::Collision),
-    /// drained one level by a [`Bullet`](Severity::Bullet)) and the ship
-    /// survives, while a hit on the bare chaingun is fatal. See
-    /// `reference/combat.md`.
+    /// Applies a hit. While invincible nothing happens; otherwise the
+    /// `firing` weapon absorbs it (zeroed by a
+    /// [`Collision`](Severity::Collision), drained one level by a
+    /// [`Bullet`](Severity::Bullet)) and the ship survives, while a hit on
+    /// the bare chaingun is fatal. See `reference/combat.md`.
+    ///
+    /// `firing` is the resolved firing weapon (`cs:0xcb5`), owned by the
+    /// fire system because it freezes across a held burst: after a mid-burst
+    /// weapon cycle it differs from `selected`, and the original's hit
+    /// consequence (file `0xc4b7`) and ram zero-out (file `0xdcf1`) both
+    /// index off it, not the selector.
     ///
     /// A fatal hit does not touch the lives counter: the caller plays the
     /// death sequence and calls [`Self::lose_life`] when it ends, matching
     /// the original (the dying flag is set at the hit, the decrement and the
     /// game-over check live in the respawn handler).
-    pub fn take_hit(&mut self, severity: Severity) -> HitOutcome {
+    pub fn take_hit(&mut self, severity: Severity, firing: ActiveWeapon) -> HitOutcome {
         if self.is_invincible() {
             return HitOutcome::Shielded;
         }
 
-        if self.active_weapon() == ActiveWeapon::Chaingun {
+        let ActiveWeapon::Selected(weapon) = firing else {
             return HitOutcome::Died;
-        }
+        };
 
-        let level = self.weapons.get_mut(self.selected);
+        let level = self.weapons.get_mut(weapon);
         *level = match severity {
             Severity::Collision => WeaponLevel::new(0),
             Severity::Bullet => level.saturating_sub(1),
@@ -543,7 +549,10 @@ mod tests {
     fn take_hit_is_ignored_while_invincible() {
         let mut state = with_selected_level(Weapon::Multishot, 3);
         state.invincible_ticks = 10;
-        assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Shielded);
+        assert_eq!(
+            state.take_hit(Severity::Collision, Weapon::Multishot.into()),
+            HitOutcome::Shielded
+        );
         assert_eq!(state.level(Weapon::Multishot).get(), 3);
         assert_eq!(state.lives.get(), 3);
         assert_eq!(state.invincible_ticks, 10);
@@ -552,7 +561,10 @@ mod tests {
     #[test]
     fn collision_zeroes_a_charged_weapon_without_costing_a_life() {
         let mut state = with_selected_level(Weapon::Multishot, 3);
-        assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Absorbed);
+        assert_eq!(
+            state.take_hit(Severity::Collision, Weapon::Multishot.into()),
+            HitOutcome::Absorbed
+        );
         assert_eq!(state.level(Weapon::Multishot).get(), 0);
         assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(state.lives.get(), 3);
@@ -561,14 +573,20 @@ mod tests {
     #[test]
     fn bullet_drains_one_level_of_a_charged_weapon() {
         let mut state = with_selected_level(Weapon::Multishot, 3);
-        assert_eq!(state.take_hit(Severity::Bullet), HitOutcome::Absorbed);
+        assert_eq!(
+            state.take_hit(Severity::Bullet, Weapon::Multishot.into()),
+            HitOutcome::Absorbed
+        );
         assert_eq!(state.level(Weapon::Multishot).get(), 2);
     }
 
     #[test]
     fn bullet_emptying_the_last_level_reverts_to_the_chaingun() {
         let mut state = with_selected_level(Weapon::Multishot, 1);
-        assert_eq!(state.take_hit(Severity::Bullet), HitOutcome::Absorbed);
+        assert_eq!(
+            state.take_hit(Severity::Bullet, Weapon::Multishot.into()),
+            HitOutcome::Absorbed
+        );
         assert_eq!(state.level(Weapon::Multishot).get(), 0);
         assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
     }
@@ -576,9 +594,28 @@ mod tests {
     #[test]
     fn a_hit_on_the_chaingun_is_fatal_but_defers_the_life_loss() {
         let mut state = fresh();
-        assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Died);
+        assert_eq!(
+            state.take_hit(Severity::Collision, ActiveWeapon::Chaingun),
+            HitOutcome::Died
+        );
         assert_eq!(state.lives.get(), 3);
         assert_eq!(state.invincible_ticks, 0);
+    }
+
+    #[test]
+    fn a_hit_drains_the_frozen_firing_weapon_not_the_selection() {
+        // Cycling weapons mid-burst moves the selector while the firing
+        // weapon stays frozen; the hit lands on the frozen one.
+        let mut state = with_selected_level(Weapon::Burning, 2);
+        *state.weapons.get_mut(Weapon::Missile) = WeaponLevel::new(2);
+        state.selected = Weapon::Missile;
+
+        assert_eq!(
+            state.take_hit(Severity::Bullet, Weapon::Burning.into()),
+            HitOutcome::Absorbed
+        );
+        assert_eq!(state.level(Weapon::Burning).get(), 1);
+        assert_eq!(state.level(Weapon::Missile).get(), 2);
     }
 
     #[test]
@@ -597,11 +634,18 @@ mod tests {
     #[test]
     fn two_hits_in_a_row_zero_the_bar_then_turn_fatal() {
         let mut state = with_selected_level(Weapon::Burning, 4);
-        assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Absorbed);
+        assert_eq!(
+            state.take_hit(Severity::Collision, Weapon::Burning.into()),
+            HitOutcome::Absorbed
+        );
         assert_eq!(state.active_weapon(), ActiveWeapon::Chaingun);
         assert_eq!(state.lives.get(), 3);
 
-        assert_eq!(state.take_hit(Severity::Collision), HitOutcome::Died);
+        // The fire system reverted the firing weapon after the zero-out.
+        assert_eq!(
+            state.take_hit(Severity::Collision, ActiveWeapon::Chaingun),
+            HitOutcome::Died
+        );
         assert_eq!(state.lives.get(), 3);
     }
 }

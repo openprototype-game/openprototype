@@ -776,13 +776,17 @@ impl LevelScene {
         };
 
         for _ in 0..combat::enemy_shots_vs_ship(spawns, wad, cs_base, &rects) {
-            let outcome = self.state.take_hit(Severity::Bullet);
+            let firing = self.weapons.firing();
+            let outcome = self.state.take_hit(Severity::Bullet, firing);
             events.ship = merge_outcome(events.ship, outcome);
 
             if outcome == HitOutcome::Absorbed {
                 // A drain to zero loses the weapon mid-hold (the original's
                 // immediate revert to the minigun, with its own sound).
-                if self.state.level(self.state.selected).get() == 0 {
+                let lost = matches!(firing, ActiveWeapon::Selected(weapon)
+                    if self.state.level(weapon).get() == 0);
+
+                if lost {
                     self.weapons.weapon_lost();
                     self.sfx.weapon_lost(&self.assets.sfx, audio);
                 } else {
@@ -791,7 +795,15 @@ impl LevelScene {
             }
         }
 
-        combat::body_contact(spawns, &rects, &mut self.state, wad, cs_base, &mut events);
+        combat::body_contact(
+            spawns,
+            &rects,
+            &mut self.state,
+            self.weapons.firing(),
+            wad,
+            cs_base,
+            &mut events,
+        );
 
         self.state.add_score(events.score);
 
