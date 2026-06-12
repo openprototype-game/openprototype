@@ -95,7 +95,12 @@ impl StarField {
         for plane in &self.planes {
             for &(star_x, star_y) in &plane.stars {
                 let x = star_x / SUBPIXEL;
-                let y = star_y / SUBPIXEL - camera_y;
+                // The plotter writes its buffer row WITHOUT the +0x50 row
+                // convention every other compositor uses, and the blit
+                // never shows buffer row 0: stars land one screen row
+                // higher than a direct mapping, and a star parked at row 0
+                // (the races' unseeded plane B) is never drawn.
+                let y = star_y / SUBPIXEL - 1 - camera_y;
 
                 if x < 0 || x >= width || y < 0 || y >= playfield_rows {
                     continue;
