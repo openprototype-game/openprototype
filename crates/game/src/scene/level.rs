@@ -178,6 +178,9 @@ pub struct LevelScene {
     /// during the lowering half of a switch this is still the OLD weapon, and
     /// it relatches to the firing weapon when the frame underflows.
     pod_weapon: ActiveWeapon,
+    /// The level's first frozen tick has happened: the baked full-bright
+    /// blend buffer was uploaded and the stepper owns the entries now.
+    pulse_primed: bool,
     /// The switch machine's phase (`cs:0x2698`): lowering back to 0 before
     /// the rise. Armed by the weapon resolve (L1 file 0xae81), a weapon loss
     /// (0xc529) and a savegame load (0x9dd3/0x9dd9).
@@ -299,6 +302,7 @@ impl LevelScene {
             esc_debounce: 0,
             pulse_value: PULSE_START,
             pulse_rising: false,
+            pulse_primed: false,
         };
 
         if !matches!(scene.flow, Flow::GameOver) {
@@ -1182,7 +1186,23 @@ impl LevelScene {
     /// `v`. The lerp reads `v` before the step, and the last
     /// blend persists after unfreeze (nothing restores the entries; the WAD
     /// palette only bakes placeholders there).
+    ///
+    /// The level's very first frozen tick instead uploads the image-baked
+    /// blend buffer, which carries the FULL-BRIGHT target colors (L1
+    /// `0x9d37`, L2 `0x783e`): one full-bright flash before the v = 0x30
+    /// blend takes over.
     fn pulse_freeze_palette(&mut self) {
+        if !self.pulse_primed {
+            self.pulse_primed = true;
+
+            for (entry, target) in PULSE_ENTRIES {
+                self.frame.palette.colors[entry] =
+                    Rgb::from_vga_6bit(target[0], target[1], target[2]);
+            }
+
+            return;
+        }
+
         for (entry, target) in PULSE_ENTRIES {
             let mut blended = [0u8; 3];
 
@@ -2020,8 +2040,16 @@ mod tests {
         );
         assert!(matches!(scene.flow, Flow::GetReady { .. }));
 
-        // The first frozen tick lerps at the baked level 0x30: white blends
-        // to 0x3f*0x30/0x40 over the shared (0, 0, 0x20) endpoint.
+        // The first frozen tick uploads the image-baked blend buffer: the
+        // full-bright targets, one flash.
+        scene.update(TICK, &[]);
+        assert_eq!(
+            scene.framebuffer().palette.colors[0xff],
+            Rgb::from_vga_6bit(0x3f, 0x3f, 0x3f)
+        );
+
+        // The next tick lerps at the baked level 0x30: white blends to
+        // 0x3f*0x30/0x40 over the shared (0, 0, 0x20) endpoint.
         scene.update(TICK, &[]);
         assert_eq!(
             scene.frame.palette.colors[0xff],
