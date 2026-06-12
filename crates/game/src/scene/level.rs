@@ -257,7 +257,10 @@ impl LevelScene {
             camera_y,
             overlay_x: OVERLAY_X,
             overlay_offset_y: OVERLAY_OFFSET_Y,
-            pod_frame: POD_SETTLED_FRAME,
+            // Level entry bakes the pod pop-up flag (cs:0x2697 = 5 in the
+            // L1 image, congruent in every WAD), so the pod starts empty
+            // and the active weapon rises once play begins.
+            pod_frame: 0,
             pod_ticks: 0,
             tick_elapsed: Duration::ZERO,
             paused: false,
@@ -1333,7 +1336,7 @@ mod tests {
     }
 
     #[test]
-    fn starts_bare_with_the_spawn_shield_and_the_pod_settled() {
+    fn starts_bare_with_the_spawn_shield_and_the_pod_down() {
         let scene = test_scene();
 
         for weapon in Weapon::ALL {
@@ -1347,7 +1350,8 @@ mod tests {
             scene.assets.combat.respawn_invincibility
         );
         assert_eq!(scene.state.active_weapon(), ActiveWeapon::Chaingun);
-        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+        // The baked pop-up flag: the pod rises once play begins.
+        assert_eq!(scene.pod_frame, 0);
         assert_eq!(scene.camera_y, 0);
     }
 
