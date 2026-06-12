@@ -5,17 +5,15 @@
 //! menu. From the menu there is never a qualifying score, so this is the
 //! read-only path; name entry (a won game) needs the level engine.
 //!
-//! Each entry flies in with a zoom (`0x2670`): the line, at its final
-//! position, is scaled about the screen center (160, 100) by
-//! `25 / (step + 1)` over 25 steps (`K = 1000`, the counter `cs:[0x2643]`
-//! 960→0 by 40, so `K - counter = 40·(step + 1)`). Rows above mid-screen fly
-//! down from above, rows below fly up, and the middle rows mostly just
-//! shrink in place; the composite touches rows 0..194 only. The fast-then-slow
-//! look comes entirely from that hyperbolic ramp, not the pacing: the scaler's
-//! inner loop runs a fixed 195 rows per step regardless of zoom, so every step
-//! is the same constant work and the timing is uniform. There is no retrace or
-//! timer wait. The absolute per-step pace is set from a recording (see
-//! `STEP_DURATION`).
+//! Each entry flies in through the 25-step zoom reveal (the scaler at file
+//! `0x2870`, shared with the ending; see [`crate::zoom`]): the row, drawn at
+//! its final position on a transparent page, zooms out from 25x over the
+//! settled screen (the FLI's last frame plus the rows already landed). Rows
+//! above mid-screen fly down from above, rows below fly up, and the middle
+//! rows shrink in place; the fast-then-slow look comes entirely from the
+//! hyperbolic scale ramp, not the pacing — every step is the same constant
+//! work, with no retrace or timer wait. The absolute per-step pace is set
+//! from a recording (see `STEP_DURATION`).
 //!
 //! The fly-in cannot be interrupted. A key aborts the FLI playback and stays
 //! pending until the final blocking key read consumes it, so a key pressed
@@ -30,6 +28,7 @@ use crate::assets::HighscoreAssets;
 use crate::flic_player::FlicPlayer;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::zoom;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 
@@ -42,19 +41,10 @@ const FLI_FRAME_DELAY: Duration = Duration::from_micros(4 * 1_000_000 / 70);
 const ENTRY_X: i32 = 0;
 const FIRST_ROW_Y: i32 = 65;
 const ROW_HEIGHT: i32 = 16;
-const STRIP_HEIGHT: u32 = 15;
 
-/// The fly-in ramp: 25 steps, size `25 / (step + 1)` (`0x2670`).
-const FLY_STEPS: usize = 25;
 /// Per-step duration. Steps advance at a uniform rate; a recording of the
 /// original runs the eight-entry fly-in over ~25s, so `8 * 25` steps ≈ 125ms each.
 const STEP_DURATION: Duration = Duration::from_millis(125);
-/// The zoom's fixed point: the in-flight line scales about the screen center,
-/// so its apparent center is `100 + (final_y - 100) * scale`.
-const SCREEN_CENTER_Y: f32 = 100.0;
-/// The original's scaler composites output rows 0..194 only; the zoomed text
-/// never touches the bottom five rows.
-const COMPOSITE_ROWS: f32 = 195.0;
 
 enum Phase {
     /// `HIGHSCOR.FLI` is playing.
@@ -66,12 +56,13 @@ enum Phase {
 }
 
 /// State of the entry fly-in: the backdrop (FLI frame plus already-landed
-/// entries), the per-entry text strips, and which entry/step is in flight.
+/// entries), the in-flight entry's source page (the row at its final
+/// position, index 0 transparent), and which entry/step is in flight.
 struct FlyIn {
     backdrop: Framebuffer,
-    strips: Vec<IndexedImage>,
+    src: IndexedImage,
     entry: usize,
-    step: usize,
+    step: u32,
     elapsed: Duration,
 }
 
@@ -106,21 +97,6 @@ impl HighscoreScreen {
         screen
     }
 
-    /// Render an entry's text to a transparent strip (index 0 = transparent).
-    fn strip(&self, entry: usize) -> IndexedImage {
-        let highscore = &self.scores.entries()[entry];
-        let text = format!("{:.<13} {:06}", highscore.name, highscore.score);
-
-        let mut strip = IndexedImage::new(
-            Dimensions::new(SCREEN_WIDTH, STRIP_HEIGHT),
-            vec![0u8; (SCREEN_WIDTH * STRIP_HEIGHT) as usize],
-        )
-        .expect("strip matches its dimensions");
-
-        self.assets.font.draw_into(&mut strip, ENTRY_X, 0, &text);
-        strip
-    }
-
     /// Begin the fly-in: the current framebuffer (the FLI's last frame, or
     /// black) becomes the backdrop the entries fly onto.
     fn start_fly_in(&mut self) {
@@ -128,13 +104,10 @@ impl HighscoreScreen {
             image: self.framebuffer.image.clone(),
             palette: self.framebuffer.palette.clone(),
         };
-        let strips = (0..self.scores.entries().len())
-            .map(|entry| self.strip(entry))
-            .collect();
 
         self.phase = Phase::FlyingIn(Box::new(FlyIn {
             backdrop,
-            strips,
+            src: entry_page(&self.assets, &self.scores, 0),
             entry: 0,
             step: 0,
             elapsed: Duration::ZERO,
@@ -162,15 +135,12 @@ impl HighscoreScreen {
             .copy_from_slice(&fly.backdrop.image.pixels);
         self.framebuffer.palette = fly.backdrop.palette.clone();
 
-        if fly.entry < fly.strips.len() {
-            // The strip spans the full width, so scaling it about the screen's
-            // center column equals the original's zoom about (160, 100).
-            blit_scaled(
+        if fly.entry < self.scores.entries().len() {
+            zoom::composite_step(
+                &fly.src,
+                &fly.backdrop.image,
+                fly.step + 1,
                 &mut self.framebuffer.image,
-                &fly.strips[fly.entry],
-                step_scale(fly.step),
-                SCREEN_WIDTH as f32 / 2.0,
-                fly_in_center_y(fly.entry, fly.step),
             );
         }
     }
@@ -231,6 +201,7 @@ impl Scene for HighscoreScreen {
 
 impl HighscoreScreen {
     fn advance_fly_in(&mut self, dt: Duration) {
+        let entries = self.scores.entries().len();
         let Phase::FlyingIn(fly) = &mut self.phase else {
             return;
         };
@@ -243,17 +214,19 @@ impl HighscoreScreen {
             fly.elapsed -= STEP_DURATION;
             fly.step += 1;
 
-            if fly.step >= FLY_STEPS {
+            if fly.step >= zoom::STEPS {
                 // The entry has reached full size: bake it into the backdrop and
                 // move to the next, or finish.
-                land_entry(fly);
+                land(&mut fly.backdrop.image, &fly.src);
                 fly.entry += 1;
                 fly.step = 0;
 
-                if fly.entry >= fly.strips.len() {
+                if fly.entry >= entries {
                     finished = true;
                     break;
                 }
+
+                fly.src = entry_page(&self.assets, &self.scores, fly.entry);
             }
         }
 
@@ -271,10 +244,16 @@ impl HighscoreScreen {
     /// Settle the table: bake any entries still in flight into the backdrop
     /// at full size and rest.
     fn land_all_entries(&mut self) {
+        let entries = self.scores.entries().len();
+
         if let Phase::FlyingIn(fly) = &mut self.phase {
-            while fly.entry < fly.strips.len() {
-                land_entry(fly);
+            while fly.entry < entries {
+                land(&mut fly.backdrop.image, &fly.src);
                 fly.entry += 1;
+
+                if fly.entry < entries {
+                    fly.src = entry_page(&self.assets, &self.scores, fly.entry);
+                }
             }
 
             self.framebuffer
@@ -288,75 +267,34 @@ impl HighscoreScreen {
     }
 }
 
-/// Draw the current entry into the backdrop at full size and final position.
-fn land_entry(fly: &mut FlyIn) {
-    blit_scaled(
-        &mut fly.backdrop.image,
-        &fly.strips[fly.entry],
-        1.0,
-        SCREEN_WIDTH as f32 / 2.0,
-        resting_center_y(fly.entry),
+/// Render an entry's source page: the row at its final position on a
+/// transparent (all-zero) page, like the original's zero-filled src buffer.
+fn entry_page(assets: &HighscoreAssets, scores: &Highscores, entry: usize) -> IndexedImage {
+    let highscore = &scores.entries()[entry];
+    let text = format!("{:.<13} {:06}", highscore.name, highscore.score);
+
+    let mut page = IndexedImage::new(
+        Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
+        vec![0u8; (SCREEN_WIDTH * SCREEN_HEIGHT) as usize],
+    )
+    .expect("page matches its dimensions");
+
+    assets.font.draw_into(
+        &mut page,
+        ENTRY_X,
+        FIRST_ROW_Y + entry as i32 * ROW_HEIGHT,
+        &text,
     );
+
+    page
 }
 
-fn resting_center_y(entry: usize) -> f32 {
-    (FIRST_ROW_Y + entry as i32 * ROW_HEIGHT) as f32 + STRIP_HEIGHT as f32 / 2.0
-}
-
-/// The entry's scale at `step`: `25 / (step + 1)` (`0x2670`).
-fn step_scale(step: usize) -> f32 {
-    FLY_STEPS as f32 / (step + 1) as f32
-}
-
-/// The in-flight entry's apparent center: its resting center pushed away from
-/// the screen center by the zoom, collapsing onto its row as the scale reaches
-/// one. Entries above mid-screen fly down from above, those below fly up.
-fn fly_in_center_y(entry: usize, step: usize) -> f32 {
-    SCREEN_CENTER_Y + (resting_center_y(entry) - SCREEN_CENTER_Y) * step_scale(step)
-}
-
-/// Composite `strip` onto `target`, scaled by `scale` and centered at
-/// (`center_x`, `center_y`). Nearest-neighbor, inverse-mapped so large scales
-/// clip to the screen. Source index 0 is transparent.
-fn blit_scaled(
-    target: &mut IndexedImage,
-    strip: &IndexedImage,
-    scale: f32,
-    center_x: f32,
-    center_y: f32,
-) {
-    let dest_w = strip.size.width as f32 * scale;
-    let dest_h = strip.size.height as f32 * scale;
-    let left = center_x - dest_w / 2.0;
-    let top = center_y - dest_h / 2.0;
-
-    let x0 = left.floor().max(0.0) as i32;
-    let x1 = (left + dest_w).ceil().min(SCREEN_WIDTH as f32) as i32;
-    let y0 = top.floor().max(0.0) as i32;
-    // The composite stops at row 194, like the original's fixed 195-row scaler
-    // loop; the landed rows all sit above it, so only in-flight frames clip.
-    let y1 = (top + dest_h).ceil().min(COMPOSITE_ROWS) as i32;
-
-    for dy in y0..y1 {
-        let source_y = ((dy as f32 + 0.5 - top) / scale) as i32;
-
-        if source_y < 0 || source_y >= strip.size.height as i32 {
-            continue;
-        }
-
-        for dx in x0..x1 {
-            let source_x = ((dx as f32 + 0.5 - left) / scale) as i32;
-
-            if source_x < 0 || source_x >= strip.size.width as i32 {
-                continue;
-            }
-
-            let pixel =
-                strip.pixels[(source_y as u32 * strip.size.width + source_x as u32) as usize];
-
-            if pixel != 0 {
-                target.pixels[(dy as u32 * SCREEN_WIDTH + dx as u32) as usize] = pixel;
-            }
+/// Bake the landed page into the backdrop. The zoom's final step is an exact
+/// 1:1 composite, so landing is a plain transparent overlay.
+fn land(backdrop: &mut IndexedImage, src: &IndexedImage) {
+    for (target, &pixel) in backdrop.pixels.iter_mut().zip(&src.pixels) {
+        if pixel != 0 {
+            *target = pixel;
         }
     }
 }
@@ -435,18 +373,12 @@ mod tests {
     }
 
     #[test]
-    fn the_fly_in_zooms_about_the_screen_center() {
-        // The last step is scale 1: the entry sits exactly on its row.
-        assert_eq!(fly_in_center_y(0, FLY_STEPS - 1), resting_center_y(0));
-        assert_eq!(fly_in_center_y(7, FLY_STEPS - 1), resting_center_y(7));
+    fn landing_bakes_the_page_into_the_backdrop() {
+        let mut backdrop = IndexedImage::new(Dimensions::new(4, 1), vec![9, 9, 9, 9]).unwrap();
+        let src = IndexedImage::new(Dimensions::new(4, 1), vec![0, 5, 0, 7]).unwrap();
 
-        // At full zoom, entries above mid-screen start far off the top and
-        // entries below start far off the bottom.
-        assert!(fly_in_center_y(0, 0) < -500.0);
-        assert!(fly_in_center_y(7, 0) > 2000.0);
+        land(&mut backdrop, &src);
 
-        // An entry whose row straddles the center barely moves.
-        let near_center = fly_in_center_y(2, 0);
-        assert!((near_center - SCREEN_CENTER_Y).abs() < 200.0);
+        assert_eq!(backdrop.pixels, vec![9, 5, 9, 7]);
     }
 }
