@@ -275,9 +275,10 @@ impl SaveGame {
 
         put_word(block, 0xcc1, u16::from(self.state.smart_bombs.get()));
         block[0xcc3 - 0xcb4] = u8::from(self.level_end);
-        block[0xcc4 - 0xcb4] = 1;
         // Parities: both copies are written identically, current = 0.
-        // TODO at 0xcc7..0xccc: fire cooldown and muzzle-flash state.
+        // TODO at 0xcc7..0xccc: fire cooldown and muzzle-flash state
+        // (ground truth shows the firing weapon's authored cooldown here).
+        // TODO at 0xcde/0xce4: spawn-clock scratch seen as 01/03 live.
 
         let table_end = RACE_TABLE_OFFSET + self.records.len() * 8;
 
@@ -304,9 +305,20 @@ impl SaveGame {
             block[at..at + 4].copy_from_slice(&accum.to_le_bytes());
         }
 
-        for (index, constant) in [0x30u16, 6, 0xa, 0x20].iter().enumerate() {
-            block[0x2814 - 0xcb4 + index * 2..0x2814 - 0xcb4 + index * 2 + 2]
+        // The per-tick scroll constants are dwords (ground truth: values at
+        // stride 4 from 0x2814).
+        for (index, constant) in [0x30u32, 6, 0xa, 0x20].iter().enumerate() {
+            block[0x2814 - 0xcb4 + index * 4..0x2814 - 0xcb4 + index * 4 + 4]
                 .copy_from_slice(&constant.to_le_bytes());
+        }
+
+        // The ship-trail history rings (x at 0x282a, y at 0x2838, 7 words
+        // each); a save parked on the current position is consistent.
+        for slot in 0..7 {
+            block[0x282a - 0xcb4 + slot * 2..0x282a - 0xcb4 + slot * 2 + 2]
+                .copy_from_slice(&(self.ship_x as u16).to_le_bytes());
+            block[0x2838 - 0xcb4 + slot * 2..0x2838 - 0xcb4 + slot * 2 + 2]
+                .copy_from_slice(&(self.ship_y as u16).to_le_bytes());
         }
 
         put_word(block, 0x2824, self.ship_ramp as u16);
@@ -320,21 +332,20 @@ impl SaveGame {
         put_word(block, 0x2850, self.speed_level * 0x50);
         put_word(block, 0x2852, self.speed_level);
 
-        // Score, its digit caches, and the extra-life decade threshold.
+        // Score, the digit caches as the in-level load path reseeds them
+        // (0x0b = blank, forcing a full redraw), and the extra-life decade
+        // threshold.
         block[0x2873 - 0xcb4..0x2873 - 0xcb4 + 4].copy_from_slice(&self.state.score.to_le_bytes());
-
-        let mut rest = self.state.score;
-
-        for digit in 0..6 {
-            block[0x2872 - 0xcb4 - digit] = (rest % 10) as u8;
-            rest /= 10;
-        }
+        block[0x286d - 0xcb4..0x2873 - 0xcb4].fill(0x0b);
 
         put_word(block, 0x2877, (self.state.score / 10_000) as u16);
 
-        // HUD redraw flags, set like the in-level load path leaves them.
-        block[0x287b - 0xcb4] = 1;
+        // The in-level-load housekeeping byte (saved as 1 in ground truth)
+        // and the HUD redraw flags as a running game carries them.
+        block[0x2879 - 0xcb4] = 1;
         block[0x287c - 0xcb4] = 1;
+        // TODO at 0x2856..0x2862, 0x2865/0x2866, 0x2869/0x286b, 0x287d/
+        // 0x287f: engine scratch observed live; unmapped.
 
         block[0] = match self.level {
             Level::L2 => 2,
