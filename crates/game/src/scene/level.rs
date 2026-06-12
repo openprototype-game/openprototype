@@ -980,8 +980,12 @@ impl LevelScene {
             self.sfx.missile_impact(&self.assets.sfx, audio);
         }
 
-        for kind in &events.kills {
-            self.sfx.enemy_died(*kind, &self.assets.sfx, audio);
+        // The race WADs' death handlers have no sound call (L2 0x9bb6,
+        // byte-congruent in L4/L6); only the shooters voice their kills.
+        if !self.assets.combat.course_restart {
+            for kind in &events.kills {
+                self.sfx.enemy_died(*kind, &self.assets.sfx, audio);
+            }
         }
 
         if events.orb_dropped {
