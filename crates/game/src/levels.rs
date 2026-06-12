@@ -341,6 +341,12 @@ pub struct LevelData {
     pub catalog: Bin,
     /// File offset of the catalog descriptor table in the level's WAD.
     pub catalog_offset: usize,
+    /// Where the sprite descriptors' cell numbering starts in the decoded
+    /// catalog. The shooters' cells index from the table head (base 0); the
+    /// race catalogs carry a junk prefix, and their entity cells start at
+    /// scenery `cell_base - 273` (L2 695, L4 705, L6 833; verified by
+    /// matching descriptor dimensions against the decoded cells).
+    pub entity_cell_base: usize,
     /// Each weapon's overlay cells in [`LevelData::catalog`]. Found by
     /// content-matching L1's overlay sprites in each level's catalog. The
     /// chaingun has no overlay, so it has no entry.
@@ -444,6 +450,7 @@ impl Level {
                 background: Sp::Canyon,
                 catalog: Bin::Out,
                 catalog_offset: 0xf9f0,
+                entity_cell_base: 0,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0xEB,
@@ -553,6 +560,7 @@ impl Level {
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbf5a,
+                entity_cell_base: 695,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0x358,
@@ -647,6 +655,7 @@ impl Level {
                 background: Sp::Wald,
                 catalog: Bin::Wald,
                 catalog_offset: 0x134c0,
+                entity_cell_base: 0,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0xa1,
@@ -754,6 +763,7 @@ impl Level {
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbfd6,
+                entity_cell_base: 705,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0x362,
@@ -846,6 +856,7 @@ impl Level {
                 background: Sp::Alienbg,
                 catalog: Bin::Techno,
                 catalog_offset: 0x10e10,
+                entity_cell_base: 0,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0xa1,
@@ -948,6 +959,7 @@ impl Level {
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xc4d6,
+                entity_cell_base: 833,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0x3e2,
@@ -1046,6 +1058,7 @@ impl Level {
                 background: Sp::Lavah,
                 catalog: Bin::Lava,
                 catalog_offset: 0x13240,
+                entity_cell_base: 0,
                 overlays: PerWeapon {
                     multishot: Overlay {
                         first: 0xa1,

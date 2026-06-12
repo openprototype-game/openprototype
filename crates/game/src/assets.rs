@@ -363,9 +363,14 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     // The weapon overlays are clip-header records; the scenery cells are
     // direct subroutines. The two readings disagree on ambiguous bytes, so
     // each consumer decodes the catalog its own way.
-    let overlay_catalog = decode_banked(&bin, &wad, data.catalog_offset)
+    let mut overlay_catalog = decode_banked(&bin, &wad, data.catalog_offset)
         .with_context(|| format!("decoding {bin_name}"))?;
     let overlays = load_overlays(&overlay_catalog, data.overlays)?;
+
+    // The sprite descriptors' cell numbering starts at the level's entity
+    // cell base (nonzero in the race catalogs); dropping the prefix makes
+    // every descriptor's cell field index the sheet directly.
+    overlay_catalog.sprites.drain(..data.entity_cell_base);
     let catalog = decode_banked_direct(&bin, &wad, data.catalog_offset)
         .with_context(|| format!("decoding {bin_name} for scenery"))?;
     let overlay_slide = read_overlay_slide(&wad, data.overlay_positions)?;
