@@ -551,18 +551,11 @@ impl Weapons {
                 let level = charge_index(state, Weapon::Missile);
                 let dy = if self.missile_toggle { 7 } else { 0 };
                 self.missile_toggle = !self.missile_toggle;
-                let target = self.missile_target;
-                let before = self.shots.len();
-                self.spawn(ShotKind::Missile, x + 35, y + 11 + dy, 48, 0);
 
-                if self.shots.len() > before
-                    && let Some(missile) = self.shots.last_mut()
-                {
-                    missile.target = target;
-                }
-
-                // Advance the lock counter and wrap it into the live entities
-                // (file 0x9cc2: 1-based, 0 while nothing lives).
+                // The lock counter pre-increments and wraps into the live
+                // entities BEFORE the spawner stores it (inc at file 0x9cc2,
+                // 1-based, 0 while nothing lives, ds-image init 0), so the
+                // first missile already locks entity 1.
                 self.missile_target += 1;
 
                 if enemy_count == 0 {
@@ -571,6 +564,16 @@ impl Weapons {
                     while usize::from(self.missile_target) > enemy_count {
                         self.missile_target -= enemy_count as u16;
                     }
+                }
+
+                let target = self.missile_target;
+                let before = self.shots.len();
+                self.spawn(ShotKind::Missile, x + 35, y + 11 + dy, 48, 0);
+
+                if self.shots.len() > before
+                    && let Some(missile) = self.shots.last_mut()
+                {
+                    missile.target = target;
                 }
 
                 self.rate = [45, 35, 25, 15][level];
@@ -963,6 +966,23 @@ mod tests {
         assert!(sounds.switched);
         let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(!sounds.switched);
+    }
+
+    #[test]
+    fn the_first_missile_locks_the_first_entity() {
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200);
+        let state = state(Weapon::Missile, 1);
+        run(&mut weapons, false, &state, 1);
+        weapons.cooldown = 100;
+
+        // Three enemies live: the counter pre-increments, so the very first
+        // missile locks entity 1 and the next one entity 2.
+        weapons.update(true, &state, (100, 60), 0, &BARRELS, 3);
+        assert_eq!(weapons.shots.last().map(|shot| shot.target), Some(1));
+
+        weapons.cooldown = 100;
+        weapons.update(true, &state, (100, 60), 0, &BARRELS, 3);
+        assert_eq!(weapons.shots.last().map(|shot| shot.target), Some(2));
     }
 
     #[test]
