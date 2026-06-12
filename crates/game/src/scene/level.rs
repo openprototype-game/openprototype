@@ -996,6 +996,16 @@ impl LevelScene {
 
         self.mask_playfield_margins();
 
+        // The freeze dims the captured playfield BEFORE the weapon overlay
+        // and panel draw (the capture remaps through the /3 table and then
+        // calls the overlay drawer, L1 file 0xe60f -> 0xe6f5), so the
+        // overlay rows above the panel stay bright.
+        let frozen = self.menu.is_some() || matches!(self.flow, Flow::GetReady { .. });
+
+        if frozen {
+            self.dim_playfield();
+        }
+
         // The chaingun has no weapon-top overlay; only a selected weapon draws one.
         if let ActiveWeapon::Selected(weapon) = active {
             let overlay = self.assets.overlays.get(weapon);
@@ -1025,15 +1035,14 @@ impl LevelScene {
 
         // The menu draws over the dimmed playfield in place of GET READY
         // (the original captures and dims the frozen frame once at freeze
-        // entry, file 0xb22d; the menu page never carries the text).
-        if self.menu.is_some() {
-            self.dim_playfield();
-
-            if let Some(menu) = &self.menu {
-                menu.render(&self.assets.font, &self.assets.dim_table, &mut self.frame);
-            }
+        // entry, L2 file 0xb22d; the menu page never carries the text).
+        if let Some(menu) = &self.menu {
+            menu.render(
+                &self.assets.font,
+                &self.assets.dim_text_table,
+                &mut self.frame,
+            );
         } else if matches!(self.flow, Flow::GetReady { .. }) {
-            self.dim_playfield();
             self.assets.font.draw_into(
                 &mut self.frame.image,
                 GET_READY_POS.0,

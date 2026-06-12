@@ -328,10 +328,6 @@ pub struct LevelData {
     pub wad: &'static str,
     /// The level's combat constants (kinds, bounds, gate sprites).
     pub combat: CombatData,
-    /// The GET READY dim table's brightness divisor: every level builds the
-    /// nearest-color table over `rgb / divisor`; L5 divides by 2 (half
-    /// brightness), the others by 3.
-    pub dim_divisor: i32,
     /// The level's SP parallax background (which carries its own strip layout).
     pub background: Sp,
     /// The level's sprite-catalog BIN file (per-theme; 2/4/6 share Race1).
@@ -456,7 +452,6 @@ impl Level {
         match self {
             Level::L1 => LevelData {
                 wad: "LEVEL_1.WAD",
-                dim_divisor: 3,
                 combat: L1_COMBAT,
                 background: Sp::Canyon,
                 catalog: Bin::Out,
@@ -546,7 +541,6 @@ impl Level {
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
-                dim_divisor: 3,
                 combat: CombatData {
                     ship_rect_table: 0x4237,
                     pickups: [0x3974, 0x3898, 0x38fe, 0x3a3a],
@@ -643,7 +637,6 @@ impl Level {
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
-                dim_divisor: 3,
                 combat: CombatData {
                     ship_rect_table: 0x63ef,
                     pickups: [0x51e8, 0x510c, 0x5172, 0x52ae],
@@ -747,7 +740,6 @@ impl Level {
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
-                dim_divisor: 3,
                 combat: CombatData {
                     ship_rect_table: 0x42af,
                     pickups: [0x39ec, 0x3910, 0x3976, 0x3ab2],
@@ -842,7 +834,6 @@ impl Level {
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
-                dim_divisor: 2,
                 combat: CombatData {
                     ship_rect_table: 0x47e5,
                     pickups: [0x3764, 0x3688, 0x36ee, 0x382a],
@@ -941,7 +932,6 @@ impl Level {
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
-                dim_divisor: 3,
                 combat: CombatData {
                     ship_rect_table: 0x47af,
                     pickups: [0x3eec, 0x3e10, 0x3e76, 0x3fb2],
@@ -1033,7 +1023,6 @@ impl Level {
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
-                dim_divisor: 3,
                 combat: CombatData {
                     ship_rect_table: 0x5b47,
                     pickups: [0x4291, 0x41b5, 0x421b, 0x4357],

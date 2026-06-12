@@ -8,8 +8,10 @@
 //! marks the selection, Up/Down wrap, Enter dispatches, Esc resumes play.
 //!
 //! LOAD GAME and SAVE GAME open a five-slot picker (rows `GAME 1..5`, drawn
-//! bright when the slot's file exists and dim through the playfield's
-//! brightness table otherwise, the shared list drawer at file `0x7dd3`).
+//! bright when the slot's file exists and dim otherwise through the WAD's
+//! half-brightness text table -- every WAD builds `/3` for the playfield
+//! freeze and `/2` for dim text, and the list drawer reads `/2` (L1 glyph
+//! drawer file `0xe8d8`, the shared picker at L2 file `0x7dd3`).
 //! Saving writes any slot; loading needs an occupied one. Both flash a toast
 //! (`GAME  SAVED` / `GAME LOADED`) over the bare dimmed playfield for the
 //! original's two 0.7-second BIOS waits, then return to the items.
@@ -243,7 +245,7 @@ impl InGameMenu {
     }
 
     /// Draw the menu over the already-dimmed playfield. `dim` is the level's
-    /// brightness table, used for unoccupied slot labels.
+    /// half-brightness text table, used for unoccupied slot labels.
     pub fn render(&self, font: &Font, dim: &[u8; 256], frame: &mut Framebuffer) {
         match &self.screen {
             Screen::Items { selected } => {

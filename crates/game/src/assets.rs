@@ -193,8 +193,13 @@ pub struct LevelAssets {
     /// The glyph sheet (`FONT.RAW`), for the GET READY overlay.
     pub font: Font,
     /// Per palette index, the index of the nearest color to one third of its
-    /// brightness; the GET READY freeze remaps the playfield through it.
+    /// brightness; the freeze remaps the playfield through it (every WAD
+    /// builds this `/3` table and a `/2` one; the playfield capture reads
+    /// `/3` in all seven levels, L5's at file `0xfa2c`).
     pub dim_table: [u8; 256],
+    /// The companion half-brightness (`/2`) table: the WAD's dim-text glyph
+    /// drawer reads it (empty save-slot labels, L1 file `0xe8d8`).
+    pub dim_text_table: [u8; 256],
     /// The ship's death-explosion frames, decoded from
     /// [`ShipData::explosion`]; empty until that level's descriptors are
     /// found.
@@ -390,7 +395,8 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let music = load_music(disc, data.music_track)?;
     let font_bytes = disc.read("FONT.RAW").context("reading FONT.RAW")?;
     let font = Font::decode(&font_bytes).context("decoding FONT.RAW")?;
-    let dim_table = darken_table(&hud.palette, data.dim_divisor);
+    let dim_table = darken_table(&hud.palette, 3);
+    let dim_text_table = darken_table(&hud.palette, 2);
     let bomb_wave = read_bomb_wave(&wad, data.fire.bomb_wave)?;
     let ship_explosion = data
         .ship
@@ -435,6 +441,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
         combat: data.combat,
         font,
         dim_table,
+        dim_text_table,
         ship_explosion,
         bomb_wave,
     })
@@ -1225,6 +1232,7 @@ pub(crate) fn test_level_assets() -> LevelAssets {
         combat: Level::L1.data().combat,
         font: Font::decode(&[0u8; 320 * 16]).expect("synthetic font sheet decodes"),
         dim_table: [0; 256],
+        dim_text_table: [0; 256],
         ship_explosion: Vec::new(),
     }
 }
