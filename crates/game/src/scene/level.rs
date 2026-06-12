@@ -460,8 +460,10 @@ impl LevelScene {
                 }));
             }
             Some(MenuRequest::Quit) => {
-                // Exit status 2: back to the front-end menu.
-                output.transition = Some(Transition::To(SceneId::MainMenu));
+                // Exit status 2: START.EXE prints the copyright line and
+                // terminates to DOS (file 0x4f90); no menu re-entry path
+                // exists for it.
+                output.transition = Some(Transition::Quit);
             }
             Some(MenuRequest::Save(slot)) => self.menu_save(slot),
             Some(MenuRequest::Load(slot)) => self.menu_load(slot, output),
@@ -1699,7 +1701,7 @@ mod tests {
     }
 
     #[test]
-    fn the_menu_quit_item_returns_to_the_front_end() {
+    fn the_menu_quit_item_exits_the_app() {
         let mut scene = test_scene();
         press(&mut scene, Key::Esc);
 
@@ -1707,7 +1709,7 @@ mod tests {
         press(&mut scene, Key::Up);
         let output = press(&mut scene, Key::Enter);
 
-        assert_eq!(output.transition, Some(Transition::To(SceneId::MainMenu)));
+        assert_eq!(output.transition, Some(Transition::Quit));
     }
 
     #[test]
