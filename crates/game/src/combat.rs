@@ -262,6 +262,7 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             entity.tick = 0;
             entity.phase_a = 0;
             entity.phase_b = 0;
+            events.orb_dropped = true;
             index += 1;
             continue;
         }
@@ -471,6 +472,9 @@ mod tests {
             if converted {
                 assert!(spawns.entities[0].seen);
             }
+
+            assert_eq!(events.orb_dropped, kill == 3, "jingle on kill {kill}");
+            events.orb_dropped = false;
 
             spawns.entities.clear();
         }

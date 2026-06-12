@@ -890,7 +890,9 @@ impl LevelScene {
             &mut events,
         );
 
-        self.state.add_score(events.score);
+        if self.state.add_score(events.score) {
+            self.sfx.extra_life(&self.assets.sfx, audio);
+        }
 
         // The shooters end on a boss death (reap), the races on the finish
         // entity's AI flag; both surface as the spawn layer's level_end.

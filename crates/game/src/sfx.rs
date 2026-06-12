@@ -141,6 +141,12 @@ impl Sfx {
         play(bank, SLOT_PEBBLE, EVENT_CHANNEL, false, audio);
     }
 
+    /// The 10,000-point extra life: the score updater plays the pickup
+    /// sample as the jingle (`0xacc3` at L1 file `0xb18e`).
+    pub fn extra_life(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+        play(bank, SLOT_PICKUP, EVENT_CHANNEL, false, audio);
+    }
+
     /// A hit drained the firing weapon one level (`0xadde`).
     pub fn weapon_drained(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, SLOT_DRAIN, EVENT_CHANNEL, false, audio);

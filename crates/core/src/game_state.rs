@@ -274,8 +274,9 @@ impl GameState {
     }
 
     /// Adds `points`, granting an extra life for each 10,000-point boundary
-    /// crossed (lives cap at 9).
-    pub fn add_score(&mut self, points: u32) {
+    /// crossed (lives cap at 9). Returns whether a life was granted, for
+    /// the scene's jingle trigger.
+    pub fn add_score(&mut self, points: u32) -> bool {
         let milestones_before = self.score / EXTRA_LIFE_INTERVAL;
         self.score = self.score.saturating_add(points);
         let earned = self.score / EXTRA_LIFE_INTERVAL - milestones_before;
@@ -284,6 +285,8 @@ impl GameState {
             let earned = u8::try_from(earned).unwrap_or(u8::MAX);
             self.lives = self.lives.saturating_add(earned);
         }
+
+        earned > 0
     }
 
     /// Raises the selected weapon's charge by one (an orb pickup), capped at
@@ -463,8 +466,9 @@ mod tests {
     #[test]
     fn add_score_grants_a_life_on_each_ten_thousand_boundary() {
         let mut state = fresh();
-        state.add_score(10_000);
+        assert!(state.add_score(10_000));
         assert_eq!(state.lives.get(), 4);
+        assert!(!state.add_score(1));
 
         let mut multi = fresh();
         multi.add_score(25_000);
