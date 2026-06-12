@@ -118,6 +118,12 @@ pub struct CombatData {
     /// (L1's asteroid and carrier pod; the other levels have none).
     pub asteroid_kind: Option<u16>,
     pub pod_kind: Option<u16>,
+    /// Race mode: an obstacle contact arms this many grace ticks instead of
+    /// killing the enemy (`cs:0x284e = 0x78`); `None` for the shooters.
+    pub contact_grace: Option<u16>,
+    /// Race mode: a respawn restarts the course (the spawn cursor rewinds,
+    /// the live entities wipe, the scroll resets).
+    pub course_restart: bool,
 }
 
 /// L1's combat data, also the placeholder for the race levels until their
@@ -137,6 +143,8 @@ const L1_COMBAT: CombatData = CombatData {
     respawn_invincibility: 300,
     asteroid_kind: Some(0x3308),
     pod_kind: Some(0x38b0),
+    contact_grace: None,
+    course_restart: false,
 };
 
 /// Where a level's WAD keeps the player-fire data: the shot sprites' directory
@@ -405,6 +413,9 @@ pub enum SpawnAi {
     L5,
     /// LEVEL_7's 50 functions (`re/l7-ai-functions.md`).
     L7,
+    /// The race levels' 6 functions (`re/race-mode.md`; identical relinked
+    /// code in LEVEL_2/4/6).
+    Race,
 }
 
 impl Level {
@@ -519,7 +530,26 @@ impl Level {
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
                 dim_divisor: 3,
-                combat: L1_COMBAT,
+                combat: CombatData {
+                    ship_rect_table: 0x4237,
+                    pickups: [0x3974, 0x3898, 0x38fe, 0x3a3a],
+                    orb_arg: 0,
+                    // No gate and no death-driven level end in race mode
+                    // (the finish entity's AI raises the flag instead).
+                    gate_release: (1, 0),
+                    level_end_sprite: 0xffff,
+                    level_end_clears_gate: true,
+                    // Obstacles are indestructible; nothing dies to a ram.
+                    ram_survivors: &[(0, 0xffff)],
+                    entity_cap: 49,
+                    cull_x_min: -0x12c0,
+                    cull_x_max: 0x1840,
+                    respawn_invincibility: 180,
+                    asteroid_kind: None,
+                    pod_kind: None,
+                    contact_grace: Some(0x78),
+                    course_restart: true,
+                },
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbf5a,
@@ -544,7 +574,7 @@ impl Level {
                 overlay_positions: 0x9683,
                 ship: ShipData {
                     catalog: 0x4954,
-                    explosion: None,
+                    explosion: Some(0x4438),
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -587,8 +617,12 @@ impl Level {
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
-                spawns: SpawnSource::StaticTable { table: 0x1690 },
-                spawn_positions: None,
+                spawns: SpawnSource::StaticTable { table: 0x1696 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x37b2,
+                    rows: 210,
+                    ai: Some(SpawnAi::Race),
+                }),
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
@@ -607,6 +641,8 @@ impl Level {
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
+                    contact_grace: None,
+                    course_restart: false,
                 },
                 background: Sp::Wald,
                 catalog: Bin::Wald,
@@ -695,7 +731,26 @@ impl Level {
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
                 dim_divisor: 3,
-                combat: L1_COMBAT,
+                combat: CombatData {
+                    ship_rect_table: 0x42af,
+                    pickups: [0x39ec, 0x3910, 0x3976, 0x3ab2],
+                    orb_arg: 0,
+                    // No gate and no death-driven level end in race mode
+                    // (the finish entity's AI raises the flag instead).
+                    gate_release: (1, 0),
+                    level_end_sprite: 0xffff,
+                    level_end_clears_gate: true,
+                    // Obstacles are indestructible; nothing dies to a ram.
+                    ram_survivors: &[(0, 0xffff)],
+                    entity_cap: 49,
+                    cull_x_min: -0x12c0,
+                    cull_x_max: 0x1840,
+                    respawn_invincibility: 180,
+                    asteroid_kind: None,
+                    pod_kind: None,
+                    contact_grace: Some(0x78),
+                    course_restart: true,
+                },
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xbfd6,
@@ -720,7 +775,7 @@ impl Level {
                 overlay_positions: 0x96fb,
                 ship: ShipData {
                     catalog: 0x49cc,
-                    explosion: None,
+                    explosion: Some(0x44b0),
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -761,8 +816,12 @@ impl Level {
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
-                spawns: SpawnSource::StaticTable { table: 0x1690 },
-                spawn_positions: None,
+                spawns: SpawnSource::StaticTable { table: 0x1696 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x382a,
+                    rows: 210,
+                    ai: Some(SpawnAi::Race),
+                }),
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
@@ -781,6 +840,8 @@ impl Level {
                     respawn_invincibility: 300,
                     asteroid_kind: None,
                     pod_kind: None,
+                    contact_grace: None,
+                    course_restart: false,
                 },
                 background: Sp::Alienbg,
                 catalog: Bin::Techno,
@@ -864,7 +925,26 @@ impl Level {
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
                 dim_divisor: 3,
-                combat: L1_COMBAT,
+                combat: CombatData {
+                    ship_rect_table: 0x47af,
+                    pickups: [0x3eec, 0x3e10, 0x3e76, 0x3fb2],
+                    orb_arg: 0,
+                    // No gate and no death-driven level end in race mode
+                    // (the finish entity's AI raises the flag instead).
+                    gate_release: (1, 0),
+                    level_end_sprite: 0xffff,
+                    level_end_clears_gate: true,
+                    // Obstacles are indestructible; nothing dies to a ram.
+                    ram_survivors: &[(0, 0xffff)],
+                    entity_cap: 49,
+                    cull_x_min: -0x12c0,
+                    cull_x_max: 0x1840,
+                    respawn_invincibility: 180,
+                    asteroid_kind: None,
+                    pod_kind: None,
+                    contact_grace: Some(0x78),
+                    course_restart: true,
+                },
                 background: Sp::Raceb2,
                 catalog: Bin::Race1,
                 catalog_offset: 0xc4d6,
@@ -889,7 +969,7 @@ impl Level {
                 overlay_positions: 0x9bfb,
                 ship: ShipData {
                     catalog: 0x4ecc,
-                    explosion: None,
+                    explosion: Some(0x49b0),
                     y_min: -12,
                     y_max: 120,
                     spawn_shield_ticks: 180,
@@ -927,8 +1007,12 @@ impl Level {
                 },
                 stars: RACE_STARS,
                 camera_min: 0,
-                spawns: SpawnSource::StaticTable { table: 0x1690 },
-                spawn_positions: None,
+                spawns: SpawnSource::StaticTable { table: 0x1696 },
+                spawn_positions: Some(SpawnPositionsData {
+                    table: 0x3d2a,
+                    rows: 210,
+                    ai: Some(SpawnAi::Race),
+                }),
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
@@ -956,6 +1040,8 @@ impl Level {
                     respawn_invincibility: 180,
                     asteroid_kind: None,
                     pod_kind: None,
+                    contact_grace: None,
+                    course_restart: false,
                 },
                 background: Sp::Lavah,
                 catalog: Bin::Lava,

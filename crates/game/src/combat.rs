@@ -337,6 +337,7 @@ mod tests {
             weapons: PerWeapon::splat(WeaponLevel::new(2)),
             selected: Weapon::Multishot,
             invincible_ticks: 0,
+            contact_grace_ticks: 0,
         }
     }
 
@@ -632,6 +633,9 @@ pub fn body_contact(
             state.lives = state.lives.saturating_add(1);
             events.pickup = true;
             spawns.entities.swap_remove(index);
+        } else if spawns.combat.contact_grace.is_some() && state.contact_grace_ticks > 0 {
+            // Race mode: an earlier contact's grace window is still open.
+            index += 1;
         } else {
             match state.take_hit(Severity::Collision) {
                 // Invincible: the ram has no effect on either side.
@@ -640,6 +644,12 @@ pub fn body_contact(
                     events.ship = merge_ship_outcome(events.ship, outcome);
                     events.ram = merge_ship_outcome(events.ram, outcome);
                     rammed = true;
+
+                    // Race mode arms the contact grace instead of killing
+                    // the (indestructible) obstacle.
+                    if let Some(grace) = spawns.combat.contact_grace {
+                        state.contact_grace_ticks = grace;
+                    }
 
                     // The rammed enemy dies, except orbiters and the boss.
                     let survives = spawns

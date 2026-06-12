@@ -12,6 +12,7 @@ mod ai_l1;
 mod ai_l3;
 mod ai_l5;
 mod ai_l7;
+mod ai_race;
 
 use std::collections::HashMap;
 
@@ -375,6 +376,17 @@ impl Spawns {
                 for entity in &mut self.entities {
                     if entity.mode == 0 {
                         ai_l3::step(entity, &mut context);
+                    }
+                }
+            }
+            Some(SpawnAi::Race) => {
+                let mut context = ai_race::AiContext {
+                    level_end: &mut self.level_end,
+                };
+
+                for entity in &mut self.entities {
+                    if entity.mode == 0 {
+                        ai_race::step(entity, &mut context);
                     }
                 }
             }

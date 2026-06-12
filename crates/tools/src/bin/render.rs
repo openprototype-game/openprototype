@@ -343,6 +343,7 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
             weapons,
             selected,
             invincible_ticks: 0,
+            contact_grace_ticks: 0,
         };
 
         let mut frame = Framebuffer::new(Dimensions::new(320, 160), assets.palette.clone());

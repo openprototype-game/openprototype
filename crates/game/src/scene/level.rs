@@ -365,6 +365,28 @@ impl LevelScene {
                         self.flow = Flow::GameOver;
                     } else {
                         self.ship = Ship::new(self.assets.ship);
+
+                        // A race respawn restarts the course: the original
+                        // restores the ISR-mutated table, rewinds the spawn
+                        // cursor, wipes the live entities, and zeroes the
+                        // scroll accumulators. Effects and live player shots
+                        // carry over; speed (the camera) persists.
+                        if self.assets.combat.course_restart {
+                            let mut fresh = Spawns::new(
+                                self.assets.spawns.records(&self.assets.wad, clock_seed()),
+                                self.assets.spawn_ai,
+                                self.assets.combat,
+                            );
+
+                            if let Some(old) = self.spawns.take() {
+                                fresh.effects = old.effects;
+                            }
+
+                            self.spawns = Some(fresh);
+                            self.background_scroll = self.assets.background.scroll();
+                            self.scenery_scroll = self.assets.scenery.scroll();
+                        }
+
                         self.flow = Flow::GetReady {
                             fire_released: false,
                         };
@@ -523,7 +545,9 @@ impl LevelScene {
 
         self.state.add_score(events.score);
 
-        if events.level_end && self.level_end_countdown.is_none() {
+        // The shooters end on a boss death (reap), the races on the finish
+        // entity's AI flag; both surface as the spawn layer's level_end.
+        if (events.level_end || spawns.level_end) && self.level_end_countdown.is_none() {
             tracing::info!(score = self.state.score, "level complete");
             self.level_end_countdown = Some(460);
         }
@@ -897,6 +921,7 @@ fn new_game_state(spawn_invincibility: u16) -> GameState {
         // The level start arms the level's baked shield duration (the same
         // data-image init the ship's shield visual reads).
         invincible_ticks: spawn_invincibility,
+        contact_grace_ticks: 0,
     }
 }
 

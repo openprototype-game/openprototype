@@ -185,6 +185,10 @@ pub struct GameState {
 
     /// Remaining post-respawn invincibility, in game ticks (`0` = vulnerable).
     pub invincible_ticks: u16,
+
+    /// Race mode's contact grace: ticks left during which obstacle contact
+    /// is ignored (`cs:0x284e`; stays 0 in the shooters).
+    pub contact_grace_ticks: u16,
 }
 
 impl GameState {
@@ -241,9 +245,10 @@ impl GameState {
         true
     }
 
-    /// Counts the invincibility timer down by one tick.
+    /// Counts the invincibility and contact-grace timers down by one tick.
     pub fn tick(&mut self) {
         self.invincible_ticks = self.invincible_ticks.saturating_sub(1);
+        self.contact_grace_ticks = self.contact_grace_ticks.saturating_sub(1);
     }
 
     /// Whether the post-respawn shield is still up (no damage lands).
@@ -306,6 +311,7 @@ mod tests {
             weapons: PerWeapon::default(),
             selected: Weapon::Multishot,
             invincible_ticks: 0,
+            contact_grace_ticks: 0,
         }
     }
 

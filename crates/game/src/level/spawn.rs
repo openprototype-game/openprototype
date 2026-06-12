@@ -25,11 +25,9 @@ pub enum SpawnSource {
     },
     /// A static table baked into the WAD (race levels 2, 4, 6).
     ///
-    /// `table` is the file offset of the constant header slot; the records
-    /// follow it. The field mapping onto [`Record`] is provisional: the race
-    /// records share the 8-byte shape, but their word semantics are still
-    /// open pending render validation (`word0` looks like a BIN reference,
-    /// not an x-step).
+    /// `table` is the file offset of the first record. The records are the
+    /// shooter consumer's exact shape (`{delay, sprite, health, spawn_row}`,
+    /// see `re/race-mode.md`); a record with sprite 0 terminates the run.
     StaticTable { table: usize },
 }
 
@@ -54,22 +52,21 @@ impl SpawnSource {
 
 /// Reads the populated run of a race WAD's static spawn table.
 ///
-/// Slot 0 is the constant header; the populated records follow, padded with
-/// `(0, 0, 0, 20)` slots to the table's fixed capacity. A populated record
-/// always carries a BIN reference in its first word, so the first zero word0
-/// ends the run (each run's last record is a `(ref, 20, 209, 20)` trailer,
-/// shared by all three race WADs).
+/// The records are the shooter consumer's `{delay, sprite, health, row}`
+/// shape; the run ends at the first record whose sprite word is zero (the
+/// `{20, 0, 0, 0}` terminator shared by all three race WADs). The last live
+/// record is the finish entity (`{400, sprite, 0x14, 209}`).
 fn static_records(wad: &[u8], table: usize) -> Vec<Record> {
     let mut out = Vec::new();
 
-    for slot in 1..STATIC_SLOTS {
+    for slot in 0..STATIC_SLOTS {
         let bytes = &wad[table + slot * 8..table + (slot + 1) * 8];
+        let word = |k: usize| u16::from_le_bytes([bytes[k * 2], bytes[k * 2 + 1]]);
 
-        if bytes[0] == 0 && bytes[1] == 0 {
+        if word(1) == 0 {
             break;
         }
 
-        let word = |k: usize| u16::from_le_bytes([bytes[k * 2], bytes[k * 2 + 1]]);
         out.push(Record {
             delay: word(0),
             sprite: word(1),
