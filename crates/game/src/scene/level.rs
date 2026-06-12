@@ -174,6 +174,14 @@ pub struct LevelScene {
     overlay_offset_y: i32,
     /// The pod's current animation frame, `0` (hidden) up to [`POD_SETTLED_FRAME`].
     pod_frame: usize,
+    /// The weapon whose pod and overlay are on screen (the latch `cs:0x2695`):
+    /// during the lowering half of a switch this is still the OLD weapon, and
+    /// it relatches to the firing weapon when the frame underflows.
+    pod_weapon: ActiveWeapon,
+    /// The switch machine's phase (`cs:0x2698`): lowering back to 0 before
+    /// the rise. Armed by the weapon resolve (L1 file 0xae81), a weapon loss
+    /// (0xc529) and a savegame load (0x9dd3/0x9dd9).
+    pod_lowering: bool,
     /// Ticks accumulated toward the next pod frame.
     pod_ticks: u32,
     /// Real time accumulated toward the next logic tick.
@@ -231,6 +239,7 @@ impl LevelScene {
         });
         let mut ship = Ship::new(assets.ship);
         ship.arm_shield(i32::from(assets.combat.respawn_invincibility));
+        let pod_weapon = state.active_weapon();
         let weapons = Weapons::new(
             assets.bob_wave.clone(),
             state.active_weapon(),
@@ -272,6 +281,8 @@ impl LevelScene {
             // L1 image, congruent in every WAD), so the pod starts empty
             // and the active weapon rises once play begins.
             pod_frame: 0,
+            pod_weapon,
+            pod_lowering: false,
             pod_ticks: 0,
             tick_elapsed: Duration::ZERO,
             paused: false,
@@ -310,6 +321,11 @@ impl LevelScene {
         let mut scene = Self::new(assets, save.level, save.handoff(), 0);
 
         scene.state = save.state;
+        // The load path re-kicks the pod machine with the lowering phase
+        // armed (L1 file 0x9dd3/0x9dd9): the settled pod dips and rises.
+        scene.pod_weapon = scene.state.active_weapon();
+        scene.pod_frame = POD_SETTLED_FRAME;
+        scene.pod_lowering = true;
         scene
             .ship
             .restore(save.ship_x, save.ship_y, save.ship_ramp, save.ship_roll);
@@ -722,12 +738,12 @@ impl LevelScene {
             );
 
             // The resolve changing the firing weapon plays the switch sound
-            // and replays the pod animation (file 0xae59); both wait out a
-            // held burst because the resolve is gated on fire released.
+            // and kicks the pod machine (file 0xae59); both wait out a held
+            // burst because the resolve is gated on fire released. The
+            // divider free-runs, so the first step lands in 1..6 ticks.
             if sounds.switched {
                 self.sfx.weapon_switched(&self.assets.sfx, audio);
-                self.pod_frame = 0;
-                self.pod_ticks = 0;
+                self.pod_lowering = true;
             }
 
             if let Some(weapon) = sounds.fired {
@@ -755,9 +771,22 @@ impl LevelScene {
         self.stars.advance(ticks);
         self.pod_ticks += ticks;
 
-        while self.pod_frame < POD_SETTLED_FRAME && self.pod_ticks >= POD_FRAME_TICKS {
+        // The 6-tick divider free-runs; each step first plays the lowering
+        // half (old weapon's pod sliding down, relatching to the firing
+        // weapon when the frame underflows), then the rise to settled.
+        while self.pod_ticks >= POD_FRAME_TICKS {
             self.pod_ticks -= POD_FRAME_TICKS;
-            self.pod_frame += 1;
+
+            if self.pod_lowering {
+                if self.pod_frame > 0 {
+                    self.pod_frame -= 1;
+                } else {
+                    self.pod_lowering = false;
+                    self.pod_weapon = self.weapons.firing();
+                }
+            } else if self.pod_frame < POD_SETTLED_FRAME {
+                self.pod_frame += 1;
+            }
         }
     }
 
@@ -843,6 +872,7 @@ impl LevelScene {
 
                 if lost {
                     self.weapons.weapon_lost();
+                    self.pod_lowering = true;
                     self.sfx.weapon_lost(&self.assets.sfx, audio);
                 } else {
                     self.sfx.weapon_drained(&self.assets.sfx, audio);
@@ -906,6 +936,7 @@ impl LevelScene {
 
         if events.ram == Some(HitOutcome::Absorbed) {
             self.weapons.weapon_lost();
+            self.pod_lowering = true;
             self.sfx.weapon_lost(&self.assets.sfx, audio);
         }
 
@@ -930,7 +961,6 @@ impl LevelScene {
     fn render(&mut self) {
         // The panel (pod, overlay) shows the resolved firing weapon, frozen
         // across a held burst, not the instantaneous selection.
-        let active = self.weapons.firing();
 
         self.assets.background.render(
             &self.background_scroll,
@@ -1023,8 +1053,11 @@ impl LevelScene {
             self.dim_playfield();
         }
 
-        // The chaingun has no weapon-top overlay; only a selected weapon draws one.
-        if let ActiveWeapon::Selected(weapon) = active {
+        // The chaingun has no weapon-top overlay; only a selected weapon
+        // draws one. During the lowering half of a switch the latch still
+        // holds the OLD weapon, whose top slides down (L1 overlay draw
+        // 0xbcce reads the latch).
+        if let ActiveWeapon::Selected(weapon) = self.pod_weapon {
             let overlay = self.assets.overlays.get(weapon);
             let slide = self.assets.overlay_slide.get(weapon);
             let (slide_x, slide_y) = slide[self.pod_frame.min(slide.len() - 1)];
@@ -1043,7 +1076,7 @@ impl LevelScene {
             &mut self.frame,
         );
         hud::draw_weapon_pod(
-            active,
+            self.pod_weapon,
             self.pod_frame,
             &self.assets.hud,
             playfield::PANEL_TOP,
@@ -1359,9 +1392,12 @@ mod tests {
         scene.state.weapons = PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX));
 
         // One idle tick so the firing weapon re-resolves to the charged
-        // selection, then settle the pod that the resolve replayed.
+        // selection, then settle the pod machine that the resolve kicked.
         scene.update(TICK, &[]);
         scene.pod_frame = POD_SETTLED_FRAME;
+        scene.pod_lowering = false;
+        scene.pod_weapon = scene.weapons.firing();
+        scene.pod_ticks = 0;
 
         scene
     }
@@ -1506,10 +1542,11 @@ mod tests {
             ActiveWeapon::Selected(Weapon::Multishot)
         );
 
-        // The press itself only moves the selection; the pod replays when
-        // the firing weapon re-resolves on the next tick (fire not held).
+        // The press itself only moves the selection; the pod machine kicks
+        // when the firing weapon re-resolves on the next tick (fire not
+        // held). The frame holds until the free-running divider steps.
         scene.update(Duration::ZERO, &[KeyEvent::Pressed(Key::Shift)]);
-        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+        assert!(!scene.pod_lowering);
 
         scene.update(TICK, &[]);
 
@@ -1517,7 +1554,22 @@ mod tests {
             scene.state.active_weapon(),
             ActiveWeapon::Selected(Weapon::Burning)
         );
+        assert!(scene.pod_lowering);
+        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+
+        // The OLD weapon's pod lowers first...
+        scene.update(TICK * POD_FRAME_TICKS, &[]);
+        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME - 1);
+        assert_eq!(scene.pod_weapon, ActiveWeapon::Selected(Weapon::Multishot));
+
+        // ...relatches to the new weapon at the underflow, then rises.
+        scene.update(TICK * POD_FRAME_TICKS * 5, &[]);
         assert_eq!(scene.pod_frame, 0);
+        assert!(!scene.pod_lowering);
+        assert_eq!(scene.pod_weapon, ActiveWeapon::Selected(Weapon::Burning));
+
+        scene.update(TICK * POD_FRAME_TICKS * 5, &[]);
+        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
     }
 
     #[test]
@@ -1532,7 +1584,7 @@ mod tests {
             scene.weapons.firing(),
             ActiveWeapon::Selected(Weapon::Multishot)
         );
-        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+        assert!(!scene.pod_lowering);
 
         scene.update(TICK, &[KeyEvent::Released(Key::Ctrl)]);
         scene.update(TICK, &[]);
@@ -1540,19 +1592,22 @@ mod tests {
             scene.weapons.firing(),
             ActiveWeapon::Selected(Weapon::Burning)
         );
-        assert_eq!(scene.pod_frame, 0);
+        assert!(scene.pod_lowering);
     }
 
     #[test]
-    fn the_pod_animation_advances_to_settled_then_stops() {
+    fn the_pod_animation_settles_after_the_full_lower_then_rise() {
         let mut scene = charged_scene();
         scene.update(TICK, &[KeyEvent::Pressed(Key::Shift)]);
-        assert_eq!(scene.pod_frame, 0);
+        assert!(scene.pod_lowering);
 
-        // Enough ticks to carry frame 0 up to the settled frame and then hold.
-        let ticks = POD_FRAME_TICKS * (POD_SETTLED_FRAME as u32 + 1);
+        // 5 lowering steps + the relatch + 5 rise steps, then hold.
+        let ticks = POD_FRAME_TICKS * (POD_SETTLED_FRAME as u32 * 2 + 1);
         scene.update(TICK * ticks, &[]);
 
+        assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
+        assert!(!scene.pod_lowering);
+        scene.update(TICK * POD_FRAME_TICKS * 3, &[]);
         assert_eq!(scene.pod_frame, POD_SETTLED_FRAME);
     }
 
