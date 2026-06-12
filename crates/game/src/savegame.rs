@@ -8,14 +8,17 @@
 //! shots, B enemy shots, C entities, D fire staging, E effects, in that
 //! order in every WAD. Everything is little-endian, no header, no padding.
 //!
-//! The block is one congruent structure in all five WADs, relinked at
+//! The block is one congruent structure in all seven WADs, relinked at
 //! per-WAD addresses: the spawn table runs from its base to the cursor
 //! word (whose baked initial value IS the base), then the scroll list and
 //! its accumulators, then the ship cluster, then the score cluster, with
-//! each level's own AI state woven around them. [`BlockMap`] carries the
-//! per-level anchors; everything else sits at fixed deltas from them
-//! (validated field-by-field against real DOSBox saves of all five
-//! levels, `tests/fixtures/`).
+//! each level's own AI state woven around them. The races share every
+//! delta but not their anchors (each race WAD's spawn table has its own
+//! length). [`BlockMap`] carries the per-level anchors; everything else
+//! sits at fixed deltas from them, validated field-by-field against real
+//! DOSBox saves (`tests/fixtures/`) for L1/L2/L3/L5/L7; the L4/L6 anchors
+//! are derived from their writers/loaders in the binaries (no fixtures
+//! yet).
 //!
 //! This module maps the snapshot onto the port's semantic state. Fields the
 //! port does not model yet are written as the original's idle values and
@@ -108,22 +111,29 @@ impl BlockMap {
                 parity_at: 0xCC5,
                 has_grace: false,
             },
-            Level::L2 | Level::L4 | Level::L6 => BlockMap {
-                level_byte: match level {
-                    Level::L2 => 2,
-                    Level::L4 => 4,
-                    _ => 6,
-                },
-                block_len: 0x1BE1,
-                entity_buf_len: 0xC80,
-                table_base: 0xCE6,
-                cursor_at: 0x27FE,
-                scroll_consts: RACE_SCROLL_CONSTS,
-                score_at: 0x2873,
-                win_at: 0xCC3,
-                parity_at: 0xCC5,
-                has_grace: true,
-            },
+            // The races share every delta, but each WAD's spawn table has its
+            // own length, shifting the cursor and everything after it (L4
+            // writer file 0xb964, loader 0xba64; L6 0xbe64/0xbf64).
+            Level::L2 | Level::L4 | Level::L6 => {
+                let (level_byte, block_len, cursor_at, score_at) = match level {
+                    Level::L2 => (2, 0x1BE1, 0x27FE, 0x2873),
+                    Level::L4 => (4, 0x1C59, 0x2876, 0x28EB),
+                    _ => (6, 0x2159, 0x2D76, 0x2DEB),
+                };
+
+                BlockMap {
+                    level_byte,
+                    block_len,
+                    entity_buf_len: 0xC80,
+                    table_base: 0xCE6,
+                    cursor_at,
+                    scroll_consts: RACE_SCROLL_CONSTS,
+                    score_at,
+                    win_at: 0xCC3,
+                    parity_at: 0xCC5,
+                    has_grace: true,
+                }
+            }
             Level::L3 => BlockMap {
                 level_byte: 3,
                 block_len: 0x2CAF,
@@ -854,6 +864,21 @@ mod tests {
     #[test]
     fn the_level_byte_leads_the_file() {
         assert_eq!(sample().encode()[0], 2);
+    }
+
+    #[test]
+    fn each_race_wad_has_its_own_geometry() {
+        let mut save = sample();
+
+        save.level = Level::L4;
+        let encoded = save.encode();
+        assert_eq!(encoded.len(), 36_057);
+        assert_eq!(SaveGame::decode(&encoded).expect("decodes"), save);
+
+        save.level = Level::L6;
+        let encoded = save.encode();
+        assert_eq!(encoded.len(), 37_337);
+        assert_eq!(SaveGame::decode(&encoded).expect("decodes"), save);
     }
 
     #[test]
