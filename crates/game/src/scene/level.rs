@@ -15,7 +15,7 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use prototype_formats::Dimensions;
+use prototype_formats::{Dimensions, Rgb};
 
 use crate::assets::LevelAssets;
 use crate::background::BackgroundScroll;
@@ -80,6 +80,33 @@ const GET_READY_POS: (i32, i32) = (96, 50);
 
 /// The GET READY string as the WAD stores it (`cs:0x6e7`, `$`-terminated).
 const GET_READY_TEXT: &str = "GET READY..";
+
+/// The freeze pulse's palette entries and their full-brightness colors
+/// (6-bit DAC; RGB tables at L2 file `0x7832`, byte-identical in every
+/// WAD). In FONT.RAW these four indices appear only in the `>` glyph — the
+/// pause menu's cursor, the one thing on a frozen screen that visibly
+/// pulses. The level palettes bake placeholders at `0xd0..0xd2` (magenta
+/// on the races); this pulse is their only writer.
+const PULSE_ENTRIES: [(usize, [u8; 3]); 4] = [
+    (0xd0, [0x3f, 0x22, 0x08]),
+    (0xd1, [0x3e, 0x04, 0x00]),
+    (0xd2, [0x20, 0x02, 0x00]),
+    (0xff, [0x3f, 0x3f, 0x3f]),
+];
+
+/// The pulse's shared dark endpoint (every entry lerps toward the same
+/// near-black blue).
+const PULSE_SOURCE: [u8; 3] = [0x00, 0x00, 0x20];
+
+/// The pulse level's bounce bounds and tick step (L2 stepper file `0x8f98`:
+/// `v` ping-pongs `0x10..=0x40` by 2, endpoints held one tick each, period
+/// 48 ticks).
+const PULSE_MIN: i32 = 0x10;
+const PULSE_MAX: i32 = 0x40;
+const PULSE_STEP: i32 = 2;
+
+/// The pulse level the WAD bakes at level entry, headed down.
+const PULSE_START: i32 = 0x30;
 
 /// The level's run state (the original's freeze and dying globals,
 /// `cs:0x29f7` and `cs:0x46b2`).
@@ -163,6 +190,10 @@ pub struct LevelScene {
     flow: Flow,
     /// The Esc menu, freezing the level while open.
     menu: Option<InGameMenu>,
+    /// The freeze pulse's level and direction (`cs:0x6ea6`/`0x6ea7` in
+    /// L2). Never reset: the phase persists across freezes within the level.
+    pulse_value: i32,
+    pulse_rising: bool,
 }
 
 impl LevelScene {
@@ -236,6 +267,8 @@ impl LevelScene {
             level_end_countdown: None,
             flow,
             menu: None,
+            pulse_value: PULSE_START,
+            pulse_rising: false,
         };
 
         if !matches!(scene.flow, Flow::GameOver) {
@@ -1009,9 +1042,48 @@ impl LevelScene {
         }
     }
 
-    /// The GET READY freeze darkens the playfield but not the panel (file
-    /// `0xe60f`): every playfield pixel is remapped through the level's
-    /// third-brightness table before the text draws over it.
+    /// One tick of the freeze pulse (the stepper every WAD's per-tick input
+    /// block falls into while frozen, L1 file `0xb42d`; DAC upload in the
+    /// frozen ISR, L1 `0x9482`): lerp the four cursor entries between
+    /// [`PULSE_SOURCE`] and their full colors by `v / 0x40`, then bounce
+    /// `v`. The lerp reads `v` before the step, and the last
+    /// blend persists after unfreeze (nothing restores the entries; the WAD
+    /// palette only bakes placeholders there).
+    fn pulse_freeze_palette(&mut self) {
+        for (entry, target) in PULSE_ENTRIES {
+            let mut blended = [0u8; 3];
+
+            for channel in 0..3 {
+                let from = i32::from(PULSE_SOURCE[channel]);
+                let delta = i32::from(target[channel]) - from;
+                blended[channel] = (from + delta * self.pulse_value / 0x40) as u8;
+            }
+
+            self.frame.palette.colors[entry] =
+                Rgb::from_vga_6bit(blended[0], blended[1], blended[2]);
+        }
+
+        if self.pulse_rising {
+            self.pulse_value += PULSE_STEP;
+
+            if self.pulse_value >= PULSE_MAX {
+                self.pulse_rising = false;
+            }
+        } else {
+            self.pulse_value -= PULSE_STEP;
+
+            if self.pulse_value <= PULSE_MIN {
+                self.pulse_rising = true;
+            }
+        }
+    }
+
+    /// The GET READY freeze darkens the playfield but not the panel: every
+    /// playfield pixel is remapped through the level's third-brightness
+    /// table before the text draws over it. Engine-common: the shooters
+    /// remap at the frozen draw (L1 file `0xe60f`), the races inside their
+    /// freeze capture (L2 file `0xb2fa`, table built at `0xb0dc` with the
+    /// same divisor 3).
     fn dim_playfield(&mut self) {
         let playfield_pixels = (SCREEN.width * playfield::PANEL_TOP as u32) as usize;
 
@@ -1157,6 +1229,16 @@ impl Scene for LevelScene {
         // original's freeze halts the whole frame loop).
         let frozen =
             matches!(self.flow, Flow::GetReady { .. } | Flow::GameOver) || self.menu.is_some();
+
+        // The freeze pulse runs while the freeze flag is up, whatever
+        // handler owns the freeze (GET READY or the menu): the per-tick
+        // input block falls through into the stepper in every WAD (L1 file
+        // 0xb425), and the frozen ISR uploads the blend each tick.
+        if frozen {
+            for _ in 0..ticks {
+                self.pulse_freeze_palette();
+            }
+        }
 
         if !self.paused && !frozen {
             self.advance(ticks, &mut output.audio);
@@ -1699,6 +1781,32 @@ mod tests {
         assert_eq!(
             output.transition,
             Some(Transition::To(SceneId::LoadGame { slot: 2 }))
+        );
+    }
+
+    #[test]
+    fn the_freeze_pulses_the_cursor_palette() {
+        let mut scene = LevelScene::new(
+            Rc::new(test_level_assets()),
+            Level::L1,
+            Handoff::new_game(),
+            0,
+        );
+        assert!(matches!(scene.flow, Flow::GetReady { .. }));
+
+        // The first frozen tick lerps at the baked level 0x30: white blends
+        // to 0x3f*0x30/0x40 over the shared (0, 0, 0x20) endpoint.
+        scene.update(TICK, &[]);
+        assert_eq!(
+            scene.frame.palette.colors[0xff],
+            Rgb::from_vga_6bit(0x2f, 0x2f, 0x37)
+        );
+
+        // The pulse heads down: the next tick lerps at 0x2e.
+        scene.update(TICK, &[]);
+        assert_eq!(
+            scene.frame.palette.colors[0xff],
+            Rgb::from_vga_6bit(0x2d, 0x2d, 0x36)
         );
     }
 }
