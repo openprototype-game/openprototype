@@ -10,6 +10,18 @@ pub struct Rgb {
     pub b: u8,
 }
 
+impl Rgb {
+    /// Build from 6-bit VGA DAC channels (0..=63), expanded to 8 bits by bit
+    /// replication, like [`Palette::from_vga_6bit`] does per entry.
+    pub fn from_vga_6bit(r: u8, g: u8, b: u8) -> Self {
+        Self {
+            r: expand_6bit(r),
+            g: expand_6bit(g),
+            b: expand_6bit(b),
+        }
+    }
+}
+
 /// A 256-entry VGA palette with display-ready 8-bit channels.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Palette {

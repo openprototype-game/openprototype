@@ -28,7 +28,7 @@ use crate::playfield;
 use crate::scene::{Scene, SceneId, SceneOutput, Transition};
 use crate::scenery::SceneryScroll;
 use crate::sfx::Sfx;
-use crate::ship::{HeldKeys, Ship};
+use crate::ship::{self, HeldKeys, Ship};
 use crate::shots::Weapons;
 use crate::spawns::{PlayerInput, Spawns};
 use crate::stars::StarField;
@@ -595,6 +595,10 @@ impl LevelScene {
     /// `audio`.
     fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
+            // The wear-off fade reads the timer before the decrement (the
+            // original's ISR runs the DAC block first), so its last write
+            // happens with one tick remaining.
+            ship::invincibility_fade(&mut self.frame.palette, self.state.invincible_ticks);
             self.state.tick();
             self.run_combat(audio);
 

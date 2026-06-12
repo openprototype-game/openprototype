@@ -35,6 +35,7 @@
 
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
+use prototype_formats::{Palette, Rgb};
 
 use crate::assets::OverlaySprite;
 use crate::levels::ShipData;
@@ -323,6 +324,85 @@ impl Ship {
                 screen_y + SHIELD_OFFSET.1,
             );
         }
+    }
+}
+
+/// The wear-off fade's palette blocks (6-bit DAC values, 16 entries each;
+/// LEVEL_1.WAD file `0x12220`/`0x12250`, byte-identical in all seven WADs):
+/// the bubble's normal colors and the dark ramp they fade toward.
+const SHIELD_FADE_BASE: [[u8; 3]; 16] = [
+    [0x3f, 0x3f, 0x34],
+    [0x3f, 0x39, 0x34],
+    [0x3f, 0x35, 0x35],
+    [0x3f, 0x35, 0x3a],
+    [0x3f, 0x36, 0x3f],
+    [0x37, 0x2f, 0x3c],
+    [0x2c, 0x29, 0x39],
+    [0x23, 0x27, 0x36],
+    [0x22, 0x22, 0x34],
+    [0x25, 0x20, 0x31],
+    [0x28, 0x1f, 0x2f],
+    [0x2a, 0x1e, 0x2d],
+    [0x2b, 0x1d, 0x2a],
+    [0x29, 0x1b, 0x25],
+    [0x27, 0x1a, 0x20],
+    [0x25, 0x19, 0x1b],
+];
+const SHIELD_FADE_TARGET: [[u8; 3]; 16] = [
+    [0x3f, 0x3f, 0x34],
+    [0x37, 0x38, 0x2d],
+    [0x26, 0x28, 0x1f],
+    [0x28, 0x2b, 0x21],
+    [0x20, 0x25, 0x1b],
+    [0x1a, 0x1f, 0x16],
+    [0x14, 0x19, 0x11],
+    [0x0f, 0x13, 0x0d],
+    [0x0a, 0x0e, 0x09],
+    [0x08, 0x0c, 0x07],
+    [0x09, 0x0d, 0x07],
+    [0x0a, 0x11, 0x08],
+    [0x0e, 0x16, 0x09],
+    [0x11, 0x18, 0x09],
+    [0x01, 0x01, 0x00],
+    [0x03, 0x04, 0x01],
+];
+
+/// The first palette entry the fade rewrites (the bubble's color band runs
+/// `0xe0..0xf0`).
+const SHIELD_FADE_FIRST_ENTRY: usize = 0xe0;
+
+/// Cross-fade the bubble's palette band toward the dark wear-off ramp while
+/// the invincibility timer runs (the ISR block at LEVEL_1.WAD file `0x9498`,
+/// identical in every WAD): `out = base + (target - base) * t / 64` with
+/// `t = max(0, (0x80 - ticks) >> 1)`, so the bubble keeps its normal colors
+/// until 126 ticks remain and darkens linearly from there.
+///
+/// Runs on every armed tick, before the timer decrement: the `t = 0` rewrite
+/// of the base block is what gives L7's bubble its real colors (that WAD's
+/// level palette holds placeholder magenta in this band). Nothing restores
+/// the entries at expiry; the bubble stops drawing instead, like the
+/// original.
+pub fn invincibility_fade(palette: &mut Palette, ticks: u16) {
+    if ticks == 0 {
+        return;
+    }
+
+    let t = ((0x80 - i32::from(ticks)) >> 1).max(0);
+
+    let entries = SHIELD_FADE_BASE.iter().zip(&SHIELD_FADE_TARGET);
+
+    for (index, (base, target)) in entries.enumerate() {
+        let mut blended = [0u8; 3];
+
+        for channel in 0..3 {
+            let from = i32::from(base[channel]);
+            let delta = i32::from(target[channel]) - from;
+            // i32 division truncates toward zero, matching the `idiv`.
+            blended[channel] = (from + delta * t / 64) as u8;
+        }
+
+        palette.colors[SHIELD_FADE_FIRST_ENTRY + index] =
+            Rgb::from_vga_6bit(blended[0], blended[1], blended[2]);
     }
 }
 
@@ -655,5 +735,44 @@ mod tests {
         assert!(ship.shield_ticks > 0);
         run(&mut ship, NONE, 300, &mut camera, 0);
         assert_eq!(ship.shield_ticks, 0);
+    }
+
+    fn magenta_band_palette() -> Palette {
+        let mut palette = Palette::from_vga_6bit(&[0u8; 768]).expect("palette decodes");
+
+        for entry in &mut palette.colors[0xe0..0xf0] {
+            *entry = Rgb::from_vga_6bit(0x3f, 0x00, 0x2b);
+        }
+
+        palette
+    }
+
+    #[test]
+    fn the_fade_rewrites_the_base_block_while_the_timer_is_high() {
+        // L7's level palette bakes placeholder magenta in the bubble band;
+        // the t = 0 regime replaces it with the real colors.
+        let mut palette = magenta_band_palette();
+        invincibility_fade(&mut palette, 300);
+
+        assert_eq!(palette.colors[0xe1], Rgb::from_vga_6bit(0x3f, 0x39, 0x34));
+        assert_eq!(palette.colors[0xef], Rgb::from_vga_6bit(0x25, 0x19, 0x1b));
+    }
+
+    #[test]
+    fn the_fade_lands_one_step_short_of_the_target_on_the_last_tick() {
+        let mut palette = magenta_band_palette();
+        invincibility_fade(&mut palette, 1);
+
+        // t = 63: entry 0xee blends 0x27/0x1a/0x20 toward 0x01/0x01/0x00.
+        assert_eq!(palette.colors[0xee], Rgb::from_vga_6bit(0x02, 0x02, 0x01));
+    }
+
+    #[test]
+    fn the_fade_leaves_the_palette_alone_after_expiry() {
+        let mut palette = magenta_band_palette();
+        let before = palette.clone();
+        invincibility_fade(&mut palette, 0);
+
+        assert_eq!(palette, before);
     }
 }
