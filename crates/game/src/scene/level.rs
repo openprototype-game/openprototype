@@ -126,6 +126,9 @@ pub struct LevelScene {
     /// Whether the level's music track has been started (the original's
     /// pending-start flag, baked set, consumed once at level begin).
     music_started: bool,
+    /// Whether the launch-time CD stop has been issued (once, on the first
+    /// update).
+    music_stopped: bool,
     /// Ticks until the music restarts (the original's `cs:[0x69ce]` TOC-length
     /// countdown in the timer ISR; the track loops when it underflows).
     music_countdown: i64,
@@ -215,6 +218,7 @@ impl LevelScene {
             weapons,
             sfx: Sfx::new(),
             music_started: false,
+            music_stopped: false,
             music_countdown: 0,
             held: HeldKeys::default(),
             fire_held: false,
@@ -338,13 +342,21 @@ impl LevelScene {
     /// Start the music and loop it on the track-length countdown, like the
     /// original's timer ISR.
     ///
-    /// The start waits for the first GET READY dismissal: the original bakes
-    /// a pending-start flag (`cs:0x736c`) that the first unfreeze consumes
-    /// (file `0x9e65`), so the opening GET READY is silent and respawn
-    /// freezes don't restart the track.
+    /// Whatever was playing stops first: START.EXE calls into the resident
+    /// CD driver before each level launch, so the previous track's tail
+    /// (which runs under the transition movie) dies at the level's GET
+    /// READY. The start itself waits for the first GET READY dismissal: the
+    /// original bakes a pending-start flag (`cs:0x736c`) that the first
+    /// unfreeze consumes (file `0x9e65`), so the opening GET READY is silent
+    /// and respawn freezes don't restart the track.
     fn advance_music(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         if !self.music_started {
-            if matches!(self.flow, Flow::GetReady { .. }) {
+            if !self.music_stopped {
+                self.music_stopped = true;
+                audio.push(AudioCommand::StopMusic);
+            }
+
+            if !matches!(self.flow, Flow::Running) {
                 return;
             }
 
@@ -905,19 +917,10 @@ impl Scene for LevelScene {
             }
 
             if *countdown == 0 {
-                output.transition = Some(match self.level.next() {
-                    Some(next) => Transition::To(SceneId::Level {
-                        level: next,
-                        handoff: self.state.handoff(),
-                    }),
-                    // TODO: the real ending sequence (START.EXE branches to
-                    // file 0x4e06 past the last level); until it is traced,
-                    // the run closes out through the game-over flow so the
-                    // score still reaches the high-score table.
-                    None => Transition::To(SceneId::GameOver {
-                        score: self.state.score,
-                    }),
-                });
+                output.transition = Some(Transition::To(SceneId::LevelTransition {
+                    after: self.level,
+                    handoff: self.state.handoff(),
+                }));
             }
         }
 
@@ -1004,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn the_level_end_chains_to_the_next_level_with_the_writeback() {
+    fn the_level_end_hands_the_writeback_to_the_transition() {
         let mut scene = test_scene();
         scene.state.score = 12_345;
         scene.level_end_countdown = Some(1);
@@ -1013,25 +1016,10 @@ mod tests {
 
         assert_eq!(
             output.transition,
-            Some(Transition::To(SceneId::Level {
-                level: Level::L2,
+            Some(Transition::To(SceneId::LevelTransition {
+                after: Level::L1,
                 handoff: scene.state.handoff(),
             }))
-        );
-    }
-
-    #[test]
-    fn the_last_level_end_exits_through_the_game_over_flow() {
-        let mut scene = test_scene();
-        scene.level = Level::L7;
-        scene.state.score = 12_345;
-        scene.level_end_countdown = Some(1);
-
-        let output = scene.update(TICK, &[]);
-
-        assert_eq!(
-            output.transition,
-            Some(Transition::To(SceneId::GameOver { score: 12_345 }))
         );
     }
 
@@ -1163,9 +1151,13 @@ mod tests {
         let mut scene = test_scene();
         let track = scene.assets.music.track;
 
-        // The first frame starts the track, even without an elapsed tick.
+        // The first frame stops the launcher's leftover music and starts
+        // the track, even without an elapsed tick.
         let output = scene.update(Duration::ZERO, &[]);
-        assert_eq!(output.audio, vec![AudioCommand::PlayTrack(track)]);
+        assert_eq!(
+            output.audio,
+            vec![AudioCommand::StopMusic, AudioCommand::PlayTrack(track)]
+        );
 
         // Nothing replays while the countdown runs (the test assets' track
         // is 10 ticks long).

@@ -995,7 +995,7 @@ fn load_cover(disc: &DiscImage) -> Result<StillImage> {
 
 /// Read a FLI's bytes and validate its header, so a corrupt file fails at load
 /// rather than when its beat plays.
-fn load_fli_bytes(disc: &DiscImage, name: &str) -> Result<Vec<u8>> {
+pub fn load_fli_bytes(disc: &DiscImage, name: &str) -> Result<Vec<u8>> {
     let bytes = disc.read(name).with_context(|| format!("reading {name}"))?;
     Flic::new(&bytes).with_context(|| format!("validating {name} header"))?;
     Ok(bytes)

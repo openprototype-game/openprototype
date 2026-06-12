@@ -17,6 +17,7 @@ pub mod level;
 pub mod list_menu;
 pub mod menu;
 pub mod music;
+pub mod transition;
 
 pub use gameover::GameOverScene;
 pub use highscore_entry::HighscoreEntry;
@@ -26,6 +27,7 @@ pub use level::LevelScene;
 pub use list_menu::ListMenu;
 pub use menu::Menu;
 pub use music::MusicMenu;
+pub use transition::LevelTransition;
 
 use std::time::Duration;
 
@@ -56,6 +58,12 @@ pub enum SceneId {
     /// writeback.
     Level {
         level: crate::levels::Level,
+        handoff: Handoff,
+    },
+    /// The interstitial FLI after a finished level, leading to its
+    /// successor (or out of the game past the last level).
+    LevelTransition {
+        after: crate::levels::Level,
         handoff: Handoff,
     },
 }

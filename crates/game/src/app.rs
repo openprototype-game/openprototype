@@ -13,8 +13,8 @@ use crate::assets::{GameOverAssets, HighscoreAssets, IntroAssets, LevelAssets, M
 use crate::highscores::HighscoreStore;
 use crate::levels::Level;
 use crate::scene::{
-    GameOverScene, HighscoreEntry, HighscoreScreen, Intro, LevelScene, Menu, MusicMenu, Scene,
-    SceneId, Transition,
+    GameOverScene, HighscoreEntry, HighscoreScreen, Intro, LevelScene, LevelTransition, Menu,
+    MusicMenu, Scene, SceneId, Transition,
 };
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game::{Game, StepOutput};
@@ -24,6 +24,9 @@ use openprototype_core::input::KeyEvent;
 /// original loads each level as its own executable).
 pub type LevelLoader = Box<dyn Fn(Level) -> anyhow::Result<LevelAssets>>;
 
+/// Loads one FLI's bytes by disc path, for the between-levels movies.
+pub type FliLoader = Box<dyn Fn(&str) -> anyhow::Result<Vec<u8>>>;
+
 pub struct App {
     current: Box<dyn Scene>,
     menu_assets: Rc<MenuAssets>,
@@ -31,6 +34,7 @@ pub struct App {
     highscore_assets: Rc<HighscoreAssets>,
     gameover_assets: Rc<GameOverAssets>,
     level_loader: LevelLoader,
+    fli_loader: FliLoader,
     /// Dev fast-forward (`--skip`), in logic ticks; consumed by the first
     /// level scene built, so a chained next level starts normally.
     level_skip_ticks: u32,
@@ -45,6 +49,7 @@ impl App {
         highscore_assets: HighscoreAssets,
         gameover_assets: GameOverAssets,
         level_loader: LevelLoader,
+        fli_loader: FliLoader,
         highscore_store: HighscoreStore,
     ) -> Self {
         let menu_assets = Rc::new(menu_assets);
@@ -57,6 +62,7 @@ impl App {
             highscore_assets: Rc::new(highscore_assets),
             gameover_assets: Rc::new(gameover_assets),
             level_loader,
+            fli_loader,
             level_skip_ticks: 0,
             highscore_store: Rc::new(highscore_store),
         }
@@ -119,6 +125,17 @@ impl App {
 
                 scene
             }
+            SceneId::LevelTransition { after, handoff } => {
+                // A movie that fails to load plays as nothing: the scene
+                // moves straight on to its destination.
+                let (name, _) = crate::scene::transition::transition_fli(after);
+                let fli = (self.fli_loader)(name).unwrap_or_else(|error| {
+                    tracing::warn!("loading {name}: {error:#}");
+                    Vec::new()
+                });
+
+                Box::new(LevelTransition::new(&fli, after, handoff))
+            }
         }
     }
 }
@@ -175,6 +192,7 @@ mod tests {
             test_highscore_assets(),
             test_gameover_assets(),
             Box::new(|_| Ok(test_level_assets())),
+            Box::new(|_| Ok(Vec::new())),
             test_store(),
         )
     }
