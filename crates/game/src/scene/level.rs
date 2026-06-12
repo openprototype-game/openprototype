@@ -859,8 +859,6 @@ impl LevelScene {
         let wad = &self.assets.wad;
         let cs_base = self.assets.cs_base;
 
-        spawns.tick(rows, wad, cs_base);
-
         let (ship_x, ship_y) = self.ship.position();
         let shots_appended = spawns.step_movement(
             wad,
@@ -871,6 +869,10 @@ impl LevelScene {
                 steering: self.held.left || self.held.right,
             },
         );
+
+        // The pull sits at the update loop's tail (after movement), so a
+        // fresh spawn gets its first movement on the NEXT tick.
+        spawns.tick(rows, wad, cs_base);
 
         // Per appended shot, not per surviving shot: the original triggers
         // the sample inside each spawn call, so an append the same

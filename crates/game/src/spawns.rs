@@ -350,11 +350,16 @@ impl Spawns {
     /// overflow spawns (the original treats overflow as a fatal error; the
     /// port degrades gracefully).
     pub fn tick(&mut self, rows: &[SpawnRow], wad: &[u8], cs_base: usize) {
-        if self.cursor >= self.records.len() || self.gate_holds() {
+        if self.cursor >= self.records.len() {
             return;
         }
 
-        self.countdown -= 1;
+        // Only the ISR's countdown decrement freezes under the boss gate
+        // (cs:0x269c); the pull itself still drains records that are
+        // already due.
+        if !self.gate_holds() {
+            self.countdown -= 1;
+        }
 
         while self.cursor < self.records.len() && self.countdown <= 0 {
             let record = self.records[self.cursor];
