@@ -214,6 +214,9 @@ impl Ship {
             self.x -= 2;
         }
 
+        // The up branch always exits past the down check (L1 file 0xb601..
+        // 0xb650, congruent in the race WADs), so with both keys held the
+        // ship climbs; left+right DO stack and cancel.
         if held.up {
             if self.y > self.y_min {
                 self.y -= 2;
@@ -222,9 +225,7 @@ impl Ship {
             if self.y <= PAN_UP_BELOW && *camera > camera_min {
                 *camera -= 1;
             }
-        }
-
-        if held.down {
+        } else if held.down {
             if self.y < self.y_max {
                 self.y += 2;
             }
@@ -513,6 +514,18 @@ mod tests {
             0,
         );
         assert_eq!(ship.position(), (X_MAX, TOP_DOWN.y_max + 1));
+    }
+
+    #[test]
+    fn up_wins_when_up_and_down_are_both_held() {
+        let mut ship = flying_ship();
+        let mut camera = 0;
+        let (_, start_y) = ship.position();
+
+        run(&mut ship, held(true, true, false, false), 5, &mut camera, 0);
+
+        let (_, y) = ship.position();
+        assert_eq!(y, start_y - 10);
     }
 
     #[test]
