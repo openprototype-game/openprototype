@@ -31,6 +31,8 @@ pub struct ListMenu {
     assets: Rc<MenuAssets>,
     framebuffer: Framebuffer,
     labels: Vec<String>,
+    /// Rows drawn through the dim table (the slot pickers' empty slots).
+    dim_rows: Vec<bool>,
     layout: MenuLayout,
     selected: usize,
 }
@@ -43,16 +45,27 @@ impl ListMenu {
             Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),
             assets.palette.clone(),
         );
+        let dim_rows = vec![false; labels.len()];
         let mut menu = Self {
             assets,
             framebuffer,
             labels,
+            dim_rows,
             layout,
             selected: 0,
         };
 
         menu.render();
         menu
+    }
+
+    /// Mark rows to draw through the dim table (`START.EXE` halves the
+    /// brightness of unoccupied slot labels) and re-render.
+    pub fn set_dim_rows(&mut self, dim_rows: Vec<bool>) {
+        debug_assert_eq!(dim_rows.len(), self.labels.len());
+
+        self.dim_rows = dim_rows;
+        self.render();
     }
 
     fn row_y(&self, index: usize) -> i32 {
@@ -85,9 +98,23 @@ impl ListMenu {
 
         for (index, label) in self.labels.iter().enumerate() {
             let y = self.row_y(index);
-            self.assets
-                .font
-                .draw_into(&mut self.framebuffer.image, self.layout.label_x, y, label);
+
+            if self.dim_rows[index] {
+                self.assets.font.draw_into_mapped(
+                    &mut self.framebuffer.image,
+                    self.layout.label_x,
+                    y,
+                    label,
+                    &self.assets.dim_table,
+                );
+            } else {
+                self.assets.font.draw_into(
+                    &mut self.framebuffer.image,
+                    self.layout.label_x,
+                    y,
+                    label,
+                );
+            }
         }
     }
 

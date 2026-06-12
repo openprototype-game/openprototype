@@ -1039,7 +1039,7 @@ impl Scene for LevelScene {
                         if self.level_end_countdown.is_none()
                             && !matches!(self.flow, Flow::GameOver)
                         {
-                            self.menu = Some(InGameMenu::new(open_save_store()));
+                            self.menu = Some(InGameMenu::new(crate::savestore::open_or_warn()));
                         }
                     }
                     Key::Ctrl => self.fire_held = true,
@@ -1169,14 +1169,6 @@ impl Scene for LevelScene {
         // [`TICK`], so the scroll advances one tick per frame with no beating.
         TICK
     }
-}
-
-/// The slot store for the in-game menu; a failure to resolve the data
-/// directory degrades to a menu whose slots all read empty.
-fn open_save_store() -> Option<crate::savestore::SaveStore> {
-    crate::savestore::SaveStore::open()
-        .map_err(|error| tracing::warn!("opening the save store: {error:#}"))
-        .ok()
 }
 
 /// Keeps the worse of two ship outcomes across the tick's passes.

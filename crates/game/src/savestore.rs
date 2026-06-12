@@ -64,6 +64,14 @@ impl SaveStore {
     }
 }
 
+/// Open the store, degrading to `None` (every slot reads empty, saves are
+/// dropped) with a warning when the data directory cannot be resolved.
+pub fn open_or_warn() -> Option<SaveStore> {
+    SaveStore::open()
+        .map_err(|error| tracing::warn!("opening the save store: {error:#}"))
+        .ok()
+}
+
 /// A store rooted at an explicit directory, for tests across the crate.
 #[cfg(test)]
 pub(crate) fn store_at(dir: PathBuf) -> SaveStore {

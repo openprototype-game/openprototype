@@ -29,6 +29,10 @@ pub struct MenuAssets {
     pub background: IndexedImage,
     pub font: Font,
     pub palette: Palette,
+    /// The front-end's dimming remap, for the slot picker's empty slots.
+    /// `START.EXE` builds it at startup like the levels do, at half
+    /// brightness (the table fill at file `0x3358`, divisor 2).
+    pub dim_table: [u8; 256],
 }
 
 /// A full-screen still with its own palette (a `.BDY` image plus its `.PAL`).
@@ -83,11 +87,13 @@ pub fn load_menu_assets(disc: &DiscImage) -> Result<MenuAssets> {
         .context("parsing START.EXE")?
         .menu_palette()
         .context("decoding menu palette")?;
+    let dim_table = darken_table(&palette, 2);
 
     Ok(MenuAssets {
         background,
         font,
         palette,
+        dim_table,
     })
 }
 
@@ -1077,6 +1083,7 @@ pub(crate) fn test_menu_assets() -> MenuAssets {
         background,
         font,
         palette,
+        dim_table: [0; 256],
     }
 }
 
