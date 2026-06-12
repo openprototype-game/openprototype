@@ -67,6 +67,7 @@ pub fn decode_rows(wad: &[u8], table: usize, rows: usize) -> anyhow::Result<Vec<
 
 /// One live enemy or pickup, the port's view of the original's 0x40-byte
 /// entity (field offsets per `re/l1-ai-functions.md`).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     /// The current sprite descriptor cs-pointer (the animation frame).
     pub sprite: u16,
@@ -120,6 +121,7 @@ pub(crate) fn descriptor_hitboxes(wad: &[u8], cs_base: usize, sprite: u16) -> [[
 
 /// One visual effect (the original's 16-byte buffer-E record): an animated
 /// sprite at a fixed pixel position (`re/l1-effects.md`).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Effect {
     /// The current sprite descriptor cs-pointer; advances by `step` as the
     /// animation plays.
@@ -170,6 +172,7 @@ pub enum BossExplosionSound {
 
 /// One enemy shot (the original's 16-byte buffer-B record): position and
 /// velocity in 12.4 per sub-step.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shot {
     pub sprite: u16,
     pub x: i32,
