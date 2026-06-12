@@ -33,6 +33,11 @@ pub enum AudioCommand {
         /// The channel whose loop ends, `0..`[`SFX_CHANNELS`].
         channel: usize,
     },
+    /// Set the sound-effect mixer volume, `0..=15` (the original's SB mixer
+    /// steps, adjusted from the in-game VOLUME submenu).
+    SetEffectsVolume(u8),
+    /// Set the CD music volume, `0..=15`.
+    SetMusicVolume(u8),
 }
 
 /// One sound-effect trigger.

@@ -163,6 +163,8 @@ impl App {
                     );
                 }
                 AudioCommand::EndSfxLoop { channel } => self.sfx.end_loop(*channel),
+                AudioCommand::SetEffectsVolume(volume) => self.sfx.set_volume(*volume),
+                AudioCommand::SetMusicVolume(volume) => self.music.set_volume(*volume),
             }
         }
 

@@ -16,9 +16,14 @@
 //! (`GAME  SAVED` / `GAME LOADED`) over the bare dimmed playfield for the
 //! original's two 0.7-second BIOS waits, then return to the items.
 //!
-//! GRAPHICS..., JOYSTICK... and VOLUME... are drawn but inert: their option
-//! submenus are not ported yet. TODO: wire them once the port grows the
-//! matching settings.
+//! VOLUME... opens the working sound submenu (L2 handler `0x7bf6`): MUSIC
+//! ON/OFF toggles the CD audio on Enter, EFFECTS VOLUME and MUSIC VOLUME
+//! adjust 0..15 with Left/Right (the original's SB mixer steps; an effects
+//! change plays a chaingun blip as feedback). The baked defaults are
+//! 15/15/on per level image; the original also persists them to proto.cfg
+//! on every menu exit (settings write `0xb776`), which the port does not
+//! model yet. GRAPHICS... and JOYSTICK... stay drawn but inert: their
+//! submenus are not ported yet.
 //!
 //! The menu is pure UI state; the [`LevelScene`](crate::scene::level) owns
 //! the freeze, performs the saves and loads it requests, and reports back via
@@ -50,6 +55,8 @@ const ITEM_X: i32 = 80;
 const ITEM_TOP: i32 = 10;
 const ROW_STEP: i32 = 15;
 const ITEM_CURSOR_X: i32 = 56;
+const VOLUME_X: i32 = 28;
+const VOLUME_CURSOR_X: i32 = 4;
 const SLOT_X: i32 = 120;
 const SLOT_TOP: i32 = 30;
 const SLOT_CURSOR_X: i32 = 100;
@@ -79,10 +86,45 @@ pub enum MenuRequest {
     Save(usize),
     /// Load this (occupied) slot.
     Load(usize),
+    /// CD music was toggled in the VOLUME submenu (`cs:0x494d`): off stops
+    /// the track, on restarts it.
+    MusicToggled(bool),
+    /// The effects volume changed (`cs:0x494b`); the scene applies it and
+    /// plays the chaingun feedback blip.
+    EffectsVolume(u8),
+    /// The music volume changed (`cs:0x494c`).
+    MusicVolume(u8),
+}
+
+/// The sound settings the VOLUME submenu edits. The level image bakes
+/// 15/15/on; the scene owns the live copy across menu opens.
+#[derive(Clone, Copy)]
+pub struct AudioSettings {
+    pub music_on: bool,
+    pub effects_volume: u8,
+    pub music_volume: u8,
+}
+
+impl Default for AudioSettings {
+    fn default() -> Self {
+        Self {
+            music_on: true,
+            effects_volume: 15,
+            music_volume: 15,
+        }
+    }
+}
+
+/// Step a 0..=15 volume by one mixer notch.
+fn step_volume(volume: u8, delta: i8) -> u8 {
+    volume.saturating_add_signed(delta).min(15)
 }
 
 enum Screen {
     Items {
+        selected: usize,
+    },
+    Volume {
         selected: usize,
     },
     Slots {
@@ -101,13 +143,16 @@ pub struct InGameMenu {
     /// `None` when the data directory could not be resolved; the pickers
     /// then show every slot empty and saves are dropped with a warning.
     store: Option<SaveStore>,
+    /// The submenu's working copy of the scene's sound settings.
+    audio: AudioSettings,
 }
 
 impl InGameMenu {
-    pub fn new(store: Option<SaveStore>) -> Self {
+    pub fn new(store: Option<SaveStore>, audio: AudioSettings) -> Self {
         Self {
             screen: Screen::Items { selected: 0 },
             store,
+            audio,
         }
     }
 
@@ -134,8 +179,59 @@ impl InGameMenu {
                             self.open_slots(selected == 2);
                             None
                         }
+                        5 => {
+                            self.screen = Screen::Volume { selected: 0 };
+                            None
+                        }
                         6 => Some(MenuRequest::Quit),
-                        // GRAPHICS.../JOYSTICK.../VOLUME...: drawn, inert.
+                        // GRAPHICS.../JOYSTICK...: drawn, inert.
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            Screen::Volume { selected } => match key {
+                Key::Down => {
+                    *selected = (*selected + 1) % 3;
+                    None
+                }
+                Key::Up => {
+                    *selected = (*selected + 2) % 3;
+                    None
+                }
+                Key::Esc => {
+                    self.screen = Screen::Items { selected: 0 };
+                    None
+                }
+                // Enter toggles the music row; Left/Right step the volumes.
+                Key::Enter if *selected == 0 => {
+                    self.audio.music_on = !self.audio.music_on;
+                    Some(MenuRequest::MusicToggled(self.audio.music_on))
+                }
+                Key::Left | Key::Right => {
+                    let delta: i8 = if key == Key::Right { 1 } else { -1 };
+
+                    match *selected {
+                        1 => {
+                            let volume = step_volume(self.audio.effects_volume, delta);
+
+                            if volume != self.audio.effects_volume {
+                                self.audio.effects_volume = volume;
+                                return Some(MenuRequest::EffectsVolume(volume));
+                            }
+
+                            None
+                        }
+                        2 => {
+                            let volume = step_volume(self.audio.music_volume, delta);
+
+                            if volume != self.audio.music_volume {
+                                self.audio.music_volume = volume;
+                                return Some(MenuRequest::MusicVolume(volume));
+                            }
+
+                            None
+                        }
                         _ => None,
                     }
                 }
@@ -281,6 +377,29 @@ impl InGameMenu {
                     }
                 }
             }
+            Screen::Volume { selected } => {
+                let music = if self.audio.music_on {
+                    "MUSIC: ON".to_string()
+                } else {
+                    "MUSIC: OFF".to_string()
+                };
+                let rows = [
+                    music,
+                    format!("EFFECTS VOLUME: {}", self.audio.effects_volume),
+                    format!("MUSIC VOLUME: {}", self.audio.music_volume),
+                ];
+
+                // The rows are wider than the main items (18 glyphs at
+                // 16 px), so they start at the cursor column's right edge.
+                for (index, row) in rows.iter().enumerate() {
+                    let y = ITEM_TOP + index as i32 * ROW_STEP;
+                    font.draw_into(&mut frame.image, VOLUME_X, y, row);
+
+                    if index == *selected {
+                        font.draw_into(&mut frame.image, VOLUME_CURSOR_X, y, ">");
+                    }
+                }
+            }
             Screen::Toast { text, .. } => {
                 font.draw_into(&mut frame.image, TOAST_X, TOAST_Y, text);
             }
@@ -294,7 +413,7 @@ mod tests {
 
     /// A menu without a store: every slot reads empty.
     fn menu() -> InGameMenu {
-        InGameMenu::new(None)
+        InGameMenu::new(None, AudioSettings::default())
     }
 
     #[test]
@@ -354,6 +473,44 @@ mod tests {
         assert!(matches!(menu.screen, Screen::Toast { .. }));
 
         menu.advance(1);
+        assert!(matches!(menu.screen, Screen::Items { selected: 0 }));
+    }
+    #[test]
+    fn the_volume_submenu_toggles_and_steps() {
+        let mut menu = menu();
+
+        // VOLUME... is the sixth item.
+        for _ in 0..5 {
+            menu.handle_key(Key::Down);
+        }
+        assert!(menu.handle_key(Key::Enter).is_none());
+        assert!(matches!(menu.screen, Screen::Volume { selected: 0 }));
+
+        // Enter on the music row toggles the CD.
+        assert!(matches!(
+            menu.handle_key(Key::Enter),
+            Some(MenuRequest::MusicToggled(false))
+        ));
+        assert!(matches!(
+            menu.handle_key(Key::Enter),
+            Some(MenuRequest::MusicToggled(true))
+        ));
+
+        // The effects row: Right is capped at 15, Left steps down.
+        menu.handle_key(Key::Down);
+        assert!(menu.handle_key(Key::Right).is_none());
+        assert!(matches!(
+            menu.handle_key(Key::Left),
+            Some(MenuRequest::EffectsVolume(14))
+        ));
+
+        // The music-volume row, then Esc backs out to the items.
+        menu.handle_key(Key::Down);
+        assert!(matches!(
+            menu.handle_key(Key::Left),
+            Some(MenuRequest::MusicVolume(14))
+        ));
+        menu.handle_key(Key::Esc);
         assert!(matches!(menu.screen, Screen::Items { selected: 0 }));
     }
 }

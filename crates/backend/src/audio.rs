@@ -18,6 +18,9 @@ pub trait MusicPlayer {
     /// Start (or restart) the given track, playing it once.
     fn play_track(&mut self, track: u8);
 
+    /// Set the playback volume in the original's SB mixer steps, `0..=15`.
+    fn set_volume(&mut self, volume: u8);
+
     /// Stop whatever is playing.
     fn stop(&mut self);
 }
@@ -39,6 +42,8 @@ impl NullMusicPlayer {
 
 impl MusicPlayer for NullMusicPlayer {
     fn play_track(&mut self, _track: u8) {}
+
+    fn set_volume(&mut self, _volume: u8) {}
 
     fn stop(&mut self) {}
 }
@@ -72,6 +77,9 @@ pub trait SfxPlayer {
     /// [`end_loop`](SfxPlayer::end_loop) or a replacing play.
     fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool, skip_if_busy: bool);
 
+    /// Set the mixer volume in the original's SB mixer steps, `0..=15`.
+    fn set_volume(&mut self, volume: u8);
+
     /// End a channel's loop: the current pass plays to its end and the
     /// channel then frees.
     fn end_loop(&mut self, channel: usize);
@@ -93,6 +101,8 @@ impl NullSfxPlayer {
 
 impl SfxPlayer for NullSfxPlayer {
     fn play(&mut self, _channel: usize, _sample: Arc<[i8]>, _looped: bool, _skip_if_busy: bool) {}
+
+    fn set_volume(&mut self, _volume: u8) {}
 
     fn end_loop(&mut self, _channel: usize) {}
 }
@@ -149,6 +159,8 @@ mod rodio_backend {
         disc: Arc<DiscImage>,
         sink: MixerDeviceSink,
         current: Option<Player>,
+        /// Linear gain from the 0..=15 mixer steps.
+        volume: f32,
     }
 
     impl RodioMusicPlayer {
@@ -163,6 +175,7 @@ mod rodio_backend {
                 disc,
                 sink,
                 current: None,
+                volume: 1.0,
             })
         }
     }
@@ -178,8 +191,17 @@ mod rodio_backend {
             };
 
             let player = Player::connect_new(self.sink.mixer());
+            player.set_volume(self.volume);
             player.append(source);
             self.current = Some(player);
+        }
+
+        fn set_volume(&mut self, volume: u8) {
+            self.volume = f32::from(volume.min(15)) / 15.0;
+
+            if let Some(player) = &self.current {
+                player.set_volume(self.volume);
+            }
         }
 
         fn stop(&mut self) {
@@ -349,7 +371,7 @@ mod rodio_backend {
     pub struct RodioSfxPlayer {
         channels: SharedChannels,
         _sink: MixerDeviceSink,
-        _player: Player,
+        player: Player,
     }
 
     impl RodioSfxPlayer {
@@ -369,7 +391,7 @@ mod rodio_backend {
             Ok(Self {
                 channels,
                 _sink: sink,
-                _player: player,
+                player,
             })
         }
     }
@@ -393,6 +415,10 @@ mod rodio_backend {
                 position: 0,
                 looped,
             };
+        }
+
+        fn set_volume(&mut self, volume: u8) {
+            self.player.set_volume(f32::from(volume.min(15)) / 15.0);
         }
 
         fn end_loop(&mut self, channel: usize) {

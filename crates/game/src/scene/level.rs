@@ -21,7 +21,7 @@ use crate::assets::LevelAssets;
 use crate::background::BackgroundScroll;
 use crate::combat::{self, CombatEvents};
 use crate::hud::{self, POD_SETTLED_FRAME};
-use crate::ingame_menu::{InGameMenu, MenuRequest};
+use crate::ingame_menu::{AudioSettings, InGameMenu, MenuRequest};
 use crate::level::prng::{EngineRng, clock_seed};
 use crate::levels::Level;
 use crate::playfield;
@@ -199,6 +199,10 @@ pub struct LevelScene {
     flow: Flow,
     /// The Esc menu, freezing the level while open.
     menu: Option<InGameMenu>,
+    /// The VOLUME submenu's sound settings. The level image bakes 15/15/on
+    /// (file 0x733b in L1); the original persists them to proto.cfg on
+    /// every menu exit, which the port does not model yet.
+    audio_settings: AudioSettings,
     /// Ticks until Esc can open the menu again: every unfreeze re-arms 20
     /// (`movw $0x14`, L1 file 0xf85c / L2 0xbdcd, the single dispatcher
     /// site in all seven WADs) and the gate requires it zero.
@@ -291,6 +295,7 @@ impl LevelScene {
             level_end_countdown: None,
             flow,
             menu: None,
+            audio_settings: AudioSettings::default(),
             esc_debounce: 0,
             pulse_value: PULSE_START,
             pulse_rising: false,
@@ -484,6 +489,38 @@ impl LevelScene {
             }
             Some(MenuRequest::Save(slot)) => self.menu_save(slot),
             Some(MenuRequest::Load(slot)) => self.menu_load(slot, output),
+            Some(MenuRequest::MusicToggled(on)) => {
+                self.audio_settings.music_on = on;
+
+                // Off stops the CD outright; on restarts the track (the
+                // toggle's stop/play thunks). The flag also gates the loop
+                // countdown in advance_music.
+                if on {
+                    output
+                        .audio
+                        .push(AudioCommand::PlayTrack(self.assets.music.track));
+                    self.music_started = true;
+                    self.music_stopped = true;
+                    self.music_countdown = i64::from(self.assets.music.length_ticks);
+                } else {
+                    output.audio.push(AudioCommand::StopMusic);
+                }
+            }
+            Some(MenuRequest::EffectsVolume(volume)) => {
+                self.audio_settings.effects_volume = volume;
+                output.audio.push(AudioCommand::SetEffectsVolume(volume));
+                // The adjust plays a chaingun blip as feedback (the inline
+                // trigger at L1 0x9d5d).
+                self.sfx.weapon_fired(
+                    openprototype_core::ActiveWeapon::Chaingun,
+                    &self.assets.sfx,
+                    &mut output.audio,
+                );
+            }
+            Some(MenuRequest::MusicVolume(volume)) => {
+                self.audio_settings.music_volume = volume;
+                output.audio.push(AudioCommand::SetMusicVolume(volume));
+            }
         }
     }
 
@@ -650,6 +687,12 @@ impl LevelScene {
             self.music_started = true;
             audio.push(AudioCommand::PlayTrack(self.assets.music.track));
             self.music_countdown = i64::from(self.assets.music.length_ticks);
+        }
+
+        // The music flag (cs:0x494d) gates the ISR loop countdown, so
+        // toggling music off also stops the auto-restart.
+        if !self.audio_settings.music_on {
+            return;
         }
 
         for _ in 0..ticks {
@@ -1235,7 +1278,10 @@ impl Scene for LevelScene {
                             && !matches!(self.flow, Flow::GameOver | Flow::Dying { .. })
                             && self.esc_debounce == 0
                         {
-                            self.menu = Some(InGameMenu::new(crate::savestore::open_or_warn()));
+                            self.menu = Some(InGameMenu::new(
+                                crate::savestore::open_or_warn(),
+                                self.audio_settings,
+                            ));
                         }
                     }
                     Key::Ctrl => self.fire_held = true,
@@ -1509,7 +1555,7 @@ mod tests {
             crate::savegame::SaveGame::decode(include_bytes!("../../tests/fixtures/l1.psg"))
                 .expect("the ground-truth fixture decodes"),
         );
-        scene.menu = Some(InGameMenu::new(Some(store)));
+        scene.menu = Some(InGameMenu::new(Some(store), AudioSettings::default()));
 
         // SAVE GAME (third item), slot 1.
         press(&mut scene, Key::Down);
@@ -1844,7 +1890,7 @@ mod tests {
     fn saving_writes_the_slot_and_round_trips() {
         let (_dir, store) = temp_store();
         let mut scene = LevelScene::from_save(Rc::new(test_level_assets()), race_fixture());
-        scene.menu = Some(InGameMenu::new(Some(store)));
+        scene.menu = Some(InGameMenu::new(Some(store), AudioSettings::default()));
 
         // SAVE GAME (third item), then slot 2.
         press(&mut scene, Key::Down);
@@ -1869,7 +1915,7 @@ mod tests {
             Handoff::new_game(),
             0,
         );
-        scene.menu = Some(InGameMenu::new(Some(store)));
+        scene.menu = Some(InGameMenu::new(Some(store), AudioSettings::default()));
 
         // LOAD GAME (second item), then slot 1.
         press(&mut scene, Key::Down);
@@ -1910,7 +1956,7 @@ mod tests {
             Handoff::new_game(),
             0,
         );
-        scene.menu = Some(InGameMenu::new(Some(store)));
+        scene.menu = Some(InGameMenu::new(Some(store), AudioSettings::default()));
         // Mid-level state: the track is already playing.
         scene.music_started = true;
         scene.music_stopped = true;
@@ -1937,7 +1983,7 @@ mod tests {
 
         // The running level is L1; the slot holds an L2 save.
         let mut scene = test_scene();
-        scene.menu = Some(InGameMenu::new(Some(store)));
+        scene.menu = Some(InGameMenu::new(Some(store), AudioSettings::default()));
 
         press(&mut scene, Key::Down);
         press(&mut scene, Key::Enter);
