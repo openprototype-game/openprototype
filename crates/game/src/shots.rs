@@ -358,6 +358,14 @@ pub struct Weapons {
     shot_x_max: i32,
     /// The level's missile spawn rows ([`FireData::missile_rows`]).
     missile_rows: (i32, i32),
+    /// A smart bomb fired since the last update: the bomb takes the
+    /// dispatch slot, so that tick's volley AND its flash/cooldown reset
+    /// are skipped (the bomb branch jumps past both, L1 0xb722 -> 0xb753).
+    bomb_fired: bool,
+    /// The bomb key was pressed while the ring is still in flight: the
+    /// dispatch falls through into the volley path (L1 0xb730), firing a
+    /// full weapon volley that bypasses the cooldown and the fire gate.
+    bypass_volley: bool,
     pub shots: Vec<Shot>,
 }
 
@@ -389,6 +397,8 @@ impl Weapons {
             bob_wave,
             shot_x_max,
             missile_rows,
+            bomb_fired: false,
+            bypass_volley: false,
             shots: Vec::new(),
         }
     }
@@ -470,7 +480,13 @@ impl Weapons {
         let launched = self.step_orbs(fire_held && plasma, state, ship);
         let mut fired = None;
 
-        if fire_held && (due || plasma) {
+        // The bomb branch takes the dispatch slot for its tick (no volley,
+        // no cooldown reset); a bomb press during the ring's flight instead
+        // forces a volley past both gates.
+        let bomb_took_slot = std::mem::take(&mut self.bomb_fired);
+        let force = std::mem::take(&mut self.bypass_volley);
+
+        if !bomb_took_slot && (force || (fire_held && (due || plasma))) {
             self.fire(state, ship, roll, barrels, enemy_count);
             self.cooldown = 0;
             fired = Some(self.firing);
@@ -629,6 +645,15 @@ impl Weapons {
         for &(dx, dy) in wave {
             self.spawn(ShotKind::BombWave, x + 25, y + 20, dx, dy);
         }
+
+        self.bomb_fired = true;
+    }
+
+    /// The bomb key landed while the ring is still in flight: the original's
+    /// dispatch falls through into the volley path (L1 `0xb730`), so the
+    /// next update fires the firing weapon's volley past every gate.
+    pub fn force_volley(&mut self) {
+        self.bypass_volley = true;
     }
 
     /// One steering step for every live missile (file `0xc114`, run per
@@ -992,6 +1017,37 @@ mod tests {
         assert!(sounds.switched);
         let sounds = weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
         assert!(!sounds.switched);
+    }
+
+    #[test]
+    fn the_bomb_takes_the_dispatch_slot_for_its_tick() {
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
+        let state = state(Weapon::Multishot, 2);
+        run(&mut weapons, false, &state, 1);
+        weapons.cooldown = 100;
+
+        // The bomb fires; that tick's held-fire volley is suppressed and
+        // the cooldown is left alone.
+        weapons.smart_bomb((100, 60), &[(16, 0)]);
+        let ring = weapons.shots.len();
+        weapons.update(true, &state, (100, 60), 0, &BARRELS, 0);
+        assert_eq!(weapons.shots.len(), ring);
+
+        // The next held tick fires normally.
+        weapons.update(true, &state, (100, 60), 0, &BARRELS, 0);
+        assert!(weapons.shots.len() > ring);
+    }
+
+    #[test]
+    fn a_bomb_press_during_the_ring_flight_forces_a_volley() {
+        let mut weapons = Weapons::new(vec![0; 20], ActiveWeapon::Chaingun, 0x1200, (11, 7));
+        let state = state(Weapon::Multishot, 2);
+        run(&mut weapons, false, &state, 1);
+
+        // Fire released, cooldown cold: the forced volley bypasses both.
+        weapons.force_volley();
+        weapons.update(false, &state, (100, 60), 0, &BARRELS, 0);
+        assert!(!weapons.shots.is_empty());
     }
 
     #[test]

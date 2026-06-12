@@ -1208,13 +1208,16 @@ impl Scene for LevelScene {
                     }
                     Key::Char('f') => self.turbo = true,
                     Key::Char(' ') => {
-                        if matches!(self.flow, Flow::Running)
-                            && self.bomb_countdown == 0
-                            && self.state.use_smart_bomb()
-                        {
-                            self.bomb_countdown = 15;
-                            self.weapons
-                                .smart_bomb(self.ship.position(), &self.assets.bomb_wave);
+                        if matches!(self.flow, Flow::Running) {
+                            if self.bomb_countdown > 0 {
+                                // Ring in flight: the dispatch falls into
+                                // the volley path instead (L1 0xb730).
+                                self.weapons.force_volley();
+                            } else if self.state.use_smart_bomb() {
+                                self.bomb_countdown = 15;
+                                self.weapons
+                                    .smart_bomb(self.ship.position(), &self.assets.bomb_wave);
+                            }
                         }
                     }
                     Key::Up => self.held.up = true,
