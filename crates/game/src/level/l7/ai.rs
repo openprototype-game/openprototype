@@ -9,6 +9,10 @@
 //! Most frames are full 0x1e-byte descriptors with per-frame hitboxes,
 //! refreshed every sub-step.
 
+use super::{
+    DART, DRAGONFLY_L, DRAGONFLY_R, DRONE_L, DRONE_R, EXTRA_LIFE, FOUNTAIN, INVINCIBILITY,
+    SMART_BOMB, TRANSPORT, TWIN_GUN, WEAPON_UPGRADE,
+};
 use crate::level::ai_common::{pickup, word};
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
@@ -128,16 +132,16 @@ fn segment_base(segment: usize) -> usize {
 /// Runs AI function `arg` for one sub-step.
 pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
-        0 => pickup(entity, 0x4291, 0x42ef),
-        1 => pickup(entity, 0x41b5, 0x4213),
-        2 => pickup(entity, 0x421b, 0x4289),
-        3 => pickup(entity, 0x4357, 0x439d),
+        0 => pickup(entity, WEAPON_UPGRADE, 0x42ef),
+        1 => pickup(entity, SMART_BOMB, 0x4213),
+        2 => pickup(entity, INVINCIBILITY, 0x4289),
+        3 => pickup(entity, EXTRA_LIFE, 0x439d),
         4 => boss_controller(entity, ctx),
         5 => boss_part(entity, ctx, PART_2),
         6 => boss_part(entity, ctx, PART_3),
         7 => boss_part(entity, ctx, PART_4),
         8 => boss_part(entity, ctx, PART_5),
-        9 => fountain(entity, ctx, 0x4689, 0x471f, 0x4797, 0x47d3),
+        9 => fountain(entity, ctx, FOUNTAIN, 0x471f, 0x4797, 0x47d3),
         10 => fountain(entity, ctx, 0x47f1, 0x4887, 0x48ff, 0x493b),
         11 => dart(entity),
         12 => {
@@ -426,8 +430,8 @@ fn dart(entity: &mut Entity) {
     if entity.anim == 4 {
         entity.anim = 0;
         entity.sprite = match entity.sprite {
-            0x4c87 => 0x4ca5,
-            0x4cb5 => 0x4c87,
+            DART => 0x4ca5,
+            0x4cb5 => DART,
             other => other + 8,
         };
     }
@@ -442,7 +446,7 @@ fn anim_small_left(entity: &mut Entity, wad: &[u8]) {
     if entity.anim == 5 {
         entity.anim = 0;
         entity.sprite = if entity.sprite == 0x4c69 {
-            0x4b97
+            DRONE_L
         } else {
             entity.sprite + 0x1e
         };
@@ -460,7 +464,7 @@ fn anim_small_right(entity: &mut Entity, wad: &[u8]) {
     if entity.anim == 5 {
         entity.anim = 0;
         entity.sprite = if entity.sprite == 0x4b79 {
-            0x4aa7
+            DRONE_R
         } else {
             entity.sprite + 0x1e
         };
@@ -488,7 +492,7 @@ fn directional(entity: &mut Entity, wad: &[u8], segment: usize) {
 
     if dy == 0 {
         if prev == 0 {
-            entity.sprite = 0x4a2f;
+            entity.sprite = TRANSPORT;
         }
     } else if dy > 0 {
         if prev > 0 {
@@ -539,11 +543,11 @@ fn dragonfly(entity: &mut Entity, wad: &[u8], facing: Facing, drift: bool) {
         } else {
             match facing {
                 Facing::Leftward => {
-                    entity.sprite = 0x45d1;
+                    entity.sprite = DRAGONFLY_R;
                     entity.x += 0x28;
                 }
                 Facing::Rightward => {
-                    entity.sprite = 0x4559;
+                    entity.sprite = DRAGONFLY_L;
                     entity.x -= 0x28;
                 }
             }
@@ -604,14 +608,14 @@ fn snake(entity: &mut Entity, ctx: &mut AiContext) {
 
     entity.anim = 0;
 
-    if entity.sprite == 0x4959 {
+    if entity.sprite == TWIN_GUN {
         entity.sprite = 0x4977;
     } else if entity.sprite == 0x4a27 {
         entity.sprite = 0x49cf;
 
         if entity.counter >= 0x190 {
             entity.counter = 0;
-            entity.sprite = 0x4959;
+            entity.sprite = TWIN_GUN;
         }
     } else {
         entity.sprite += 8;

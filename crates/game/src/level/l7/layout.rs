@@ -4,6 +4,10 @@
 //! running game (seed `0x3e94` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
+use super::{
+    BOSS, BOSS_PART_2, BOSS_PART_3, BOSS_PART_4, BOSS_PART_5, DART, DRAGONFLY_L, DRAGONFLY_R,
+    DRONE_L, DRONE_R, EXTRA_LIFE, FOUNTAIN, INVINCIBILITY, SMART_BOMB, TRANSPORT, TWIN_GUN,
+};
 use crate::level::slot::{Cell, Emitter, Insert, PostOp, Step, XStart, rand, step};
 
 /// The health the landmark pickup `Once` emitters hardcode (`0xfa` = 250).
@@ -27,7 +31,7 @@ fn grid(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
 
 fn once_41b5() -> Emitter {
     Emitter::Once {
-        sprite: 0x41b5,
+        sprite: SMART_BOMB,
         health: PICKUP_HEALTH,
         spawn_row: rand(3, 0),
     }
@@ -35,7 +39,7 @@ fn once_41b5() -> Emitter {
 
 fn once_421b() -> Emitter {
     Emitter::Once {
-        sprite: 0x421b,
+        sprite: INVINCIBILITY,
         health: PICKUP_HEALTH,
         spawn_row: rand(3, 3),
     }
@@ -43,7 +47,7 @@ fn once_421b() -> Emitter {
 
 fn once_4357() -> Emitter {
     Emitter::Once {
-        sprite: 0x4357,
+        sprite: EXTRA_LIFE,
         health: PICKUP_HEALTH,
         spawn_row: rand(2, 6),
     }
@@ -56,7 +60,7 @@ fn lead_4959(spawn_row: u16) -> Cell {
     Cell {
         x_base: 0,
         x_start: XStart::Consume,
-        sprite: 0x4959,
+        sprite: TWIN_GUN,
         health: 0xaf0,
         spawn_row,
     }
@@ -66,7 +70,7 @@ fn tail_4959(x_base: u16, spawn_row: u16) -> Cell {
     Cell {
         x_base,
         x_start: XStart::None,
-        sprite: 0x4959,
+        sprite: TWIN_GUN,
         health: 0xaf0,
         spawn_row,
     }
@@ -102,7 +106,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x45d1)
+            .sprite(DRAGONFLY_R)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0x67)
@@ -110,7 +114,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4a2f)
+            .sprite(TRANSPORT)
             .health(0xaa)
             .row_reset(0x32)
             .spawn_row_offset(0x3f)
@@ -118,7 +122,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x14)
             .x_step(0x0)
-            .sprite(0x4559)
+            .sprite(DRAGONFLY_L)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0x53)
@@ -126,7 +130,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x45d1)
+            .sprite(DRAGONFLY_R)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0x71)
@@ -134,7 +138,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x14)
-            .sprite(0x4a2f)
+            .sprite(TRANSPORT)
             .health(0xaa)
             .row_reset(0x96)
             .spawn_row_offset(0x3f)
@@ -143,7 +147,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x45d1)
+            .sprite(DRAGONFLY_R)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0x67)
@@ -152,7 +156,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x14)
-            .sprite(0x4a2f)
+            .sprite(TRANSPORT)
             .health(0xaa)
             .row_reset(0x96)
             .spawn_row_offset(0x3f)
@@ -161,7 +165,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4559)
+            .sprite(DRAGONFLY_L)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0x5d)
@@ -169,7 +173,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x14)
-            .sprite(0x4aa7)
+            .sprite(DRONE_R)
             .health(0x96)
             .row_reset(0x96)
             .spawn_row_offset(0x35)
@@ -178,7 +182,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4b97)
+            .sprite(DRONE_L)
             .health(0x96)
             .row_reset(0x32)
             .spawn_row_offset(0x17)
@@ -187,7 +191,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x45d1)
+            .sprite(DRAGONFLY_R)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0x67)
@@ -196,7 +200,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4c87)
+            .sprite(DART)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0xd)
@@ -204,7 +208,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4aa7)
+            .sprite(DRONE_R)
             .health(0x96)
             .row_reset(0x32)
             .spawn_row_offset(0x21)
@@ -212,7 +216,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4a2f)
+            .sprite(TRANSPORT)
             .health(0xaa)
             .row_reset(0x32)
             .spawn_row_offset(0x49)
@@ -221,7 +225,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x14)
-            .sprite(0x4aa7)
+            .sprite(DRONE_R)
             .health(0x96)
             .row_reset(0x96)
             .spawn_row_offset(0x35)
@@ -229,7 +233,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x14)
-            .sprite(0x4b97)
+            .sprite(DRONE_L)
             .health(0x96)
             .row_reset(0x96)
             .spawn_row_offset(0x2b)
@@ -237,7 +241,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4c87)
+            .sprite(DART)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0xd)
@@ -245,7 +249,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4aa7)
+            .sprite(DRONE_R)
             .health(0x96)
             .row_reset(0x32)
             .spawn_row_offset(0x35)
@@ -253,7 +257,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4a2f)
+            .sprite(TRANSPORT)
             .health(0xaa)
             .row_reset(0x32)
             .spawn_row_offset(0x3f)
@@ -261,7 +265,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4b97)
+            .sprite(DRONE_L)
             .health(0x96)
             .row_reset(0x32)
             .spawn_row_offset(0x2b)
@@ -269,7 +273,7 @@ pub fn script() -> Vec<Step> {
         step()
             .x_start(0x64)
             .x_step(0x0)
-            .sprite(0x4c87)
+            .sprite(DART)
             .health(0xdc)
             .row_reset(0x32)
             .spawn_row_offset(0xd)
@@ -280,7 +284,7 @@ pub fn script() -> Vec<Step> {
 fn landmark(target_tick: u16, spawn_row: u16) -> PostOp {
     PostOp::Insert(Insert {
         target_tick,
-        records: vec![(0x4689, 0x140, spawn_row)],
+        records: vec![(FOUNTAIN, 0x140, spawn_row)],
     })
 }
 
@@ -293,11 +297,11 @@ pub fn post_pass() -> Vec<PostOp> {
         PostOp::Insert(Insert {
             target_tick: 0x3cd2,
             records: vec![
-                (0x5893, 0x7d00, 0x8),
-                (0x4cbd, 0x7d00, 0x9),
-                (0x507d, 0x7d00, 0xa),
-                (0x53a7, 0x7d00, 0xb),
-                (0x5749, 0x7d00, 0xc),
+                (BOSS, 0x7d00, 0x8),
+                (BOSS_PART_2, 0x7d00, 0x9),
+                (BOSS_PART_3, 0x7d00, 0xa),
+                (BOSS_PART_4, 0x7d00, 0xb),
+                (BOSS_PART_5, 0x7d00, 0xc),
             ],
         }),
         landmark(0xb30, 0x87),
