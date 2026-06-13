@@ -16,9 +16,7 @@
 //! delta but not their anchors (each race WAD's spawn table has its own
 //! length). [`BlockMap`] carries the per-level anchors; everything else
 //! sits at fixed deltas from them, validated field-by-field against real
-//! DOSBox saves (`tests/fixtures/`) for L1/L2/L3/L5/L7; the L4/L6 anchors
-//! are derived from their writers/loaders in the binaries (no fixtures
-//! yet).
+//! DOSBox saves of all seven levels (`tests/fixtures/`).
 //!
 //! This module maps the snapshot onto the port's semantic state. Fields the
 //! port does not model yet are written as the original's idle values and
@@ -948,6 +946,8 @@ mod tests {
     const DOSBOX_L3_SAVE: &[u8] = include_bytes!("../tests/fixtures/l3.psg");
     const DOSBOX_L5_SAVE: &[u8] = include_bytes!("../tests/fixtures/l5.psg");
     const DOSBOX_L7_SAVE: &[u8] = include_bytes!("../tests/fixtures/l7.psg");
+    const DOSBOX_L4_SAVE: &[u8] = include_bytes!("../tests/fixtures/l4-race.psg");
+    const DOSBOX_L6_SAVE: &[u8] = include_bytes!("../tests/fixtures/l6-race.psg");
 
     #[test]
     fn the_dosbox_race_save_decodes() {
@@ -1067,6 +1067,39 @@ mod tests {
     }
 
     #[test]
+    fn the_dosbox_l4_save_decodes() {
+        let save = SaveGame::decode(DOSBOX_L4_SAVE).expect("ground truth decodes");
+
+        assert_eq!(save.level, Level::L4);
+        assert_eq!(save.state.lives.get(), 3);
+        assert_eq!(save.state.score, 0);
+        assert_eq!(save.records.len(), 82);
+        assert_eq!(save.cursor, 3);
+        assert_eq!(save.orb_drop_countdown, 3);
+        assert_eq!((save.ship_x, save.ship_y), (0, 19));
+        assert_eq!(save.entities.len(), 3);
+        assert_eq!(save.entities[0].kind, 0x3D86);
+        assert_eq!(save.scroll_accums, vec![0x2BB0, 0x576, 0x91A, 0x1D20]);
+    }
+
+    #[test]
+    fn the_dosbox_l6_save_decodes() {
+        let save = SaveGame::decode(DOSBOX_L6_SAVE).expect("ground truth decodes");
+
+        assert_eq!(save.level, Level::L6);
+        assert_eq!(save.state.lives.get(), 2);
+        assert_eq!(save.records.len(), 242);
+        assert_eq!(save.cursor, 7);
+        assert_eq!(save.entities.len(), 5);
+        // The capture shot an obstacle: live damage in the entity buffer.
+        assert_eq!(save.entities[4].health, 31_940);
+        assert_eq!(save.effects.len(), 5);
+        // The lingering spark is L6's own chaingun-spark descriptor, the
+        // same value the per-WAD effect table carries.
+        assert_eq!(save.effects[0].sprite, 0x3C90);
+    }
+
+    #[test]
     fn re_encoding_every_dosbox_save_is_idempotent() {
         for (name, bytes) in [
             ("l2-race", DOSBOX_RACE_SAVE),
@@ -1074,6 +1107,8 @@ mod tests {
             ("l3", DOSBOX_L3_SAVE),
             ("l5", DOSBOX_L5_SAVE),
             ("l7", DOSBOX_L7_SAVE),
+            ("l4-race", DOSBOX_L4_SAVE),
+            ("l6-race", DOSBOX_L6_SAVE),
         ] {
             let save = SaveGame::decode(bytes).expect("ground truth decodes");
             let encoded = save.encode();
