@@ -9,11 +9,11 @@
 //! obstacle (no animation); arg 5 is the stationary finish entity, which
 //! raises the level-end flag on its first step.
 
-use super::Entity;
+use crate::spawns::Entity;
 
 /// Per-step context: the race AI touches nothing but the entity and the
 /// level-end flag.
-pub(super) struct AiContext<'a> {
+pub(crate) struct AiContext<'a> {
     /// The level-end flag (`cs:0xcc3`), raised by the finish entity.
     pub level_end: &'a mut bool,
 }
@@ -23,7 +23,7 @@ pub(super) struct AiContext<'a> {
 const PICKUP_LAST_OFFSET: [u16; 4] = [0x5e, 0x5e, 0x6e, 0x46];
 
 /// Runs AI function `arg` for one sub-step.
-pub(super) fn step(entity: &mut Entity, ctx: &mut AiContext) {
+pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
         0..=3 => {
             entity.x -= 0x50;

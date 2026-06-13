@@ -8,11 +8,11 @@
 //! port assembles each sprite from its descriptor over the clip-header catalog
 //! and blits it whole.
 
-mod ai_l1;
-mod ai_l3;
-mod ai_l5;
-mod ai_l7;
-mod ai_race;
+use crate::level::l1::ai as ai_l1;
+use crate::level::l3::ai as ai_l3;
+use crate::level::l5::ai as ai_l5;
+use crate::level::l7::ai as ai_l7;
+use crate::level::race::ai as ai_race;
 
 use std::collections::HashMap;
 

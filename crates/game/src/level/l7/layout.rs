@@ -4,7 +4,7 @@
 //! running game (seed `0x3e94` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
-use super::slot::{Cell, Emitter, Insert, PostOp, Step, XStart, rand, step};
+use crate::level::slot::{Cell, Emitter, Insert, PostOp, Step, XStart, rand, step};
 
 /// The health the landmark pickup `Once` emitters hardcode (`0xfa` = 250).
 const PICKUP_HEALTH: u16 = 0xfa;

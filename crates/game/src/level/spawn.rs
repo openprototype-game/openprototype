@@ -18,7 +18,7 @@ pub enum SpawnSource {
     /// Built at load by the level's layout script (levels 1, 3, 5, 7).
     ///
     /// The script and post-pass are the validated transcriptions in
-    /// `level_<n>.rs`; the PRNG seed makes the scatter vary per play.
+    /// `l<n>/layout.rs`; the PRNG seed makes the scatter vary per play.
     Generated {
         script: fn() -> Vec<Step>,
         post_pass: Option<fn() -> Vec<PostOp>>,
@@ -82,7 +82,7 @@ fn static_records(wad: &[u8], table: usize) -> Vec<Record> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::level::level_3;
+    use crate::level::l3;
     use crate::levels::Level;
 
     #[test]
@@ -90,11 +90,7 @@ mod tests {
         let source = Level::L3.data().spawns;
         let records = source.records(&[], &mut EngineRng::new(0x1a94));
 
-        let direct = generate(
-            &level_3::script(),
-            &level_3::post_pass(),
-            &mut EngineRng::new(0x1a94),
-        );
+        let direct = generate(&l3::script(), &l3::post_pass(), &mut EngineRng::new(0x1a94));
         assert_eq!(records, direct);
     }
 

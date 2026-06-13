@@ -6,11 +6,12 @@
 //! dispatcher script, and the emitter library that writes the spawn records.
 //! See `reference/formats/level-layout.md` for the disassembly it mirrors.
 
-pub mod level_1;
-pub mod level_3;
-pub mod level_5;
-pub mod level_7;
+pub mod l1;
+pub mod l3;
+pub mod l5;
+pub mod l7;
 pub mod prng;
+pub mod race;
 pub mod slot;
 pub mod spawn;
 

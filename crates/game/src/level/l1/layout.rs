@@ -4,7 +4,7 @@
 //! running game (seed `0x3b95` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
-use super::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
+use crate::level::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
 /// Per-sprite-type spawn health, read by the original from a 9-entry table
 /// at `cs:[bf6d..]`.

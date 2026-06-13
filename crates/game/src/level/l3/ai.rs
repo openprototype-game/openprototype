@@ -10,8 +10,8 @@
 //! Positions are 12.4 fixed point; data tables are read from the WAD image
 //! at their file offsets.
 
-use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
+use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
 /// LEVEL_3's cs-pointer to file-offset base.
 const CS_BASE: usize = 0x4710;
@@ -20,7 +20,7 @@ const CS_BASE: usize = 0x4710;
 const SLOT_VOLLEY: usize = 8;
 
 /// Per-step context the AI functions read and write besides the entity.
-pub(super) struct AiContext<'a> {
+pub(crate) struct AiContext<'a> {
     pub wad: &'a [u8],
     pub rng: &'a mut EngineRng,
     /// Player position in pixels (camera-inclusive buffer coordinates).
@@ -42,7 +42,7 @@ pub(super) struct AiContext<'a> {
 
 /// The boss's engine globals (`cs:0xcd7..0xcf5`); one boss runs at a time,
 /// so the original keeps these outside the entity.
-pub(super) struct BossState {
+pub(crate) struct BossState {
     /// Y-bob phase (`cs:0xcd9`, wrap 0x28, byte-indexed deltas).
     bob_phase: usize,
     /// The boss script tick (`cs:0xcd7`); the pattern loop resets it to
@@ -126,7 +126,7 @@ fn segment_base(segment: usize) -> usize {
 const ORBITER_WAVE: usize = 0x103fd;
 
 /// Runs AI function `arg` for one sub-step.
-pub(super) fn step(entity: &mut Entity, ctx: &mut AiContext) {
+pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
         0 => pickup(entity, 0x51e8, 0x5246),
         1 => pickup(entity, 0x510c, 0x516a),

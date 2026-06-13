@@ -9,8 +9,8 @@
 //! Most frames are full 0x1e-byte descriptors with per-frame hitboxes,
 //! refreshed every sub-step.
 
-use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
+use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
 /// LEVEL_7's cs-pointer to file-offset base.
 const CS_BASE: usize = 0x51e0;
@@ -19,7 +19,7 @@ const CS_BASE: usize = 0x51e0;
 const SLOT_BITE: usize = 8;
 
 /// Per-step context the AI functions read and write besides the entity.
-pub(super) struct AiContext<'a> {
+pub(crate) struct AiContext<'a> {
     pub wad: &'a [u8],
     pub rng: &'a mut EngineRng,
     /// Player y in pixels (the bite-row proximity check; no L7 enemy aims,
@@ -39,7 +39,7 @@ pub(super) struct AiContext<'a> {
 /// The composite boss's shared globals (`cs:0xcc3..0xcdd`), owned by the
 /// controller (arg 4) and read by the body parts. File-image inits in the
 /// `Default`.
-pub(super) struct BossState {
+pub(crate) struct BossState {
     /// The shared anchor (`cs:0xcc3`/`0xcc5`, 12.4; starts at 288, 20 px).
     anchor_x: i32,
     anchor_y: i32,
@@ -56,7 +56,7 @@ pub(super) struct BossState {
     spiral_divider: u8,
     /// The min-shared health pool (`cs:0xcd3`); the death handler zeroes it
     /// to cascade the remaining parts.
-    pub(super) shared_health: i32,
+    pub(crate) shared_health: i32,
     /// Smoke burst delay (`cs:0xcd9`, init 0x14) and offsets.
     smoke_delay: i32,
     smoke_dx: i32,
@@ -134,7 +134,7 @@ fn segment_base(segment: usize) -> usize {
 }
 
 /// Runs AI function `arg` for one sub-step.
-pub(super) fn step(entity: &mut Entity, ctx: &mut AiContext) {
+pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
         0 => pickup(entity, 0x4291, 0x42ef),
         1 => pickup(entity, 0x41b5, 0x4213),

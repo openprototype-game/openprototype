@@ -7,7 +7,7 @@
 
 use crate::background::Sp;
 use crate::level::spawn::SpawnSource;
-use crate::level::{level_1, level_3, level_5, level_7};
+use crate::level::{l1, l3, l5, l7};
 use openprototype_core::PerWeapon;
 
 /// Which catalog cells make up a weapon's overlay sprite: the run of `count`
@@ -573,7 +573,7 @@ impl Level {
                 stars: &[],
                 camera_min: 0,
                 spawns: SpawnSource::Generated {
-                    script: level_1::script,
+                    script: l1::script,
                     post_pass: None,
                 },
                 spawn_positions: Some(SpawnPositionsData {
@@ -790,8 +790,8 @@ impl Level {
                 stars: &[],
                 camera_min: 4,
                 spawns: SpawnSource::Generated {
-                    script: level_3::script,
-                    post_pass: Some(level_3::post_pass),
+                    script: l3::script,
+                    post_pass: Some(l3::post_pass),
                 },
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x85df,
@@ -1000,7 +1000,7 @@ impl Level {
                 stars: &[],
                 camera_min: 0,
                 spawns: SpawnSource::Generated {
-                    script: level_5::script,
+                    script: l5::script,
                     post_pass: None,
                 },
                 spawn_positions: Some(SpawnPositionsData {
@@ -1218,8 +1218,8 @@ impl Level {
                 stars: &[],
                 camera_min: 0,
                 spawns: SpawnSource::Generated {
-                    script: level_7::script,
-                    post_pass: Some(level_7::post_pass),
+                    script: l7::script,
+                    post_pass: Some(l7::post_pass),
                 },
                 spawn_positions: Some(SpawnPositionsData {
                     table: 0x8635,

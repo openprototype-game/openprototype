@@ -9,8 +9,8 @@
 //! sub-step, while the fixture (func 40, 0xe3c7) keeps its spawn-time
 //! boxes for life. Everything else uses L1-style 8-byte cycle frames.
 
-use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
+use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
 /// LEVEL_5's cs-pointer to file-offset base.
 const CS_BASE: usize = 0x3f90;
@@ -22,7 +22,7 @@ const SLOT_VOLLEY: usize = 16;
 const SLOT_PHASE_CHANGE: usize = 8;
 
 /// Per-step context the AI functions read and write besides the entity.
-pub(super) struct AiContext<'a> {
+pub(crate) struct AiContext<'a> {
     pub wad: &'a [u8],
     pub rng: &'a mut EngineRng,
     /// Player position in pixels (camera-inclusive buffer coordinates).
@@ -50,7 +50,7 @@ pub(super) struct AiContext<'a> {
 
 /// The boss's engine globals (`cs:0xce4..0xced`), all file-image zero.
 #[derive(Default)]
-pub(super) struct BossState {
+pub(crate) struct BossState {
     /// The boss tick (`cs:0xce4`) and the fire-tick counter (`cs:0xce9`).
     tick: u16,
     fire_ticks: u16,
@@ -102,7 +102,7 @@ fn segment_base(segment: usize) -> usize {
 }
 
 /// Runs AI function `arg` for one sub-step.
-pub(super) fn step(entity: &mut Entity, ctx: &mut AiContext) {
+pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
         0 => pickup(entity, 0x3764, 0x37c2),
         1 => pickup(entity, 0x3688, 0x36e6),

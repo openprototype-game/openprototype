@@ -411,12 +411,12 @@ fn draw(rng: &mut EngineRng, r: Rand) -> u16 {
 /// # Examples
 ///
 /// ```
-/// use openprototype::level::level_1;
+/// use openprototype::level::l1;
 /// use openprototype::level::prng::EngineRng;
 /// use openprototype::level::slot::generate;
 ///
 /// // Seed 0x3b95 reproduces LEVEL_1's validated GET-READY capture.
-/// let records = generate(&level_1::script(), &[], &mut EngineRng::new(0x3b95));
+/// let records = generate(&l1::script(), &[], &mut EngineRng::new(0x3b95));
 /// assert_eq!(records.len(), 446);
 /// ```
 ///

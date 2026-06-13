@@ -12,11 +12,11 @@
 //! (savegame-visible state only). The effects queue, the SFX triggers and
 //! the boss/orbiter scroll gate are implemented.
 
-use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
+use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
 /// Per-step context the AI functions read and write besides the entity.
-pub(super) struct AiContext<'a> {
+pub(crate) struct AiContext<'a> {
     pub wad: &'a [u8],
     pub rng: &'a mut EngineRng,
     /// Player position in pixels (camera-inclusive buffer coordinates).
@@ -37,7 +37,7 @@ pub(super) struct AiContext<'a> {
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
 /// runs at a time, so the original keeps these outside the entity.
-pub(super) struct BossState {
+pub(crate) struct BossState {
     anchor_x: i32,
     anchor_y: i32,
     saved_a: u16,
@@ -75,7 +75,7 @@ fn word(wad: &[u8], at: usize) -> i32 {
 }
 
 /// Runs AI function `arg` for one sub-step.
-pub(super) fn step(entity: &mut Entity, ctx: &mut AiContext) {
+pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
         0 => asteroid(entity, -0x20, 4),
         1 => asteroid(entity, -0x18, 6),

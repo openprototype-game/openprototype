@@ -4,7 +4,7 @@
 //! running game (seed `0x1a94` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
-use super::slot::{Cell, Emitter, Fill, Overwrite, PostOp, Step, XStart, rand, step};
+use crate::level::slot::{Cell, Emitter, Fill, Overwrite, PostOp, Step, XStart, rand, step};
 
 /// Per-sprite-type spawn health, read by the original from a 9-entry table
 /// at `cs:[dac5..dad5]`.

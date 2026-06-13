@@ -4,7 +4,7 @@
 //! running game (seed `0x2d93` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
-use super::slot::{Cell, Emitter, Fill, RowStyle, Step, XStart, rand, step};
+use crate::level::slot::{Cell, Emitter, Fill, RowStyle, Step, XStart, rand, step};
 
 // Per-sprite-type spawn health, read by the original from runtime slots
 // `cs:[bd9e..bdae]`. Two sprites share `D_3C4E`.
