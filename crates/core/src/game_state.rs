@@ -273,20 +273,26 @@ impl GameState {
         }
     }
 
-    /// Adds `points`, granting an extra life for each 10,000-point boundary
-    /// crossed (lives cap at 9). Returns whether a life was granted, for
-    /// the scene's jingle trigger.
+    /// Adds `points`, granting AT MOST one extra life when a 10,000-point
+    /// boundary is crossed (lives cap at 9). Returns whether a life was
+    /// granted, for the scene's jingle trigger.
+    ///
+    /// The original's per-tick updater (`div 0x2710`, all seven WADs)
+    /// grants one life per check and snaps its milestone to the full
+    /// quotient, so crossing two boundaries in one tick -- a smart bomb
+    /// reaping a dense wave -- still pays one life and never pays the
+    /// skipped boundary later. The snap is implicit here: the milestone
+    /// derives from the score itself.
     pub fn add_score(&mut self, points: u32) -> bool {
         let milestones_before = self.score / EXTRA_LIFE_INTERVAL;
         self.score = self.score.saturating_add(points);
-        let earned = self.score / EXTRA_LIFE_INTERVAL - milestones_before;
+        let crossed = self.score / EXTRA_LIFE_INTERVAL > milestones_before;
 
-        if earned > 0 {
-            let earned = u8::try_from(earned).unwrap_or(u8::MAX);
-            self.lives = self.lives.saturating_add(earned);
+        if crossed {
+            self.lives = self.lives.saturating_add(1);
         }
 
-        earned > 0
+        crossed
     }
 
     /// Raises the selected weapon's charge by one (an orb pickup), capped at
@@ -464,14 +470,20 @@ mod tests {
     }
 
     #[test]
-    fn add_score_grants_a_life_on_each_ten_thousand_boundary() {
+    fn add_score_grants_at_most_one_life_per_check() {
         let mut state = fresh();
         assert!(state.add_score(10_000));
         assert_eq!(state.lives.get(), 4);
         assert!(!state.add_score(1));
 
+        // Two boundaries in one add still pay a single life, and the
+        // skipped boundary is never paid later (the milestone snaps).
         let mut multi = fresh();
         multi.add_score(25_000);
+        assert_eq!(multi.lives.get(), 4);
+        multi.add_score(1_000);
+        assert_eq!(multi.lives.get(), 4);
+        multi.add_score(5_000);
         assert_eq!(multi.lives.get(), 5);
     }
 
