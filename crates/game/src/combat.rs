@@ -344,6 +344,11 @@ fn center_offset(wad: &[u8], cs_base: usize, kind: u16) -> (i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::level::prng::EngineRng;
+
+    fn test_rng() -> EngineRng {
+        EngineRng::new(1)
+    }
     use openprototype_core::PerWeapon;
     use openprototype_core::game_state::{Lives, SmartBombs, Weapon, WeaponLevel};
 
@@ -425,7 +430,12 @@ mod tests {
 
     #[test]
     fn touching_a_pickup_grants_and_removes_it() {
-        let mut spawns = Spawns::new(Vec::new(), None, crate::levels::Level::L1.data().combat);
+        let mut spawns = Spawns::new(
+            Vec::new(),
+            None,
+            crate::levels::Level::L1.data().combat,
+            test_rng(),
+        );
         let mut orb = entity(100, 50, 350);
         orb.kind = 0x36ea;
         spawns.entities.push(orb);
@@ -449,7 +459,12 @@ mod tests {
 
     #[test]
     fn ramming_an_enemy_costs_the_bar_and_kills_it() {
-        let mut spawns = Spawns::new(Vec::new(), None, crate::levels::Level::L1.data().combat);
+        let mut spawns = Spawns::new(
+            Vec::new(),
+            None,
+            crate::levels::Level::L1.data().combat,
+            test_rng(),
+        );
         spawns.entities.push(entity(100, 50, 100));
 
         let mut state = fresh_state();
@@ -472,7 +487,12 @@ mod tests {
 
     #[test]
     fn the_first_orb_drops_on_the_third_kill() {
-        let mut spawns = Spawns::new(Vec::new(), None, crate::levels::Level::L1.data().combat);
+        let mut spawns = Spawns::new(
+            Vec::new(),
+            None,
+            crate::levels::Level::L1.data().combat,
+            test_rng(),
+        );
         let mut events = CombatEvents::default();
 
         for kill in 1..=3 {

@@ -35,15 +35,16 @@ impl SpawnSource {
     /// Resolves the source into the level's spawn-record buffer.
     ///
     /// `wad` is the level's WAD image (read by [`StaticTable`]
-    /// (SpawnSource::StaticTable)); `seed` feeds the engine PRNG (drawn by
-    /// [`Generated`](SpawnSource::Generated), pass
-    /// [`clock_seed`](super::prng::clock_seed) for the original's
-    /// varies-every-play behavior).
-    pub fn records(self, wad: &[u8], seed: u16) -> Vec<Record> {
+    /// (SpawnSource::StaticTable)); `rng` is the level's single engine
+    /// stream (seeded once per entry from
+    /// [`clock_seed`](super::prng::clock_seed)): the layout draws advance
+    /// it, and the star scatter and play draws continue from there, like
+    /// the original's one-generator model.
+    pub fn records(self, wad: &[u8], rng: &mut EngineRng) -> Vec<Record> {
         match self {
             SpawnSource::Generated { script, post_pass } => {
                 let post = post_pass.map_or_else(Vec::new, |build| build());
-                generate(&script(), &post, &mut EngineRng::new(seed))
+                generate(&script(), &post, rng)
             }
             SpawnSource::StaticTable { table } => static_records(wad, table),
         }
@@ -87,7 +88,7 @@ mod tests {
     #[test]
     fn generated_arm_runs_the_script_and_post_pass() {
         let source = Level::L3.data().spawns;
-        let records = source.records(&[], 0x1a94);
+        let records = source.records(&[], &mut EngineRng::new(0x1a94));
 
         let direct = generate(
             &level_3::script(),
@@ -116,7 +117,7 @@ mod tests {
                 "race level without a static table"
             );
 
-            let records = data.spawns.records(&wad, 0);
+            let records = data.spawns.records(&wad, &mut EngineRng::new(1));
             assert_eq!(records.len(), expected_count, "{}", data.wad);
 
             // The head record pins the table base: the opening obstacle

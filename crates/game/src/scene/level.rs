@@ -234,16 +234,18 @@ impl LevelScene {
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
         let background_scroll = assets.background.scroll();
         let scenery_scroll = assets.scenery.scroll();
-        let stars = StarField::new(assets.stars, &mut EngineRng::new(clock_seed()));
-        // The original seeds the layout PRNG from the wall clock at level
-        // init, so the scatter varies every play.
-        let spawns = assets.spawn_rows.is_some().then(|| {
-            Spawns::new(
-                assets.spawns.records(&assets.wad, clock_seed()),
-                assets.spawn_ai,
-                assets.combat,
-            )
-        });
+        // One engine PRNG per level entry, seeded once from the wall clock
+        // (the original's single-stream model): the layout generator's
+        // draws come first, the races' star scatter continues the stream,
+        // and the play draws (AI timers, orb reseeds, aimed shots) follow.
+        let mut rng = EngineRng::new(clock_seed());
+        let records = assets
+            .spawn_rows
+            .is_some()
+            .then(|| assets.spawns.records(&assets.wad, &mut rng));
+        let stars = StarField::new(assets.stars, &mut rng);
+        let spawns =
+            records.map(|records| Spawns::new(records, assets.spawn_ai, assets.combat, rng));
         let mut ship = Ship::new(assets.ship);
         ship.arm_shield(i32::from(assets.combat.respawn_invincibility));
         let pod_weapon = state.active_weapon();
@@ -745,10 +747,17 @@ impl LevelScene {
                         // scroll accumulators. Effects and live player shots
                         // carry over; speed (the camera) persists.
                         if self.assets.combat.course_restart {
+                            // The restart re-reads the static table; the
+                            // engine stream continues uninterrupted (the
+                            // respawn handler never re-seeds).
+                            let mut restart_rng = EngineRng::new(clock_seed());
                             let mut fresh = Spawns::new(
-                                self.assets.spawns.records(&self.assets.wad, clock_seed()),
+                                self.assets
+                                    .spawns
+                                    .records(&self.assets.wad, &mut restart_rng),
                                 self.assets.spawn_ai,
                                 self.assets.combat,
+                                restart_rng,
                             );
 
                             if let Some(old) = self.spawns.take() {
@@ -758,6 +767,7 @@ impl LevelScene {
                                 // carries across deaths.
                                 fresh.set_orb_drop_countdown(old.orb_drop_countdown());
                                 fresh.effects = old.effects;
+                                fresh.rng = old.rng;
                             }
 
                             self.spawns = Some(fresh);

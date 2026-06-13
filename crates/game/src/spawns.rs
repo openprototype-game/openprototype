@@ -234,7 +234,7 @@ pub struct Spawns {
     /// Which per-level AI set drives mode-0 entities, when transcribed.
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
-    rng: EngineRng,
+    pub(crate) rng: EngineRng,
     /// The orb-drop countdown (`cs:0x2666`): every Nth killed enemy converts
     /// into the weapon-orb pickup.
     orb_drop_countdown: i32,
@@ -261,7 +261,12 @@ impl Spawns {
     /// Builds the schedule over a generated (or static) record buffer.
     /// `combat` carries the level's engine bounds (entity cap, cull floor)
     /// and the kind/sprite constants the combat passes key on.
-    pub fn new(records: Vec<Record>, ai: Option<SpawnAi>, combat: CombatData) -> Self {
+    pub fn new(
+        records: Vec<Record>,
+        ai: Option<SpawnAi>,
+        combat: CombatData,
+        rng: EngineRng,
+    ) -> Self {
         let countdown = records.first().map_or(0, |record| i32::from(record.delay));
 
         Self {
@@ -275,7 +280,7 @@ impl Spawns {
             boss_explosion: None,
             ai_sounds: Vec::new(),
             ai,
-            rng: EngineRng::new(clock_seed()),
+            rng,
             // The WAD's data image initializes the countdown to 3, so the
             // first orb drops on the third kill; rng(4)+5 reseeds after.
             orb_drop_countdown: 3,
@@ -316,7 +321,9 @@ impl Spawns {
             entity.debris = descriptor_debris(wad, cs_base, entity.kind);
         }
 
-        let mut spawns = Self::new(records, ai, combat);
+        // The PRNG lives outside the saved block, so a load resumes on a
+        // fresh clock seed, like the original's GET READY re-entry.
+        let mut spawns = Self::new(records, ai, combat, EngineRng::new(clock_seed()));
         spawns.countdown = spawns
             .records
             .get(cursor)
@@ -758,6 +765,7 @@ mod tests {
             vec![record(3, 0), record(0, 1), record(2, 0)],
             None,
             crate::levels::Level::L1.data().combat,
+            EngineRng::new(1),
         );
         let rows = rows();
 
@@ -785,7 +793,12 @@ mod tests {
     #[test]
     fn caps_the_entity_list() {
         let records = (0..30).map(|_| record(0, 0)).collect();
-        let mut spawns = Spawns::new(records, None, crate::levels::Level::L1.data().combat);
+        let mut spawns = Spawns::new(
+            records,
+            None,
+            crate::levels::Level::L1.data().combat,
+            EngineRng::new(1),
+        );
 
         spawns.tick(&rows(), &[], 0);
         // The original's sustained max is one below the cap (the cap-th
@@ -799,6 +812,7 @@ mod tests {
             vec![record(1, 0)],
             None,
             crate::levels::Level::L1.data().combat,
+            EngineRng::new(1),
         );
 
         spawns.tick(&rows(), &[], 0);
