@@ -36,7 +36,7 @@ use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game_state::{Handoff, HitOutcome, Severity};
 use openprototype_core::input::{Key, KeyEvent};
-use openprototype_core::{ActiveWeapon, GameState, Weapon};
+use openprototype_core::{ActiveWeapon, GameState, Weapon, WeaponLevel};
 
 /// The level's frame: hand-programmed Mode X 320x160 (480 scanlines, each row
 /// tripled to give 160 logical rows), shown on a 4:3 CRT so pixels are 1.5x
@@ -110,6 +110,17 @@ const PULSE_START: i32 = 0x30;
 /// `cs:0x29f7` and `cs:0x46b2`).
 /// Every unfreeze re-arms this many ticks before Esc can reopen the menu.
 const ESC_DEBOUNCE_TICKS: u32 = 0x14;
+
+/// The ERIK cheat's letters, and the typing window per letter (one second;
+/// the sequence-instead-of-chord shape is a documented deviation, see the
+/// `erik_progress` field).
+const ERIK: [char; 4] = ['e', 'r', 'i', 'k'];
+const ERIK_LETTER_TICKS: u32 = 60;
+
+/// What the cheat grants, every time the sequence completes: the original
+/// writes 0x7d00 invincibility ticks and fills all four weapon bars to 0x20
+/// (charge level 4) -- L1 file 0xb2b0..0xb2d2.
+const ERIK_INVINCIBILITY: u16 = 0x7D00;
 
 enum Flow {
     /// Frozen on the last composed frame with GET READY overlaid, waiting for
@@ -210,6 +221,16 @@ pub struct LevelScene {
     /// (`movw $0x14`, L1 file 0xf85c / L2 0xbdcd, the single dispatcher
     /// site in all seven WADs) and the gate requires it zero.
     esc_debounce: u32,
+    /// Progress through the typed ERIK cheat, `0..4` letters matched.
+    ///
+    /// The original requires E+R+I+K held simultaneously (checker at L1
+    /// file 0xb287, per unfrozen tick); the port deviates to a typed
+    /// sequence because 4-key chords ghost on many modern keyboard
+    /// matrices -- the original chord only ever had to work on the NEO
+    /// team's own boards (ERIK tops the shipped highscore list).
+    erik_progress: usize,
+    /// Ticks left for the next ERIK letter before the progress resets.
+    erik_deadline: u32,
     /// The freeze pulse's level and direction (`cs:0x6ea6`/`0x6ea7` in
     /// L2). Never reset: the phase persists across freezes within the level.
     pulse_value: i32,
@@ -302,6 +323,8 @@ impl LevelScene {
             menu: None,
             audio_settings: AudioSettings::default(),
             esc_debounce: 0,
+            erik_progress: 0,
+            erik_deadline: 0,
             pulse_value: PULSE_START,
             pulse_rising: false,
             pulse_primed: false,
@@ -649,6 +672,38 @@ impl LevelScene {
         self.state.cycle_weapon();
     }
 
+    /// One typed letter toward the ERIK cheat (only while running, like the
+    /// original's checker, which is skipped under the freeze flag). A
+    /// completed sequence grants what L1 file 0xb2b0 writes: 0x7d00
+    /// invincibility ticks and all four weapon bars at full charge.
+    fn erik_letter(&mut self, letter: char) {
+        if !matches!(self.flow, Flow::Running) {
+            return;
+        }
+
+        if letter == ERIK[self.erik_progress] {
+            self.erik_progress += 1;
+            self.erik_deadline = ERIK_LETTER_TICKS;
+        } else {
+            // A wrong letter restarts the sequence (an 'e' counts as its
+            // first letter again).
+            self.erik_progress = usize::from(letter == ERIK[0]);
+            self.erik_deadline = ERIK_LETTER_TICKS;
+        }
+
+        if self.erik_progress == ERIK.len() {
+            self.erik_progress = 0;
+            self.state.invincible_ticks = ERIK_INVINCIBILITY;
+            self.ship.arm_shield(i32::from(ERIK_INVINCIBILITY));
+
+            for weapon in Weapon::ALL {
+                *self.state.weapons.get_mut(weapon) = WeaponLevel::new(WeaponLevel::MAX);
+            }
+
+            tracing::info!("ERIK");
+        }
+    }
+
     /// Report the selected weapon's charge after a dev-key adjustment.
     fn report_level(&self) {
         eprintln!(
@@ -788,6 +843,15 @@ impl LevelScene {
 
             if running {
                 self.esc_debounce = self.esc_debounce.saturating_sub(1);
+
+                if self.erik_progress > 0 {
+                    self.erik_deadline = self.erik_deadline.saturating_sub(1);
+
+                    if self.erik_deadline == 0 {
+                        self.erik_progress = 0;
+                    }
+                }
+
                 self.ship
                     .update(self.held, &mut self.camera_y, self.assets.camera_min);
             } else if matches!(self.flow, Flow::Dying { .. }) {
@@ -1331,28 +1395,35 @@ impl Scene for LevelScene {
                     }
                     Key::Ctrl => self.fire_held = true,
                     Key::Enter | Key::Backspace => {}
-                    Key::Char(c) => match c.to_ascii_lowercase() {
-                        'a' => self.nudge_overlay(-1, 0),
-                        'd' => self.nudge_overlay(1, 0),
-                        'w' => self.nudge_overlay(0, -1),
-                        's' => self.nudge_overlay(0, 1),
-                        'p' => {
-                            self.paused = !self.paused;
-                            eprintln!("scroll {}", if self.paused { "paused" } else { "running" });
+                    Key::Char(c) => {
+                        self.erik_letter(c.to_ascii_lowercase());
+
+                        match c.to_ascii_lowercase() {
+                            'a' => self.nudge_overlay(-1, 0),
+                            'd' => self.nudge_overlay(1, 0),
+                            'w' => self.nudge_overlay(0, -1),
+                            's' => self.nudge_overlay(0, 1),
+                            'p' => {
+                                self.paused = !self.paused;
+                                eprintln!(
+                                    "scroll {}",
+                                    if self.paused { "paused" } else { "running" }
+                                );
+                            }
+                            // Dev: adjust the selected weapon's charge level,
+                            // to test the per-level fire modes.
+                            ']' => {
+                                self.state.level_up();
+                                self.report_level();
+                            }
+                            '[' => {
+                                let level = self.state.weapons.get_mut(self.state.selected);
+                                *level = level.saturating_sub(1);
+                                self.report_level();
+                            }
+                            _ => {}
                         }
-                        // Dev: adjust the selected weapon's charge level, to
-                        // test the per-level fire modes.
-                        ']' => {
-                            self.state.level_up();
-                            self.report_level();
-                        }
-                        '[' => {
-                            let level = self.state.weapons.get_mut(self.state.selected);
-                            *level = level.saturating_sub(1);
-                            self.report_level();
-                        }
-                        _ => {}
-                    },
+                    }
                 },
                 KeyEvent::Released(key) => match key {
                     Key::Up => self.held.up = false,
@@ -1853,6 +1924,42 @@ mod tests {
         press(&mut scene, Key::Esc);
 
         assert!(scene.menu.is_none());
+    }
+
+    #[test]
+    fn typing_erik_grants_invincibility_and_full_bars() {
+        let mut scene = test_scene();
+
+        for letter in ['e', 'r', 'i', 'k'] {
+            press(&mut scene, Key::Char(letter));
+        }
+
+        assert_eq!(scene.state.invincible_ticks, ERIK_INVINCIBILITY);
+
+        for weapon in Weapon::ALL {
+            assert_eq!(scene.state.level(weapon).get(), WeaponLevel::MAX);
+        }
+    }
+
+    #[test]
+    fn the_erik_sequence_times_out_between_letters() {
+        let mut scene = test_scene();
+
+        press(&mut scene, Key::Char('e'));
+        press(&mut scene, Key::Char('r'));
+        scene.update(TICK * (ERIK_LETTER_TICKS + 1), &[]);
+        press(&mut scene, Key::Char('i'));
+        press(&mut scene, Key::Char('k'));
+
+        // No grant: only the spawn invincibility's remainder is ticking.
+        assert_ne!(scene.state.invincible_ticks, ERIK_INVINCIBILITY);
+
+        // A fresh, prompt sequence still lands.
+        for letter in ['e', 'r', 'i', 'k'] {
+            press(&mut scene, Key::Char(letter));
+        }
+
+        assert_eq!(scene.state.invincible_ticks, ERIK_INVINCIBILITY);
     }
 
     #[test]
