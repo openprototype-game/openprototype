@@ -5,8 +5,9 @@
 //! deterministic (no random-fire helper); the boss is a stationary fixture
 //! whose facing reacts to the player's position and steering keys. The
 //! walker/fixture family (funcs 40/41) and the boss step 0x1e-byte
-//! descriptors and re-copy their hitboxes per sub-step; everything else uses
-//! L1-style 8-byte cycle frames.
+//! descriptors; the walker and the boss re-copy their hitboxes per
+//! sub-step, while the fixture (func 40, 0xe3c7) keeps its spawn-time
+//! boxes for life. Everything else uses L1-style 8-byte cycle frames.
 
 use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;
@@ -42,6 +43,8 @@ pub(super) struct AiContext<'a> {
     /// Whether a left/right arrow is held (`cs:0x820c/0x820d`); the boss
     /// holds its facing while the player is steering mid-screen.
     pub steering: bool,
+    /// Live patches to the shared per-kind descriptors' debris slots.
+    pub debris_overrides: &'a mut std::collections::HashMap<u16, u16>,
 }
 
 /// The boss's engine globals (`cs:0xce4..0xced`), all file-image zero.
@@ -416,8 +419,10 @@ fn fixture(entity: &mut Entity, ctx: &mut AiContext) {
         });
     }
 
-    entity.debris = 0x2f83;
-    copy_hitbox(entity, ctx.wad);
+    // The shared 0x3d46 descriptor's debris slot (cs:0x3d5a): both the
+    // fixture and the walker patch it every step, last writer wins. The
+    // fixture has NO hitbox copy -- its spawn boxes hold for life.
+    ctx.debris_overrides.insert(entity.kind, 0x2f83);
 }
 
 /// Func 41: the walker. Decelerating entry with a y-bob, then a 0x1e-stride
@@ -459,11 +464,12 @@ fn walker(entity: &mut Entity, ctx: &mut AiContext) {
         }
     }
 
-    entity.debris = if entity.sprite >= 0x3e72 {
+    let debris = if entity.sprite >= 0x3e72 {
         0x2f91
     } else {
         0x2f83
     };
+    ctx.debris_overrides.insert(entity.kind, debris);
     copy_hitbox(entity, ctx.wad);
 }
 

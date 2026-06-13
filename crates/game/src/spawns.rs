@@ -89,7 +89,11 @@ pub struct Entity {
     pub anim: u8,
     /// The per-life tick counter (entity +0x20).
     pub tick: u16,
-    /// The death-debris template cs-pointer (descriptor +0x14 at spawn; the
+    /// The death-debris template cs-pointer read from the type descriptor
+    /// at spawn. The descriptor itself is SHARED per kind and some AIs
+    /// patch it in place every step; [`Spawns::debris_override`] carries
+    /// those patches and wins over this spawn-time copy at death.
+    /// (descriptor +0x14 at spawn; the
     /// orbiter's pose patch rewrites it so the explosion matches the pose).
     pub debris: u16,
     /// Three collision boxes (entity +0x8..0x13): unsigned byte offsets
@@ -205,6 +209,12 @@ pub struct PlayerInput {
 
 /// The spawn schedule, live entities, and enemy shots for a running level.
 pub struct Spawns {
+    /// Live patches to the shared per-kind type descriptors' debris slots
+    /// (+0x14): L1's orbiter writes its claw word (target cs:0x3942) and
+    /// L5's fixture/walker write theirs (cs:0x3d5a) on every AI step, so
+    /// the last entity stepped decides every same-kind death's debris that
+    /// frame.
+    debris_overrides: std::collections::HashMap<u16, u16>,
     /// The level's combat constants (kinds, bounds, gate sprites).
     pub combat: CombatData,
     /// The level's spawn records, in spawn order.
@@ -276,6 +286,7 @@ impl Spawns {
             boss_l5: ai_l5::BossState::default(),
             boss_l7: ai_l7::BossState::default(),
             sprites: HashMap::new(),
+            debris_overrides: HashMap::new(),
         }
     }
 
@@ -437,6 +448,7 @@ impl Spawns {
                     gate: &mut self.gate,
                     boss_explosion: &mut self.boss_explosion,
                     sounds: &mut self.ai_sounds,
+                    debris_overrides: &mut self.debris_overrides,
                 };
 
                 for entity in &mut self.entities {
@@ -512,6 +524,7 @@ impl Spawns {
                     sounds: &mut self.ai_sounds,
                     firing_plasma: player.firing_plasma,
                     steering: player.steering,
+                    debris_overrides: &mut self.debris_overrides,
                 };
 
                 for entity in &mut self.entities {
@@ -603,6 +616,12 @@ impl Spawns {
         let bypassed = self.level_end && self.combat.level_end_clears_gate;
 
         self.gate > 0 && !bypassed
+    }
+
+    /// The live debris patch for a kind's shared descriptor, if any AI has
+    /// written one this session.
+    pub fn debris_override(&self, kind: u16) -> Option<u16> {
+        self.debris_overrides.get(&kind).copied()
     }
 
     /// Appends an effect, dropping it past the original's buffer cap.

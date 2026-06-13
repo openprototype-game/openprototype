@@ -31,6 +31,8 @@ pub(super) struct AiContext<'a> {
     pub boss_explosion: &'a mut Option<BossExplosionSound>,
     /// Sample slots the AI triggered this step (event channel).
     pub sounds: &'a mut AiSounds,
+    /// Live patches to the shared per-kind descriptors' debris slots.
+    pub debris_overrides: &'a mut std::collections::HashMap<u16, u16>,
 }
 
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
@@ -413,7 +415,7 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
             entity.sprite = 0x392e;
         } else {
             entity.sprite += 8;
-            orbiter_frame_patch(entity, ctx.wad);
+            orbiter_frame_patch(entity, ctx);
         }
     }
 }
@@ -421,10 +423,12 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
 /// The orbiter frame patch (file 0xcc5e): the attack frames carry their own
 /// middle collision box, from the 12-entry table at file 0xc892.
 ///
-/// TODO: the original also writes a per-frame claw word into the rest
-/// descriptor (table at file 0xc8c2, target cs:0x3942); its consumer is
-/// untraced.
-fn orbiter_frame_patch(entity: &mut Entity, wad: &[u8]) {
+/// The per-frame claw word goes into the kind's SHARED rest descriptor
+/// (table at file 0xc8c2, target cs:0x3942 = descriptor +0x14); the death
+/// handler reads it through the kind at death time (0xbe21), so the last
+/// orbiter stepped decides every orbiter death's debris that frame.
+fn orbiter_frame_patch(entity: &mut Entity, ctx: &mut AiContext) {
+    let wad = ctx.wad;
     let index = if entity.sprite == 0x392e {
         0
     } else {
@@ -442,7 +446,8 @@ fn orbiter_frame_patch(entity: &mut Entity, wad: &[u8]) {
     let claw = 0xc8c2 + index * 2;
 
     if wad.len() >= claw + 2 {
-        entity.debris = u16::from_le_bytes([wad[claw], wad[claw + 1]]);
+        let word = u16::from_le_bytes([wad[claw], wad[claw + 1]]);
+        ctx.debris_overrides.insert(entity.kind, word);
     }
 }
 

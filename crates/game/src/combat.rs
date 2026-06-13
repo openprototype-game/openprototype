@@ -237,11 +237,15 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
         events.kills.push(kind);
         events.score += score_value(wad, cs_base, kind);
 
-        // The death debris: the entity's template rows burst at its pixel
-        // position with their staggered delays.
+        // The death debris: the template rows burst at the death's pixel
+        // position. The handler reads the pointer through the kind's SHARED
+        // descriptor at death time (L1 0xbe21 reads kind +0x14), so an AI
+        // that patches the descriptor overrides the spawn-time copy.
         let px = spawns.entities[index].x >> 4;
         let py = spawns.entities[index].y >> 4;
-        let debris = spawns.entities[index].debris;
+        let debris = spawns
+            .debris_override(kind)
+            .unwrap_or(spawns.entities[index].debris);
         spawn_debris(spawns, wad, cs_base, debris, px, py);
 
         // A dying orb pickup is simply removed; everything else feeds the
