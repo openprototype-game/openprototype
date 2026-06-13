@@ -178,14 +178,17 @@ the per-layer scroll rates (`cs:0x25f6/fa/f2`) are placeholders until traced.
 LEVEL_2, 4, 6 are one code build, so a lower-data byte diff between them isolates the
 per-level data: a table at file `0x1690`.
 
-- 8-byte records from `0x1698`; slot 0 at `0x1690` is a header of three zero words
-  and a per-level word3 (`0xC8` = 200 in LEVEL_2/4, `0x64` = 100 in LEVEL_6; meaning
-  unknown).
-- Fixed capacity 244 slots (1952 bytes): populated records, then `(0, 0, 0, 20)`
-  padding slots (word3 stays 20, the rest zero).
+- The consumer reads 8-byte `{delay, sprite, health, row}` records starting
+  at `0x1696`, after a three-zero-word header at `0x1690`. (An earlier
+  framing put the records at `0x1698` with a four-word header; that misread
+  the first record's `delay` field — `0xC8` = 200 in LEVEL_2/4, `0x64` = 100
+  in LEVEL_6 — as a header word.)
+- The table region is large: live records, then `(0, 0, 0, 20)` terminator
+  slots padding it out to ~800 trailing slots (867 total in LEVEL_2, 882 in
+  LEVEL_4, 1042 in LEVEL_6). The consumer never reaches them.
 - Populated count scales with level length: LEVEL_2 67, LEVEL_4 82, LEVEL_6 242.
   Every run ends with a shared `(ref, 20, 209, 20)` trailer record; a populated
-  record always has a nonzero word0, so the first zero word0 ends the run.
+  record always has a nonzero sprite word, so the first zero sprite ends the run.
 - `word0` is a reference into the level's BIN: in LEVEL_2 the offsets point at real,
   reused sprite data in `RACE1.BIN` (`0x3EB2` appears three times in a row, the same
   sprite placed repeatedly); the bytes there are compiled-sprite code
@@ -223,9 +226,11 @@ Two functions (addresses are file offsets):
 - **Generator** @ `0x818c`: additive lagged-Fibonacci over that table. Two lag
   pointers (`si`, `di`, byte offsets) start `0x74` and `0x2e`, step `-2` per call,
   wrap `0 → 0x74`. Output `bx = table[si] + table[di]`, fed back as `table[si] = bx`.
-  Modulus comes in `ax` (stored at `[0x56f5]`): nonzero → returns `bx % modulus`,
-  zero → raw value (retries if the raw value is 0). Every layout call passes a
-  nonzero modulus.
+  Modulus comes in `ax` (stored at `[0x56f5]`): nonzero → returns `bx % modulus`.
+  A zero modulus does **not** return the raw value: the L1/L3/L5 generator
+  re-enters with the first nonzero draw as the new modulus (`draw2 % draw1`),
+  while only L7's generator guards the entry and returns 0 with no state
+  advance. Every layout call passes a nonzero modulus, so neither path runs.
 
 State: DGROUP `0x56f5` (modulus), `0x56f7`/`0x56f9` (saved lag pointers),
 `0x56fb`..`0x576f` (the 58-word table). This is the engine's general-purpose RNG
@@ -512,7 +517,7 @@ and emitters. Only data and link addresses differ; the code shape is one engine:
 
 | WAD | PRNG generator | dispatcher config block | distinct emitters |
 |-----|----------------|-------------------------|-------------------|
-| LEVEL_1 | `0x798c` | `0xbf6b` (x), `0xbf82`/`0xbf84` (cfg) | 18 |
+| LEVEL_1 | `0x818c` | `0xbf6b` (x), `0xbf82`/`0xbf84` (cfg) | 18 |
 | LEVEL_3 | `0x1bb2a` | `0xdab7` (x), `0xdab9`/`0xdabb` (cfg) | 13 (+ post-pass) |
 | LEVEL_5 | `0x97a0` | `0xbd16` (x), `0xbd9c` (cfg) | 16 |
 | LEVEL_7 | `0x1bd52` | `0xcf4b` (x), `0xcfd1`..`0xcfd9` (cfg) | 9 (+ insert post-pass) |

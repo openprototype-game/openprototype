@@ -139,10 +139,11 @@ game over. Otherwise it respawns the ship and **arms invincibility**.
 ### Invincibility (`cs:0x266a`)
 
 A per-frame countdown (decremented at `0xb2b1`) that gates *all* collision damage.
-Set to **300** (`0x12c`) on every respawn (`0x9ba2`, right after the lives `dec`),
-so ~3 s of invulnerability after each GET READY (level start and each death). The
-invincibility pickup sets 600; the cheat sets 32000. The visible shield sprite
-around the ship is drawn while `cs:0x266a != 0` (checked at `0xb8d3`).
+Set on every respawn (right after the lives `dec`) to a per-level value:
+**300** (`0x12c`) in L1 and L5, **180** (`0xb4`) in L2/L3/L4/L6/L7, so ~3 s
+or ~1.8 s of invulnerability after each GET READY (level start and each death).
+The invincibility pickup sets 600; the cheat sets 32000. The visible shield
+sprite around the ship is drawn while `cs:0x266a != 0` (checked at `0xb8d3`).
 
 ## Open / TBD
 

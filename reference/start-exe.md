@@ -107,8 +107,14 @@ any open file, and jumps to the menu entry at `0x4a54`, which restores the
 saved stack pointer, clears the gate, and runs the menu setup plus its 40-tick
 fade-in. So one key anywhere in the intro aborts the entire script onto the
 menu fade-in. The gate stays 0 afterwards; menus block on the key reader
-`0x2e5c` (spins on `[0x2dec]`, returns the raw scancode, clears the flag), and
-the highscores FLI aborts through `[0x2dea]` instead.
+`0x2e5c` (spins on `[0x2dec]`, returns the raw scancode, clears the flag).
+
+The highscores FLI is **not** key-abortable: the highscore routine restores
+the DOS `int 9` before playing it (the saved vector at `[0x2d63]`, init
+`0xffff`) and reinstalls the custom ISR only after, so no key reaches
+`[0x2dea]` during the movie. The between-levels cutscenes, by contrast, run
+with the custom ISR live and their shared FLI player aborts when `[0x2dea]`
+reads exactly 1.
 
 ### Palette fade (`0x2ec4`)
 
@@ -152,10 +158,12 @@ white. Behind it: vsync + sequencer unchain (`0x1b5`), CRTC register 9 `&=
 0x60` (scan doubling off, 400 visible lines), then 4 planes x `0x7d00` bytes
 copy from segments `[0x34ea..0x34f0]`: 320x400, the top 400 rows of the
 478-row BDY. The plane buffers free (`0x3be6`), one tick aligns (`0x1047`),
-and `cover3.pal` uploads in one go (255 colors from index 0). The white lasts
-as long as the copy, a few ticks. Two quirks: the fade-out afterwards skips
-DAC index 0, and index 255 never receives a cover color (it keeps the white).
-The credits reset mode 13h, back to 200 lines.
+and `cover3.pal` uploads in one go (the upload at `0x4bfa`: 255 colors from
+index 0, so indices 0..254). The white lasts as long as the copy, a few
+ticks. Quirk: the fade-out afterwards (`0x4c31`, `bx=1`) covers DAC 1..255,
+skipping only index 0; cover3.pal never set index 255, so it fades the
+leftover white down with everything else. The net result matches a plain
+full-palette fade. The credits reset mode 13h, back to 200 lines.
 
 ### Credits (`0x460b`)
 
@@ -182,7 +190,7 @@ checks `[0x2dec]` per frame and the caller checks it before each play: any
 pending key aborts the credits, including a key pressed earlier in the intro,
 since nothing before the menu consumes the flag.
 
-## Main menu (0x3e41, set up by 0x413e)
+## Main menu (0x3e41, labels drawn by 0x3df6)
 
 Setup: re-set mode 13h, blit `back3.raw`, upload the menu palette (`0x230`),
 draw five labels with the string drawer `0x3d89` at x=90: NEW GAME, LOAD GAME,
@@ -227,9 +235,13 @@ A loop driven by `cs:[0x46ff]` (the last level's outcome) and `cs:[0x4703]`
   `EXEC` `level_N.wad`; the level plays its own track. On level 8, go to the
   ending.
 - **state 2**: quit to DOS (`0x4d90`).
-- **state 5 (won)**: stop music, play `fli\go2.fli`, compare the score in
-  `eax` against `cs:[0xf2f]`, enter a highscore via `0x3f0c`, return to the
-  menu (and restart track 2).
+- **state 5 (out of lives)**: the game-over path, not a win. The respawn
+  handlers write status 5 only when lives hit 0; the win path is status 0
+  on level 8. Stop music, play `fli\go2.fli`, compare the score in `eax`
+  against `cs:[0xf2f]`, enter a highscore via `0x3f0c`, return to the menu
+  (and restart track 2).
+- **states 3 / 4**: level error exit to DOS (3) and NEW GAME chain restart
+  (4).
 - **level 8 (0x4c06)**: the ending sequence (loads via `0x24`).
 
 Before each level, `0x3b0a` plays the inter-level cutscene
@@ -281,8 +293,11 @@ seven songs.
 
 ## LOAD GAME (0x4258)
 
-A 5-slot screen (GAME 1..5), same cursor/key loop; loads a save and resumes at
-its level. **TBD:** save-file format and who writes it (likely the level WAD).
+A 5-slot screen (GAME 1..5), same cursor/key loop; loads a save and resumes
+at its level. The save file is the level WAD's `.psg` (the in-game menu
+writes it); START.EXE reads only its first byte (the level number) to pick
+which WAD to `EXEC`. The cross-tool handover is the `f:message` file: a
+mode byte plus `{status, score:4, lives:1, bombs:1, weapons:4}`.
 
 ## Audio
 

@@ -125,12 +125,14 @@ no internal catalog. It fits one segment, so there's no EMS banking (no
 `field0`). The ship sprites are all **direct** (raw subroutine pointers, no clip
 header — the ship is never edge-clipped).
 
-The grouping is a catalog in the WAD at vaddr `0x6bdc` (file `0x6ddc`): a flat
-array of **8-byte cell records `[p0, p1, p2, p3]`** (4 plane offsets into PTURN1),
-delimited into frames by a trailing `ncells` word. The draw loop (`@0x8b80`,
-four X-align variants) is handed a frame's first cell and `cx = ncells`; it walks
-8-byte cells, calling the direct dispatcher (`@0x804a`) per cell and advancing
-X += 32 per cell. So a frame is `ncells` cells of 64/96px width.
+The grouping is a catalog in the WAD: **28 fixed 18-byte records**, each a
+**count-first** `[ncells, then up to 8 cell words]` from file `0x6dda`. The
+blitter (`@0x8b80`, four X-align variants) reads the leading count
+(`cx = cs:(di)`), takes the cells at `di + 2`, and advances by a hardcoded
+`0x12` (18) stride per record; it calls the direct dispatcher (`@0x804a`)
+per cell, advancing X += 32. So a frame is `ncells` cells of 64/96px width.
+(`PTURN1_CATALOG = 0x6ddc` in the port points at `di + 2`, the first cell
+word; the count sits two bytes earlier.)
 
 **28 ship frames render correctly** (rotating/banking craft with twin green
 exhausts), covering 228 of the 232 subroutines.
@@ -147,17 +149,11 @@ exhausts), covering 228 of the 232 subroutines.
 - **Open**: the runtime placement layer — *which* catalog entry is drawn *where*
   and *when* (scroll `cs:0x6404`, the per-object tables) — is needed for a
   faithful live renderer but not for extracting the sprites. Not traced.
-- **Open (PTURN1 tail)**: 4 of the 232 PTURN1 subroutines aren't accounted for —
-  grouping the last 8 subs as a 2-cell frame renders an incoherent strip, so they
-  don't form a standalone ship frame. They're reached (if at all) through a
-  separate sprite-directory layer: tables of `[X, ncells, w, h]` / `[w, h, X,
-  ncells]` records near the catalog (bounding boxes `51×33`, `94×51`, and tiny
-  `4×4`), where `X = 473, 475, … 511, 514 …` indexes a pool **larger than
-  PTURN1's 58 cells** — i.e. a cross-sprite/global directory the level engine
-  maintains, not part of the ship file itself. **There is at least one sprite in
-  the PTURN1 tail not yet identified.** Reverse-engineering that directory is a
-  separate, larger task (the general object catalog), out of scope for the sprite
-  encoding.
+- **PTURN1 tail (resolved)**: the 4 unaccounted subroutines belong to the
+  ship's death-explosion descriptor table, which the port pins at `cs:0x45e2`
+  (file `0x6fd2`) and feeds through [`ShipData::explosion`]. They are not a
+  ship flight frame, which is why grouping them as one rendered an incoherent
+  strip; the explosion sequence draws them in order at the ship position.
 
 Addresses are r2 flat vaddr for `LEVEL_1.WAD`; file offset = vaddr + `0x200`
 (the MZ header).
