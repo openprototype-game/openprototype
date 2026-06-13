@@ -10,46 +10,55 @@ use super::{
 };
 use crate::level::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
-/// Per-sprite-type spawn health, read by the original from a 9-entry table
-/// at `cs:[bf6d..]`.
-const HEALTHS: [u16; 9] = [100, 160, 500, 600, 200, 200, 1000, 14000, 10000];
+// Per-enemy spawn health, read by the original from a 9-entry table at
+// `cs:[bf6d..]`. The boss carries two values (its two end-of-level spawns).
+
+const ASTEROID_HEALTH: u16 = 100;
+const KAMIKAZE_HEALTH: u16 = 160;
+const CANNON_HEALTH: u16 = 500;
+const STRAFER_HEALTH: u16 = 600;
+const INTERCEPTOR_HEALTH: u16 = 200;
+const SNIPER_HEALTH: u16 = 200;
+const ORBITER_HEALTH: u16 = 1000;
+const BOSS_HEALTH: u16 = 14000;
+const BOSS_HEALTH_2: u16 = 10000;
 
 /// The health the landmark pickup emitters hardcode (`0xfa` = 250).
 const PICKUP_HEALTH: u16 = 250;
 
 // Fixed/repeat record blocks (the emitters with no count loop or a constant body).
 
-const EB35: [Cell; 2] = [
+const ORBITER_PAIR: [Cell; 2] = [
     Cell {
         x_base: 0,
         x_start: XStart::Peek,
         sprite: ORBITER,
-        health: HEALTHS[6],
+        health: ORBITER_HEALTH,
         spawn_row: 0x26,
     },
     Cell {
         x_base: 0x3c,
         x_start: XStart::None,
         sprite: ORBITER,
-        health: HEALTHS[6],
+        health: ORBITER_HEALTH,
         spawn_row: 0x27,
     },
 ];
 
-const EB72: [Cell; 1] = [Cell {
+const BOSS_CELL: [Cell; 1] = [Cell {
     x_base: 0,
     x_start: XStart::Peek,
     sprite: BOSS,
-    health: HEALTHS[7],
+    health: BOSS_HEALTH,
     spawn_row: 0x45,
 }];
 
-const EB92: [Cell; 6] = [
+const BOSS_AND_UPGRADES: [Cell; 6] = [
     Cell {
         x_base: 0,
         x_start: XStart::Peek,
         sprite: BOSS,
-        health: HEALTHS[8],
+        health: BOSS_HEALTH_2,
         spawn_row: 0x46,
     },
     Cell {
@@ -89,120 +98,120 @@ const EB92: [Cell; 6] = [
     },
 ];
 
-const ECBD: [Cell; 6] = [
+const SNIPER_CELLS: [Cell; 6] = [
     Cell {
         x_base: 0x64,
         x_start: XStart::Consume,
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: 0x21,
     },
     Cell {
         x_base: 0x28,
         x_start: XStart::None,
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: 0x20,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: 0x22,
     },
     Cell {
         x_base: 0x28,
         x_start: XStart::None,
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: 0x1f,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: 0x23,
     },
     Cell {
         x_base: 0x64,
         x_start: XStart::None,
         sprite: CANNON,
-        health: HEALTHS[2],
+        health: CANNON_HEALTH,
         spawn_row: 0x16,
     },
 ];
 
 // Emitter builders: each bakes one emitter's spawn constants; the dispatcher
-// supplies the count (and, for e776, the x spread). Named for their original
-// code addresses.
+// supplies the count (and, for asteroid_scatter, the x spread). Named for the
+// enemy they emit and the emitter shape.
 
-fn e776(count: Rand, x: Rand) -> Emitter {
+fn asteroid_scatter(count: Rand, x: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x,
         sprite: ASTEROID,
-        health: HEALTHS[0],
+        health: ASTEROID_HEALTH,
         spawn_row: rand(0x12, 0),
     }
 }
 
-fn e7bb(count: Rand) -> Emitter {
+fn kamikaze_scatter(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x1e, 0x1e),
         sprite: KAMIKAZE,
-        health: HEALTHS[1],
+        health: KAMIKAZE_HEALTH,
         spawn_row: rand(5, 0x1a),
     }
 }
 
-fn e800(count: Rand) -> Emitter {
+fn cannon_scatter(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x32, 0x50),
         sprite: CANNON,
-        health: HEALTHS[2],
+        health: CANNON_HEALTH,
         spawn_row: rand(5, 0x15),
     }
 }
 
-fn e845(count: Rand) -> Emitter {
+fn strafer_scatter(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x32, 0x78),
         sprite: STRAFER,
-        health: HEALTHS[3],
+        health: STRAFER_HEALTH,
         spawn_row: rand(6, 0x36),
     }
 }
 
-fn e920(count: Rand) -> Emitter {
+fn interceptor_scatter(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x1e, 0x14),
         sprite: INTERCEPTOR,
-        health: HEALTHS[4],
+        health: INTERCEPTOR_HEALTH,
         spawn_row: rand(6, 0x2c),
     }
 }
 
-fn e965(count: Rand) -> Emitter {
+fn sniper_scatter(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x1e, 0x28),
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: rand(6, 0x1f),
     }
 }
 
-fn e88a(count: Rand) -> Emitter {
+fn interceptor_row(count: Rand) -> Emitter {
     Emitter::Row {
         count,
         sprite: INTERCEPTOR,
-        health: HEALTHS[4],
+        health: INTERCEPTOR_HEALTH,
         spawn_row: rand(4, 0x28),
         style: RowStyle::Anchored {
             x_base: 0x14,
@@ -211,11 +220,11 @@ fn e88a(count: Rand) -> Emitter {
     }
 }
 
-fn e8d5(count: Rand) -> Emitter {
+fn sniper_row(count: Rand) -> Emitter {
     Emitter::Row {
         count,
         sprite: SNIPER,
-        health: HEALTHS[5],
+        health: SNIPER_HEALTH,
         spawn_row: rand(4, 0x32),
         style: RowStyle::Anchored {
             x_base: 0x14,
@@ -224,53 +233,53 @@ fn e8d5(count: Rand) -> Emitter {
     }
 }
 
-fn e9aa(count: Rand) -> Emitter {
+fn cannon_or_asteroid(count: Rand) -> Emitter {
     Emitter::Choice {
         count,
         lo: Arm {
             x: rand(0xa, 0x1e),
             sprite: CANNON,
-            health: HEALTHS[2],
+            health: CANNON_HEALTH,
             spawn_row: rand(5, 0x15),
         },
         hi: Arm {
             x: rand(0xa, 0x1e),
             sprite: ASTEROID,
-            health: HEALTHS[0],
+            health: ASTEROID_HEALTH,
             spawn_row: rand(0x12, 0),
         },
     }
 }
 
-fn ea2d(count: Rand) -> Emitter {
+fn kamikaze_or_asteroid(count: Rand) -> Emitter {
     Emitter::Choice {
         count,
         lo: Arm {
             x: rand(0xa, 0x1e),
             sprite: KAMIKAZE,
-            health: HEALTHS[1],
+            health: KAMIKAZE_HEALTH,
             spawn_row: rand(5, 0x1a),
         },
         hi: Arm {
             x: rand(0xa, 0x1e),
             sprite: ASTEROID,
-            health: HEALTHS[0],
+            health: ASTEROID_HEALTH,
             spawn_row: rand(0x12, 0),
         },
     }
 }
 
-fn eab0(count: Rand) -> Emitter {
+fn interceptor_asteroid_row(count: Rand) -> Emitter {
     Emitter::Row {
         count,
         sprite: INTERCEPTOR,
-        health: HEALTHS[4],
+        health: INTERCEPTOR_HEALTH,
         spawn_row: rand(4, 0x28),
         style: RowStyle::Anchored {
             x_base: 0x14,
             extra: Some(Extra {
                 sprite: ASTEROID,
-                health: HEALTHS[0],
+                health: ASTEROID_HEALTH,
                 spawn_row: rand(0x12, 0),
             }),
         },
@@ -285,10 +294,10 @@ fn once(sprite: u16, spawn_row: Rand) -> Emitter {
     }
 }
 
-fn ecbd(count: Rand) -> Emitter {
+fn sniper_block(count: Rand) -> Emitter {
     Emitter::Fixed {
         repeat: Some(count),
-        cells: ECBD.to_vec(),
+        cells: SNIPER_CELLS.to_vec(),
     }
 }
 
@@ -304,59 +313,59 @@ fn at(x_start: u16, emitter: Emitter) -> Step {
 pub fn script() -> Vec<Step> {
     vec![
         at(0x96, once(EXTRA_LIFE, rand(3, 0x42))),
-        plain(e776(rand(7, 0x28), rand(0x1e, 0x32))),
-        plain(e776(rand(7, 8), rand(0xa, 0x1e))),
-        plain(ea2d(rand(8, 8))),
-        plain(e776(rand(0xa, 8), rand(0xa, 0x1e))),
-        at(0xc8, e7bb(rand(3, 0xc))),
-        plain(ea2d(rand(5, 0xf))),
-        at(0xc8, e800(rand(2, 6))),
-        plain(e9aa(rand(6, 0xa))),
+        plain(asteroid_scatter(rand(7, 0x28), rand(0x1e, 0x32))),
+        plain(asteroid_scatter(rand(7, 8), rand(0xa, 0x1e))),
+        plain(kamikaze_or_asteroid(rand(8, 8))),
+        plain(asteroid_scatter(rand(0xa, 8), rand(0xa, 0x1e))),
+        at(0xc8, kamikaze_scatter(rand(3, 0xc))),
+        plain(kamikaze_or_asteroid(rand(5, 0xf))),
+        at(0xc8, cannon_scatter(rand(2, 6))),
+        plain(cannon_or_asteroid(rand(6, 0xa))),
         at(0x28, once(SMART_BOMB, rand(3, 0x3c))),
-        at(0x12c, e88a(rand(5, 0xa))),
+        at(0x12c, interceptor_row(rand(5, 0xa))),
         at(
             0x12c,
             Emitter::Fixed {
                 repeat: None,
-                cells: EB35.to_vec(),
+                cells: ORBITER_PAIR.to_vec(),
             },
         ),
-        plain(e776(rand(5, 5), rand(0xa, 0x1e))),
-        plain(e920(rand(5, 8))),
-        at(0x78, e7bb(rand(0xa, 0x14))),
+        plain(asteroid_scatter(rand(5, 5), rand(0xa, 0x1e))),
+        plain(interceptor_scatter(rand(5, 8))),
+        at(0x78, kamikaze_scatter(rand(0xa, 0x14))),
         at(0x28, once(INVINCIBILITY, rand(3, 0x3f))),
-        at(0x14, ecbd(rand(2, 2))),
-        plain(e7bb(rand(0xa, 0x14))),
-        plain(e800(rand(2, 6))),
-        at(0x64, e7bb(rand(5, 0xa))),
-        at(0x64, e965(rand(0xa, 0xa))),
-        at(0x64, e776(rand(5, 5), rand(0xa, 0x1e))),
-        plain(eab0(rand(5, 5))),
-        plain(e776(rand(5, 5), rand(0xa, 0x1e))),
-        plain(eab0(rand(5, 8))),
-        plain(e776(rand(5, 0xa), rand(0xa, 0x1e))),
-        at(0x64, e8d5(rand(5, 0xa))),
-        at(0xdc, e845(rand(5, 0xa))),
+        at(0x14, sniper_block(rand(2, 2))),
+        plain(kamikaze_scatter(rand(0xa, 0x14))),
+        plain(cannon_scatter(rand(2, 6))),
+        at(0x64, kamikaze_scatter(rand(5, 0xa))),
+        at(0x64, sniper_scatter(rand(0xa, 0xa))),
+        at(0x64, asteroid_scatter(rand(5, 5), rand(0xa, 0x1e))),
+        plain(interceptor_asteroid_row(rand(5, 5))),
+        plain(asteroid_scatter(rand(5, 5), rand(0xa, 0x1e))),
+        plain(interceptor_asteroid_row(rand(5, 8))),
+        plain(asteroid_scatter(rand(5, 0xa), rand(0xa, 0x1e))),
+        at(0x64, sniper_row(rand(5, 0xa))),
+        at(0xdc, strafer_scatter(rand(5, 0xa))),
         at(0x28, once(SMART_BOMB, rand(3, 0x3c))),
-        at(0xdc, e8d5(rand(5, 0xa))),
-        plain(e7bb(rand(5, 0xa))),
+        at(0xdc, sniper_row(rand(5, 0xa))),
+        plain(kamikaze_scatter(rand(5, 0xa))),
         at(
             0xfa,
             Emitter::Fixed {
                 repeat: None,
-                cells: EB72.to_vec(),
+                cells: BOSS_CELL.to_vec(),
             },
         ),
-        at(0xdc, e845(rand(5, 0xa))),
+        at(0xdc, strafer_scatter(rand(5, 0xa))),
         at(0x28, once(SMART_BOMB, rand(3, 0x3c))),
-        at(0xdc, e8d5(rand(5, 0xa))),
-        plain(e7bb(rand(0x28, 0x14))),
-        plain(e776(rand(0xa, 0xa), rand(0xa, 0x1e))),
+        at(0xdc, sniper_row(rand(5, 0xa))),
+        plain(kamikaze_scatter(rand(0x28, 0x14))),
+        plain(asteroid_scatter(rand(0xa, 0xa), rand(0xa, 0x1e))),
         at(
             0xfa,
             Emitter::Fixed {
                 repeat: None,
-                cells: EB92.to_vec(),
+                cells: BOSS_AND_UPGRADES.to_vec(),
             },
         ),
     ]
