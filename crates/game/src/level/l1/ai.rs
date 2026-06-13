@@ -12,6 +12,10 @@
 //! (savegame-visible state only). The effects queue, the SFX triggers and
 //! the boss/orbiter scroll gate are implemented.
 
+use super::{
+    ASTEROID, CANNON, EXTRA_LIFE, INTERCEPTOR, INVINCIBILITY, KAMIKAZE, ORBITER, SMART_BOMB,
+    SNIPER, STRAFER, WEAPON_UPGRADE,
+};
 use crate::level::ai_common::word;
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
@@ -78,7 +82,7 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
         2 => asteroid(entity, -0x1c, 5),
         3 => cannon(entity, ctx),
         4 => kamikaze(entity, ctx),
-        5 => flapper(entity, -0x14, 4, 0x36ea, 0x3708, 0x3748),
+        5 => flapper(entity, -0x14, 4, WEAPON_UPGRADE, 0x3708, 0x3748),
         6 => {
             entity.x -= 0xc;
             sniper_anim(entity, ctx);
@@ -98,9 +102,9 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
         16 => path_sniper(entity, ctx, 0x1d70, 0x12c),
         17 => path_sniper(entity, ctx, 0x2220, 0xc8),
         18 => strafer(entity, ctx),
-        19 => flapper(entity, -0x14, 4, 0x3750, 0x376e, 0x37ae),
-        20 => flapper(entity, -0x14, 4, 0x37b6, 0x37d4, 0x3824),
-        21 => flapper(entity, -0x14, 4, 0x382c, 0x3846, 0x386e),
+        19 => flapper(entity, -0x14, 4, SMART_BOMB, 0x376e, 0x37ae),
+        20 => flapper(entity, -0x14, 4, INVINCIBILITY, 0x37d4, 0x3824),
+        21 => flapper(entity, -0x14, 4, EXTRA_LIFE, 0x3846, 0x386e),
         22 => boss(entity, ctx),
         23 => {
             // Form 2 is the same body with the form flag set (`cs:0xce8`).
@@ -120,10 +124,10 @@ fn asteroid(entity: &mut Entity, speed: i32, threshold: u8) {
     if entity.anim == threshold {
         entity.anim = 0;
 
-        if entity.sprite == 0x3308 {
+        if entity.sprite == ASTEROID {
             entity.sprite = 0x3326;
         } else if entity.sprite == 0x3386 {
-            entity.sprite = 0x3308;
+            entity.sprite = ASTEROID;
         } else {
             entity.sprite += 8;
         }
@@ -178,10 +182,10 @@ fn cannon(entity: &mut Entity, ctx: &mut AiContext) {
     if entity.anim == 5 {
         entity.anim = 0;
 
-        if entity.sprite == 0x338e {
+        if entity.sprite == CANNON {
             entity.sprite = 0x33ac;
         } else if entity.sprite == 0x33ec {
-            entity.sprite = 0x338e;
+            entity.sprite = CANNON;
         } else {
             entity.sprite += 8;
         }
@@ -222,7 +226,7 @@ fn kamikaze(entity: &mut Entity, ctx: &mut AiContext) {
 
         entity.anim = 0;
 
-        if entity.sprite == 0x38b0 {
+        if entity.sprite == KAMIKAZE {
             entity.sprite = 0x38ce;
         } else if entity.sprite != 0x3926 {
             entity.sprite += 8;
@@ -305,17 +309,17 @@ fn sniper_anim(entity: &mut Entity, ctx: &mut AiContext) {
     if entity.anim == 7 {
         entity.anim = 0;
 
-        if entity.sprite == 0x33f4 {
+        if entity.sprite == SNIPER {
             entity.sprite = 0x3412;
         } else if entity.sprite == 0x343a {
-            entity.sprite = 0x33f4;
+            entity.sprite = SNIPER;
         } else {
             entity.sprite += 8;
         }
     }
 
     // Wobble table at file 0xc7c6, indexed by frame (unsigned compare).
-    let index = if entity.sprite <= 0x33f4 {
+    let index = if entity.sprite <= SNIPER {
         0
     } else {
         usize::from(entity.sprite - 0x3412 + 8) >> 2
@@ -396,7 +400,7 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
     // Attack animation, gated by vertical proximity to the player.
     // TODO: the original bypasses the gate while the firing weapon
     // (cs:0xcb5) is 3.
-    if entity.sprite == 0x392e && ((entity.y >> 4) - ctx.player_y - 0xc).abs() > 0xf {
+    if entity.sprite == ORBITER && ((entity.y >> 4) - ctx.player_y - 0xc).abs() > 0xf {
         return;
     }
 
@@ -405,10 +409,10 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
     if entity.anim == 4 {
         entity.anim = 0;
 
-        if entity.sprite == 0x392e {
+        if entity.sprite == ORBITER {
             entity.sprite = 0x394c;
         } else if entity.sprite == 0x399c {
-            entity.sprite = 0x392e;
+            entity.sprite = ORBITER;
         } else {
             entity.sprite += 8;
             orbiter_frame_patch(entity, ctx);
@@ -425,7 +429,7 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
 /// orbiter stepped decides every orbiter death's debris that frame.
 fn orbiter_frame_patch(entity: &mut Entity, ctx: &mut AiContext) {
     let wad = ctx.wad;
-    let index = if entity.sprite == 0x392e {
+    let index = if entity.sprite == ORBITER {
         0
     } else {
         usize::from((entity.sprite - 0x394c) >> 3) + 1
@@ -458,10 +462,10 @@ fn interceptor_anim(entity: &mut Entity) {
 
     entity.anim = 0;
 
-    if entity.sprite == 0x3a92 {
+    if entity.sprite == INTERCEPTOR {
         entity.sprite = 0x3ab0;
     } else if entity.sprite == 0x3ae0 {
-        entity.sprite = 0x3a92;
+        entity.sprite = INTERCEPTOR;
     } else {
         entity.sprite += 8;
     }
@@ -513,7 +517,7 @@ fn strafer(entity: &mut Entity, ctx: &mut AiContext) {
 
     entity.anim = 0;
 
-    if entity.sprite == 0x39a4 {
+    if entity.sprite == STRAFER {
         entity.sprite = 0x39c2;
         return;
     }

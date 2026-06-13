@@ -4,6 +4,10 @@
 //! running game (seed `0x3b95` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
+use super::{
+    ASTEROID, BOSS, CANNON, EXTRA_LIFE, INTERCEPTOR, INVINCIBILITY, KAMIKAZE, ORBITER, SMART_BOMB,
+    SNIPER, STRAFER, WEAPON_UPGRADE,
+};
 use crate::level::slot::{Arm, Cell, Emitter, Extra, Rand, RowStyle, Step, XStart, rand, step};
 
 /// Per-sprite-type spawn health, read by the original from a 9-entry table
@@ -19,14 +23,14 @@ const EB35: [Cell; 2] = [
     Cell {
         x_base: 0,
         x_start: XStart::Peek,
-        sprite: 0x392e,
+        sprite: ORBITER,
         health: HEALTHS[6],
         spawn_row: 0x26,
     },
     Cell {
         x_base: 0x3c,
         x_start: XStart::None,
-        sprite: 0x392e,
+        sprite: ORBITER,
         health: HEALTHS[6],
         spawn_row: 0x27,
     },
@@ -35,7 +39,7 @@ const EB35: [Cell; 2] = [
 const EB72: [Cell; 1] = [Cell {
     x_base: 0,
     x_start: XStart::Peek,
-    sprite: 0x3f8e,
+    sprite: BOSS,
     health: HEALTHS[7],
     spawn_row: 0x45,
 }];
@@ -44,42 +48,42 @@ const EB92: [Cell; 6] = [
     Cell {
         x_base: 0,
         x_start: XStart::Peek,
-        sprite: 0x3f8e,
+        sprite: BOSS,
         health: HEALTHS[8],
         spawn_row: 0x46,
     },
     Cell {
         x_base: 3,
         x_start: XStart::None,
-        sprite: 0x36ea,
+        sprite: WEAPON_UPGRADE,
         health: PICKUP_HEALTH,
         spawn_row: 0x47,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
-        sprite: 0x36ea,
+        sprite: WEAPON_UPGRADE,
         health: PICKUP_HEALTH,
         spawn_row: 0x48,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
-        sprite: 0x36ea,
+        sprite: WEAPON_UPGRADE,
         health: PICKUP_HEALTH,
         spawn_row: 0x49,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
-        sprite: 0x36ea,
+        sprite: WEAPON_UPGRADE,
         health: PICKUP_HEALTH,
         spawn_row: 0x4a,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
-        sprite: 0x36ea,
+        sprite: WEAPON_UPGRADE,
         health: PICKUP_HEALTH,
         spawn_row: 0x4b,
     },
@@ -89,42 +93,42 @@ const ECBD: [Cell; 6] = [
     Cell {
         x_base: 0x64,
         x_start: XStart::Consume,
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: 0x21,
     },
     Cell {
         x_base: 0x28,
         x_start: XStart::None,
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: 0x20,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: 0x22,
     },
     Cell {
         x_base: 0x28,
         x_start: XStart::None,
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: 0x1f,
     },
     Cell {
         x_base: 0,
         x_start: XStart::None,
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: 0x23,
     },
     Cell {
         x_base: 0x64,
         x_start: XStart::None,
-        sprite: 0x338e,
+        sprite: CANNON,
         health: HEALTHS[2],
         spawn_row: 0x16,
     },
@@ -138,7 +142,7 @@ fn e776(count: Rand, x: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x,
-        sprite: 0x3308,
+        sprite: ASTEROID,
         health: HEALTHS[0],
         spawn_row: rand(0x12, 0),
     }
@@ -148,7 +152,7 @@ fn e7bb(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x1e, 0x1e),
-        sprite: 0x38b0,
+        sprite: KAMIKAZE,
         health: HEALTHS[1],
         spawn_row: rand(5, 0x1a),
     }
@@ -158,7 +162,7 @@ fn e800(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x32, 0x50),
-        sprite: 0x338e,
+        sprite: CANNON,
         health: HEALTHS[2],
         spawn_row: rand(5, 0x15),
     }
@@ -168,7 +172,7 @@ fn e845(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x32, 0x78),
-        sprite: 0x39a4,
+        sprite: STRAFER,
         health: HEALTHS[3],
         spawn_row: rand(6, 0x36),
     }
@@ -178,7 +182,7 @@ fn e920(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x1e, 0x14),
-        sprite: 0x3a92,
+        sprite: INTERCEPTOR,
         health: HEALTHS[4],
         spawn_row: rand(6, 0x2c),
     }
@@ -188,7 +192,7 @@ fn e965(count: Rand) -> Emitter {
     Emitter::Scatter {
         count,
         x: rand(0x1e, 0x28),
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: rand(6, 0x1f),
     }
@@ -197,7 +201,7 @@ fn e965(count: Rand) -> Emitter {
 fn e88a(count: Rand) -> Emitter {
     Emitter::Row {
         count,
-        sprite: 0x3a92,
+        sprite: INTERCEPTOR,
         health: HEALTHS[4],
         spawn_row: rand(4, 0x28),
         style: RowStyle::Anchored {
@@ -210,7 +214,7 @@ fn e88a(count: Rand) -> Emitter {
 fn e8d5(count: Rand) -> Emitter {
     Emitter::Row {
         count,
-        sprite: 0x33f4,
+        sprite: SNIPER,
         health: HEALTHS[5],
         spawn_row: rand(4, 0x32),
         style: RowStyle::Anchored {
@@ -225,13 +229,13 @@ fn e9aa(count: Rand) -> Emitter {
         count,
         lo: Arm {
             x: rand(0xa, 0x1e),
-            sprite: 0x338e,
+            sprite: CANNON,
             health: HEALTHS[2],
             spawn_row: rand(5, 0x15),
         },
         hi: Arm {
             x: rand(0xa, 0x1e),
-            sprite: 0x3308,
+            sprite: ASTEROID,
             health: HEALTHS[0],
             spawn_row: rand(0x12, 0),
         },
@@ -243,13 +247,13 @@ fn ea2d(count: Rand) -> Emitter {
         count,
         lo: Arm {
             x: rand(0xa, 0x1e),
-            sprite: 0x38b0,
+            sprite: KAMIKAZE,
             health: HEALTHS[1],
             spawn_row: rand(5, 0x1a),
         },
         hi: Arm {
             x: rand(0xa, 0x1e),
-            sprite: 0x3308,
+            sprite: ASTEROID,
             health: HEALTHS[0],
             spawn_row: rand(0x12, 0),
         },
@@ -259,13 +263,13 @@ fn ea2d(count: Rand) -> Emitter {
 fn eab0(count: Rand) -> Emitter {
     Emitter::Row {
         count,
-        sprite: 0x3a92,
+        sprite: INTERCEPTOR,
         health: HEALTHS[4],
         spawn_row: rand(4, 0x28),
         style: RowStyle::Anchored {
             x_base: 0x14,
             extra: Some(Extra {
-                sprite: 0x3308,
+                sprite: ASTEROID,
                 health: HEALTHS[0],
                 spawn_row: rand(0x12, 0),
             }),
@@ -299,7 +303,7 @@ fn at(x_start: u16, emitter: Emitter) -> Step {
 /// Returns LEVEL_1's 38-step layout script, in order.
 pub fn script() -> Vec<Step> {
     vec![
-        at(0x96, once(0x382c, rand(3, 0x42))),
+        at(0x96, once(EXTRA_LIFE, rand(3, 0x42))),
         plain(e776(rand(7, 0x28), rand(0x1e, 0x32))),
         plain(e776(rand(7, 8), rand(0xa, 0x1e))),
         plain(ea2d(rand(8, 8))),
@@ -308,7 +312,7 @@ pub fn script() -> Vec<Step> {
         plain(ea2d(rand(5, 0xf))),
         at(0xc8, e800(rand(2, 6))),
         plain(e9aa(rand(6, 0xa))),
-        at(0x28, once(0x3750, rand(3, 0x3c))),
+        at(0x28, once(SMART_BOMB, rand(3, 0x3c))),
         at(0x12c, e88a(rand(5, 0xa))),
         at(
             0x12c,
@@ -320,7 +324,7 @@ pub fn script() -> Vec<Step> {
         plain(e776(rand(5, 5), rand(0xa, 0x1e))),
         plain(e920(rand(5, 8))),
         at(0x78, e7bb(rand(0xa, 0x14))),
-        at(0x28, once(0x37b6, rand(3, 0x3f))),
+        at(0x28, once(INVINCIBILITY, rand(3, 0x3f))),
         at(0x14, ecbd(rand(2, 2))),
         plain(e7bb(rand(0xa, 0x14))),
         plain(e800(rand(2, 6))),
@@ -333,7 +337,7 @@ pub fn script() -> Vec<Step> {
         plain(e776(rand(5, 0xa), rand(0xa, 0x1e))),
         at(0x64, e8d5(rand(5, 0xa))),
         at(0xdc, e845(rand(5, 0xa))),
-        at(0x28, once(0x3750, rand(3, 0x3c))),
+        at(0x28, once(SMART_BOMB, rand(3, 0x3c))),
         at(0xdc, e8d5(rand(5, 0xa))),
         plain(e7bb(rand(5, 0xa))),
         at(
@@ -344,7 +348,7 @@ pub fn script() -> Vec<Step> {
             },
         ),
         at(0xdc, e845(rand(5, 0xa))),
-        at(0x28, once(0x3750, rand(3, 0x3c))),
+        at(0x28, once(SMART_BOMB, rand(3, 0x3c))),
         at(0xdc, e8d5(rand(5, 0xa))),
         plain(e7bb(rand(0x28, 0x14))),
         plain(e776(rand(0xa, 0xa), rand(0xa, 0x1e))),

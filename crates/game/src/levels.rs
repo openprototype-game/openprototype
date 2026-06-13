@@ -156,7 +156,12 @@ pub struct EffectData {
 /// L1's combat data.
 const L1_COMBAT: CombatData = CombatData {
     ship_rect_table: 0x4771,
-    pickups: [0x36ea, 0x3750, 0x37b6, 0x382c],
+    pickups: [
+        l1::WEAPON_UPGRADE,
+        l1::SMART_BOMB,
+        l1::INVINCIBILITY,
+        l1::EXTRA_LIFE,
+    ],
     orb_arg: 5,
     gate_release: (0x392e, 0x399c),
     level_end_sprite: 0x3ae8,
