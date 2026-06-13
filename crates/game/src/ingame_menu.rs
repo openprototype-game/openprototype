@@ -22,8 +22,11 @@
 //! change plays a chaingun blip as feedback). The baked defaults are
 //! 15/15/on per level image; the original also persists them to proto.cfg
 //! on every menu exit (settings write `0xb776`), which the port does not
-//! model yet. GRAPHICS... and JOYSTICK... stay drawn but inert: their
-//! submenus are not ported yet.
+//! model yet. GRAPHICS... and JOYSTICK... are drawn DISABLED (the slot
+//! picker's dim-text treatment) and the cursor skips them: their submenus
+//! (detail system, gamepad support) are unported, and a dimmed item reads
+//! more honestly than the original's working-looking one -- a deliberate
+//! deviation until they land.
 //!
 //! The menu is pure UI state; the [`LevelScene`](crate::scene::level) owns
 //! the freeze, performs the saves and loads it requests, and reports back via
@@ -120,6 +123,10 @@ fn step_volume(volume: u8, delta: i8) -> u8 {
     volume.saturating_add_signed(delta).min(15)
 }
 
+/// The unported submenu items (GRAPHICS..., JOYSTICK...): drawn dim,
+/// skipped by the cursor.
+const DISABLED_ITEMS: [usize; 2] = [3, 4];
+
 enum Screen {
     Items {
         selected: usize,
@@ -163,10 +170,20 @@ impl InGameMenu {
             Screen::Items { selected } => match key {
                 Key::Down => {
                     *selected = (*selected + 1) % ITEMS.len();
+
+                    while DISABLED_ITEMS.contains(selected) {
+                        *selected = (*selected + 1) % ITEMS.len();
+                    }
+
                     None
                 }
                 Key::Up => {
                     *selected = (*selected + ITEMS.len() - 1) % ITEMS.len();
+
+                    while DISABLED_ITEMS.contains(selected) {
+                        *selected = (*selected + ITEMS.len() - 1) % ITEMS.len();
+                    }
+
                     None
                 }
                 Key::Esc => Some(MenuRequest::Resume),
@@ -184,7 +201,8 @@ impl InGameMenu {
                             None
                         }
                         6 => Some(MenuRequest::Quit),
-                        // GRAPHICS.../JOYSTICK...: drawn, inert.
+                        // GRAPHICS.../JOYSTICK... are disabled and the
+                        // cursor never lands on them.
                         _ => None,
                     }
                 }
@@ -347,7 +365,12 @@ impl InGameMenu {
             Screen::Items { selected } => {
                 for (index, item) in ITEMS.iter().enumerate() {
                     let y = ITEM_TOP + index as i32 * ROW_STEP;
-                    font.draw_into(&mut frame.image, ITEM_X, y, item);
+
+                    if DISABLED_ITEMS.contains(&index) {
+                        font.draw_into_mapped(&mut frame.image, ITEM_X, y, item, dim);
+                    } else {
+                        font.draw_into(&mut frame.image, ITEM_X, y, item);
+                    }
 
                     if index == *selected {
                         font.draw_into(&mut frame.image, ITEM_CURSOR_X, y, ">");
@@ -476,11 +499,27 @@ mod tests {
         assert!(matches!(menu.screen, Screen::Items { selected: 0 }));
     }
     #[test]
+    fn the_cursor_skips_the_disabled_items() {
+        let mut menu = menu();
+
+        // Down from SAVE GAME (2) lands on VOLUME (5), skipping 3 and 4.
+        menu.handle_key(Key::Down);
+        menu.handle_key(Key::Down);
+        menu.handle_key(Key::Down);
+        assert!(matches!(menu.screen, Screen::Items { selected: 5 }));
+
+        // Up from VOLUME lands back on SAVE GAME.
+        menu.handle_key(Key::Up);
+        assert!(matches!(menu.screen, Screen::Items { selected: 2 }));
+    }
+
+    #[test]
     fn the_volume_submenu_toggles_and_steps() {
         let mut menu = menu();
 
-        // VOLUME... is the sixth item.
-        for _ in 0..5 {
+        // VOLUME... is the sixth item, three Downs with the disabled
+        // GRAPHICS.../JOYSTICK... rows skipped.
+        for _ in 0..3 {
             menu.handle_key(Key::Down);
         }
         assert!(menu.handle_key(Key::Enter).is_none());
