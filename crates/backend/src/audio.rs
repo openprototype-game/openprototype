@@ -316,7 +316,8 @@ mod rodio_backend {
         }
 
         fn total_duration(&self) -> Option<Duration> {
-            // The track loops, so it has no finite duration.
+            // The source streams to the track's end and stops; reporting an
+            // unknown duration to rodio is harmless and avoids a TOC read.
             None
         }
     }

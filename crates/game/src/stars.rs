@@ -8,9 +8,10 @@
 //!
 //! Star placement is generated at level start: the engine rolls `rand(320)`,
 //! `rand(160)` per star through the layout PRNG, interleaved across the seeded
-//! planes (and skipping unseeded ones, see [`StarPlaneData::seeded`]). Rows at
-//! or below the panel are generated but never visible, exactly like the
-//! original's work buffer, whose bottom rows are never blitted.
+//! planes (and skipping unseeded ones, see [`StarPlaneData::seeded`]). Stars
+//! scattered into the panel band only show when the race camera pans down
+//! (it exposes up to 32 buffer rows below the resting window); rows past the
+//! camera's reach stay unblitted, like the original's work buffer.
 
 use crate::level::prng::EngineRng;
 use crate::levels::StarPlaneData;

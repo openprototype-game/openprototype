@@ -75,8 +75,11 @@ impl EngineRng {
 
     /// Draws the next value, reduced into `[0, modulus)`.
     ///
-    /// Every layout draw passes a nonzero modulus; the original's raw
-    /// (modulus 0) path is unused here.
+    /// Every layout draw passes a nonzero modulus. The original's modulus-0
+    /// path does not return the raw draw: the L1/L3/L5 generator re-enters
+    /// with the first nonzero draw as the new modulus (`draw2 % draw1`), and
+    /// only L7's generator guards the entry and returns 0 with no state
+    /// advance. The port never passes 0, so neither shape is modeled.
     ///
     /// # Panics
     ///

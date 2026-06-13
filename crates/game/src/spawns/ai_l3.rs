@@ -263,8 +263,10 @@ fn popper_anim(entity: &mut Entity) {
 }
 
 /// One path-table step (the head of files `0x10104`/`0x101b5`/`0x1034c`):
-/// adds the tick's `{dx, dy}` entry, scaled to 12.4. L3 paths never wrap;
-/// the tables outlast an entity's on-screen life.
+/// adds the tick's `{dx, dy}` entry, scaled to 12.4. L3 paths never wrap,
+/// and a long-lived follower CAN outrun its table (row 62 lives 426 ticks
+/// on a 232-entry segment), harmlessly reading the next segment's bytes --
+/// both engines read the same WAD data there.
 fn path_step(entity: &mut Entity, wad: &[u8], segment: usize) {
     let at = segment_base(segment) + usize::from(entity.tick) * 4;
     entity.x += word(wad, at) << 4;

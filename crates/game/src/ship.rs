@@ -1,7 +1,8 @@
 //! The player ship: movement, the barrel-roll animation, the camera coupling,
 //! and the spawn shield.
 //!
-//! Reverse-engineered from `LEVEL_1.WAD`'s per-tick handler (file `0xb4c0`);
+//! Reverse-engineered from `LEVEL_1.WAD`'s per-tick handler (entry file
+//! `0xb410`, the ship block at `0xb479`);
 //! the engine code is the same in every level, with the per-level constants
 //! (idle frame, vertical clamps, spawn shield duration) byte-verified in each
 //! WAD and carried in [`ShipData`]. All movement is digital, 2 pixels per
@@ -400,8 +401,10 @@ const SHIELD_FADE_TARGET: [[u8; 3]; 16] = [
 const SHIELD_FADE_FIRST_ENTRY: usize = 0xe0;
 
 /// Cross-fade the bubble's palette band toward the dark wear-off ramp while
-/// the invincibility timer runs (the ISR block at LEVEL_1.WAD file `0x9498`,
-/// identical in every WAD): `out = base + (target - base) * t / 64` with
+/// the invincibility timer runs (the ISR block at LEVEL_1.WAD file `0x9498`;
+/// structurally congruent in every WAD with two per-WAD immediates, and the
+/// 96 ramp table bytes byte-identical in all seven):
+/// `out = base + (target - base) * t / 64` with
 /// `t = max(0, (0x80 - ticks) >> 1)`, so the bubble keeps its normal colors
 /// until 126 ticks remain and darkens linearly from there.
 ///

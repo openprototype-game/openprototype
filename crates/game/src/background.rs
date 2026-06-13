@@ -166,7 +166,8 @@ const ALIENBG_STRIPS: [Strip; 4] = [
 /// L7's lava background: a 65-strip perspective gradient. 32 two-row lines
 /// rush at the top (rates 256 down to 32), a 32-row horizon crawls in the
 /// middle, and the mirror rushes back out at the bottom. From `LEVEL_7.WAD`
-/// heights `cs:0x3e67`, accums `cs:0x2c64`, rates `cs:0x2d68`.
+/// heights `cs:0x3e67`, accums `cs:0x2c64`; the rate table base `cs:0x2d68`
+/// holds 3 scenery slots first, the strip rates from `cs:0x2d74`.
 const LAVAH_STRIPS: [Strip; 65] = [
     Strip {
         height: 2,
@@ -497,8 +498,9 @@ impl Background {
             let dest_row = (dest_y * frame_width) as usize;
 
             // Rows past the strips: L5 paints them solid dark brown every
-            // frame; L3's stay uncomposited (black here pending the DOSBox
-            // check on what its stale buffer shows through the trees).
+            // frame; L3's stay uncomposited and the forest scenery always
+            // covers them with margin (DOSBox-verified), so black is
+            // equivalent there.
             let strip = (image_y >= 0 && image_y < image_height)
                 .then(|| strip_at(self.strips, image_y))
                 .flatten();

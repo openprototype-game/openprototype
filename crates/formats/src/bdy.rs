@@ -13,12 +13,18 @@ pub fn decode(bytes: &[u8], size: Dimensions) -> Result<IndexedImage> {
     IndexedImage::new(size, unpack_byte_run1(bytes)?)
 }
 
-/// ByteRun1 (PackBits) decompression.
+/// ByteRun1 decompression.
 ///
 /// Each control byte is read as a signed value:
 /// - `0..=127`: copy the next `n + 1` bytes literally.
 /// - `-127..=-1`: repeat the next byte `1 - n` times.
-/// - `-128`: no-op.
+/// - `-128`: no-op (the PackBits convention).
+///
+/// The original's unpacker (START.EXE file `0x3104`) instead computes
+/// `0x101 - control` for every control `> 0x7f`, so it treats `0x80` as a
+/// 129-byte run rather than a no-op. No shipped `.BDY` contains a `0x80`
+/// control, so the decoded output is identical either way; the port keeps
+/// the standard PackBits reading.
 fn unpack_byte_run1(bytes: &[u8]) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     let mut input = bytes.iter().copied();

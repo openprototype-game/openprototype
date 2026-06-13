@@ -66,9 +66,9 @@ pub struct ShipData {
     /// The idle exhaust-flicker alternate frame (the draw site's `add di`
     /// over 18).
     pub flicker_frame: usize,
-    /// The vertical clamps (`cmp` guards before the 2-pixel steps): L1 stops
-    /// higher (-2..110), L5 at 113, the rest fly -12..120. The horizontal
-    /// clamps are -12..230 in every level.
+    /// The vertical clamps (`cmp` guards before the 2-pixel steps): L1 and
+    /// L3 floor at -2 (L1 also ceils at 110), L5 ceils at 113, the rest fly
+    /// -12..120. The horizontal clamps are -12..230 in every level.
     pub y_min: i32,
     pub y_max: i32,
     /// File offset of the ship's 23 death-explosion descriptors (the dying
@@ -116,7 +116,8 @@ pub struct CombatData {
     /// `cull_x_max` in every WAD, but the binary compares are distinct
     /// sites.
     pub shot_x_max: i32,
-    /// Respawn invincibility in ticks (L3 180, the others 300).
+    /// Respawn invincibility in ticks: 300 in L1 and L5 (writes of 0x12c at
+    /// L1 0x9da2 / L5 0xb3fb), 180 (0xb4) in L2/L3/L4/L6/L7.
     pub respawn_invincibility: u16,
     /// Kinds whose death plays a dedicated sample over the explosion
     /// (L1's asteroid and carrier pod; the other levels have none).
@@ -152,9 +153,7 @@ pub struct EffectData {
     pub ship_hit: u16,
 }
 
-/// L1's combat data, also the placeholder for the race levels until their
-/// consumer is reverse-engineered (they build no spawn layer, so it goes
-/// unread there).
+/// L1's combat data.
 const L1_COMBAT: CombatData = CombatData {
     ship_rect_table: 0x4771,
     pickups: [0x36ea, 0x3750, 0x37b6, 0x382c],
@@ -209,8 +208,9 @@ pub struct FireData {
     /// are identical in all seven WADs, at different offsets.
     pub bomb_wave: usize,
     /// The smart-bomb ring shot's directory record (the spawner's sprite
-    /// literal + cs_base): every WAD names its own (only L1's aliases the
-    /// multishot sprite); verified by the `ba 20 00 c7 07` spawner scan.
+    /// literal + cs_base): every WAD names its own, and in every WAD the
+    /// spawner's literal equals `multishot[2]`; verified by the
+    /// `ba 20 00 c7 07` spawner scan.
     pub bomb_sprite: usize,
     /// The chaingun muzzle flash: 6 records (3 cells, 2 frames each).
     pub muzzle_flash: usize,
@@ -231,7 +231,8 @@ pub struct FireData {
 /// L5), loaded whole at level start. The trigger routines play each sample to
 /// an authored length constant, around 200 bytes short of the file, with real
 /// per-level quirks (L1's multisho stops 2 bytes earlier than the others';
-/// extraabg plays 1542 of its 1980 bytes everywhere but L1). Slot meanings are
+/// L1 plays 1542 of extraabg's 1980 bytes where every other level plays
+/// 1580). Slot meanings are
 /// positional and identical across levels, except slot 8, the per-level enemy
 /// sound (gegrocke, lgegshot, kanone or scheren), and L5's extra slot 16.
 #[derive(Clone, Copy)]

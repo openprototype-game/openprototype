@@ -20,10 +20,12 @@ use std::collections::BTreeSet;
 use crate::error::{DecodeError, Result};
 use crate::image::Dimensions;
 
-/// File offset of `OUT.BIN`'s sprite catalog in `LEVEL_1.WAD`.
+/// File offset of `OUT.BIN`'s sprite catalog in `LEVEL_1.WAD` (the banked
+/// blitter loads its `gs` from segment `0x0F7F` = paragraph for file
+/// `0xf9f0`).
 pub const OUT_BIN_CATALOG: usize = 0xf9f0;
-/// File offset of the player-ship frame catalog in `LEVEL_1.WAD` (segment
-/// `0x0F7F` is the r2 vaddr `0x6bdc`; the on-disk offset is `+0x200`).
+/// File offset of the player-ship frame catalog in `LEVEL_1.WAD` (reached
+/// cs-relative: `mov $0x43ea, %di` then cells at `di + 2` = file `0x6ddc`).
 pub const PTURN1_CATALOG: usize = 0x6ddc;
 
 /// Mode X plane-buffer row stride: 320 columns / 4 planes.

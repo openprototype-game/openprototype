@@ -40,8 +40,9 @@ pub(super) struct AiContext<'a> {
     /// Whether the firing weapon is the plasma (`cs:0xcb5 == 3`); the boss
     /// fires four times faster against it.
     pub firing_plasma: bool,
-    /// Whether a left/right arrow is held (`cs:0x820c/0x820d`); the boss
-    /// holds its facing while the player is steering mid-screen.
+    /// Whether a left/right arrow is held (`cs:0x820c` = right, `0x820d` =
+    /// left); the boss holds its facing while the player is steering
+    /// mid-screen (it ORs both flags, so the pairing is inert).
     pub steering: bool,
     /// Live patches to the shared per-kind descriptors' debris slots.
     pub debris_overrides: &'a mut std::collections::HashMap<u16, u16>,

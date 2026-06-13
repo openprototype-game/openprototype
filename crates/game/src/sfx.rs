@@ -6,8 +6,8 @@
 //! Sound Blaster's DMA buffer and assigns them by sound category: explosions
 //! and impacts on 0, the player's weapons on 1, pickups/enemy/weapon-switch
 //! events on 2. A trigger overwrites its channel immediately; there is no
-//! fade and no priority (except the chainhit don't-interrupt guard, not yet
-//! wired).
+//! fade and no priority, except the chainhit don't-interrupt guard
+//! (`skip_if_busy`, honored by the backend mixer).
 //!
 //! The plasma weapon's audio is the burning2 hum: a looped sample started on
 //! the first firing tick, guarded by the original's `cs:[0x8414]` flag so the

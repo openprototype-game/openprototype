@@ -6,11 +6,11 @@
 //! wobbles) are read straight from the WAD image at their file offsets, like
 //! the sprite descriptors.
 //!
-//! Side effects the port does not carry yet are marked `TODO` at their sites:
-//! the effects/spawn queue (func 4's child drop, the boss explosions), the
-//! per-function SFX triggers, the boss/orbiter scroll gate (`cs:0x269c`), the
-//! orbiter frame patch's hitbox/claw writes, and the firing-weapon gate bypass
-//! (`cs:0xcb5 == 3`).
+//! Side effects the port does not carry yet are marked `TODO` at their
+//! sites; the open ones are the orbiter's plasma proximity-gate bypass
+//! (`cs:0xcb5 == 3`) and the flapper funcs' dropped tick increment
+//! (savegame-visible state only). The effects queue, the SFX triggers and
+//! the boss/orbiter scroll gate are implemented.
 
 use super::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 use crate::level::prng::EngineRng;

@@ -201,7 +201,8 @@ const SHOT_Y: std::ops::Range<i32> = 1..0xa00;
 pub struct PlayerInput {
     pub x: i32,
     pub y: i32,
-    /// The firing weapon is the plasma (`cs:0xcb5 == 3`).
+    /// The firing weapon is the plasma (`cs:0xcb5 == 3`; this low-ds flag
+    /// does not relink, so the offset is the same in every WAD).
     pub firing_plasma: bool,
     /// A left/right arrow is held (the L5 boss's facing hold).
     pub steering: bool,
@@ -235,14 +236,18 @@ pub struct Spawns {
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
     pub(crate) rng: EngineRng,
-    /// The orb-drop countdown (`cs:0x2666`): every Nth killed enemy converts
-    /// into the weapon-orb pickup.
+    /// The orb-drop countdown (L1 `cs:0x2666`; relinked per WAD, e.g. L5
+    /// `cs:0x2653`): every Nth killed enemy converts into the weapon-orb
+    /// pickup.
     orb_drop_countdown: i32,
-    /// The boss/orbiter gate (`cs:0x269c`): while nonzero the parallax
-    /// scroll and the spawn clock hold until the gated enemies die.
+    /// The boss/orbiter gate (L1 `cs:0x269c`; relinked per WAD, e.g. L5
+    /// `cs:0x2689`): while nonzero the parallax scroll and the spawn clock
+    /// hold until the gated enemies die.
     pub gate: u8,
-    /// The level-end flag (`cs:0xcc2`): once set, the gate no longer holds
-    /// the clock (the original's ISR bypass).
+    /// The level-end flag (L1 `cs:0xcc1`; the races' end flag is `cs:0xcc3`,
+    /// L7's `cs:0xcdf`; this field merges the completed flag and the ISR
+    /// clock-bypass the original keeps separate): once set, the gate no
+    /// longer holds the clock.
     pub level_end: bool,
     /// The L1 boss's engine globals.
     boss: ai_l1::BossState,

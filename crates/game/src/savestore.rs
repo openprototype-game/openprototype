@@ -53,8 +53,6 @@ impl SaveStore {
     }
 
     /// Encode `save` into `slot`, creating the data directory if needed.
-    /// Panics on a shooter save, like [`SaveGame::encode`], until that codec
-    /// lands.
     pub fn save(&self, slot: usize, save: &SaveGame) -> Result<()> {
         fs::create_dir_all(&self.dir)
             .with_context(|| format!("creating {}", self.dir.display()))?;

@@ -48,9 +48,10 @@ const SCREEN: Dimensions = Dimensions {
 };
 
 /// The game's logic tick. The original is vsync-locked: it calibrates the PIT
-/// against the VGA vertical retrace (vaddr `0x9350`), so its tick is the display
-/// refresh, ~60Hz for the 480-line mode. The parallax scroll and the pod
-/// animation both advance on this tick.
+/// against the VGA vertical retrace (L1 file `0x93c4`; START.EXE's twin at
+/// file `0x1160`), so its tick is the display refresh, ~60Hz for the
+/// 480-line mode (confirmed by stopwatch against DOSBox). The parallax
+/// scroll and the pod animation both advance on this tick.
 const TICK: Duration = Duration::from_nanos(1_000_000_000 / 60);
 
 /// Ticks the weapon pod holds on each open/settle frame: the animator steps
@@ -240,9 +241,10 @@ pub struct LevelScene {
 impl LevelScene {
     pub fn new(assets: Rc<LevelAssets>, level: Level, handoff: Handoff, skip_ticks: u32) -> Self {
         // The level start runs the original's spawn handler on its respawn
-        // path (the handoff flag `cs:0xb12b` bakes 0 and only an `f:message`
-        // mode byte changes it), so on top of the carried payload's entry
-        // math it arms the same invincibility a death respawn does.
+        // path (the handoff flag -- `cs:0xb12b` in the race WADs, `cs:0xcb88`
+        // in L1 -- bakes 0 and only an `f:message` mode byte changes it), so
+        // on top of the carried payload's entry math it arms the same
+        // invincibility a death respawn does.
         let mut state = GameState::enter_level(handoff);
         state.invincible_ticks = assets.combat.respawn_invincibility;
 
@@ -495,9 +497,9 @@ impl LevelScene {
                 self.esc_debounce = ESC_DEBOUNCE_TICKS;
 
                 // The original's dispatcher clears the freeze wholesale when
-                // the menu handler returns (file 0xbdc1), so closing the menu
-                // resumes play directly — even when it was opened from the
-                // GET READY freeze, whose fire-wait is skipped. A death
+                // the menu handler returns (L2 file 0xbdc1), so closing the
+                // menu resumes play directly — even when it was opened from
+                // the GET READY freeze, whose fire-wait is skipped. A death
                 // explosion keeps playing out (dying is not the freeze flag).
                 if matches!(self.flow, Flow::GetReady { .. }) {
                     self.flow = Flow::Running;
@@ -1377,11 +1379,13 @@ impl Scene for LevelScene {
                     Key::Left => self.held.left = true,
                     Key::Right => self.held.right = true,
                     // Esc freezes the level and opens the in-game menu. The
-                    // original's gate (L2 file 0x91bb) blocks it during the
-                    // win flyout, the dying skip jumps over it while the
-                    // death explosion plays (L1 0xb4de -> 0xb75d), and the
-                    // unfreeze debounce must have run out; game over
-                    // transitions out by itself.
+                    // original's win flyout is Esc-immune because the level
+                    // end leaves the per-tick dispatch loop entirely (L2
+                    // 0xbd23; the gate at L2 file 0x91bb reads cs:0x6ea8,
+                    // the freeze-handler dispatch index), the dying skip
+                    // jumps over the gate while the death explosion plays
+                    // (L1 0xb4de -> 0xb75d), and the unfreeze debounce must
+                    // have run out; game over transitions out by itself.
                     Key::Esc => {
                         if self.level_end_countdown.is_none()
                             && !matches!(self.flow, Flow::GameOver | Flow::Dying { .. })
