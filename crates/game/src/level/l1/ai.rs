@@ -67,7 +67,7 @@ impl Default for BossState {
     }
 }
 
-/// The carrier pod's deploy sample (gegrocke, the per-level slot 8).
+/// The kamikaze rocket's launch sample (gegrocke, the per-level slot 8).
 const SLOT_ENEMY_VOICE: usize = 8;
 
 /// Runs AI function `arg` for one sub-step.
@@ -76,28 +76,28 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
         0 => asteroid(entity, -0x20, 4),
         1 => asteroid(entity, -0x18, 6),
         2 => asteroid(entity, -0x1c, 5),
-        3 => turret(entity, ctx),
-        4 => carrier_pod(entity, ctx),
+        3 => cannon(entity, ctx),
+        4 => kamikaze(entity, ctx),
         5 => flapper(entity, -0x14, 4, 0x36ea, 0x3708, 0x3748),
         6 => {
             entity.x -= 0xc;
-            shooter_anim(entity, ctx);
+            sniper_anim(entity, ctx);
         }
         7 => orbiter(entity, ctx, OrbiterShape::Circle),
         8 => orbiter(entity, ctx, OrbiterShape::Lissajous),
-        9 => path_popper(entity, ctx, 0x6b0, 0xfa),
-        10 => path_popper(entity, ctx, 0xaa0, 0xc8),
-        11 => path_popper(entity, ctx, 0xdc0, 0x12c),
-        12 => path_popper(entity, ctx, 0x10e0, 0x12c),
+        9 => path_interceptor(entity, ctx, 0x6b0, 0xfa),
+        10 => path_interceptor(entity, ctx, 0xaa0, 0xc8),
+        11 => path_interceptor(entity, ctx, 0xdc0, 0x12c),
+        12 => path_interceptor(entity, ctx, 0x10e0, 0x12c),
         13 => {
             entity.x -= 0x30;
-            popper_anim(entity);
+            interceptor_anim(entity);
         }
-        14 => path_shooter(entity, ctx, 0x1590, 0xfa),
-        15 => path_shooter(entity, ctx, 0x1980, 0xfa),
-        16 => path_shooter(entity, ctx, 0x1d70, 0x12c),
-        17 => path_shooter(entity, ctx, 0x2220, 0xc8),
-        18 => bomber(entity, ctx),
+        14 => path_sniper(entity, ctx, 0x1590, 0xfa),
+        15 => path_sniper(entity, ctx, 0x1980, 0xfa),
+        16 => path_sniper(entity, ctx, 0x1d70, 0x12c),
+        17 => path_sniper(entity, ctx, 0x2220, 0xc8),
+        18 => strafer(entity, ctx),
         19 => flapper(entity, -0x14, 4, 0x3750, 0x376e, 0x37ae),
         20 => flapper(entity, -0x14, 4, 0x37b6, 0x37d4, 0x3824),
         21 => flapper(entity, -0x14, 4, 0x382c, 0x3846, 0x386e),
@@ -151,8 +151,8 @@ fn flapper(entity: &mut Entity, speed: i32, threshold: u8, rest: u16, first: u16
     }
 }
 
-/// Function 3: the timed-shot turret (frames 0x338e..0x33ec).
-fn turret(entity: &mut Entity, ctx: &mut AiContext) {
+/// Function 3: the timed-shot cannon (frames 0x338e..0x33ec).
+fn cannon(entity: &mut Entity, ctx: &mut AiContext) {
     entity.x -= 0x18;
     entity.tick += 1;
 
@@ -197,9 +197,9 @@ fn turret(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// Function 4: the carrier pod (frames 0x38b0..0x3926): sine bob in, open,
-/// drop a child, retreat fast.
-fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
+/// Function 4: the kamikaze rocket (frames 0x38b0..0x3926): sine-bob in, open
+/// into a rocket, then dash left fast trailing exhaust.
+fn kamikaze(entity: &mut Entity, ctx: &mut AiContext) {
     entity.x -= 0xc;
     entity.tick += 1;
 
@@ -231,8 +231,8 @@ fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
         return;
     }
 
-    // Deployed: runs every call while on the final frame; the deploy sound
-    // (0xace3, the level's enemy voice) fires once.
+    // Ignited (final frame): runs every call once the rocket is lit; the
+    // launch sound (0xace3, the level's enemy voice) fires once.
     if entity.phase_a & 0xff != 0x11 {
         ctx.sounds.push(SLOT_ENEMY_VOICE);
         entity.phase_a = (entity.phase_a & 0xff00) | 0x11;
@@ -240,8 +240,8 @@ fn carrier_pod(entity: &mut Entity, ctx: &mut AiContext) {
 
     entity.x -= 0x80;
 
-    // The pod streams its child animation every call while deployed; the
-    // retreat speed bounds the count, like the original.
+    // The rocket streams its exhaust trail every call while dashing; the dash
+    // speed bounds the count, like the original.
     ctx.effects.push(Effect {
         sprite: 0x35e2,
         x: (entity.x >> 4) + 0x12,
@@ -295,9 +295,9 @@ fn aim_at_player(ctx: &AiContext, sx: i32, sy: i32, speed: i32) -> Option<(i32, 
     Some(((dx << 4) / scale, (dy << 4) / scale))
 }
 
-/// `shooter_anim` (file 0xc842): random aimed fire, 7-tick ping-pong over
+/// `sniper_anim` (file 0xc842): random aimed fire, 7-tick ping-pong over
 /// 0x33f4/0x3412..0x343a, and a per-frame x wobble.
-fn shooter_anim(entity: &mut Entity, ctx: &mut AiContext) {
+fn sniper_anim(entity: &mut Entity, ctx: &mut AiContext) {
     random_aimed_shot(entity, ctx);
 
     entity.anim += 1;
@@ -449,7 +449,7 @@ fn orbiter_frame_patch(entity: &mut Entity, ctx: &mut AiContext) {
 
 /// The small-popper animation (file 0xce51): every 2 sub-steps over
 /// 0x3a92/0x3ab0..0x3ae0.
-fn popper_anim(entity: &mut Entity) {
+fn interceptor_anim(entity: &mut Entity) {
     entity.anim += 1;
 
     if entity.anim != 2 {
@@ -481,19 +481,19 @@ fn path_step(entity: &mut Entity, ctx: &AiContext, table: usize, wrap: u16) {
 }
 
 /// Functions 9-12: path follower with the popper animation.
-fn path_popper(entity: &mut Entity, ctx: &mut AiContext, table: usize, wrap: u16) {
+fn path_interceptor(entity: &mut Entity, ctx: &mut AiContext, table: usize, wrap: u16) {
     path_step(entity, ctx, table, wrap);
-    popper_anim(entity);
+    interceptor_anim(entity);
 }
 
 /// Functions 14-17: path follower with the shooter animation/fire.
-fn path_shooter(entity: &mut Entity, ctx: &mut AiContext, table: usize, wrap: u16) {
+fn path_sniper(entity: &mut Entity, ctx: &mut AiContext, table: usize, wrap: u16) {
     path_step(entity, ctx, table, wrap);
-    shooter_anim(entity, ctx);
+    sniper_anim(entity, ctx);
 }
 
-/// Function 18: the two-gun bomber (frames 0x39a4..0x3a82).
-fn bomber(entity: &mut Entity, ctx: &mut AiContext) {
+/// Function 18: the two-gun strafer (frames 0x39a4..0x3a82).
+fn strafer(entity: &mut Entity, ctx: &mut AiContext) {
     entity.x -= 8;
     entity.tick += 1;
 
