@@ -376,7 +376,7 @@ impl LevelScene {
             save.entities,
             save.enemy_shots,
             save.effects,
-            save.orb_drop_countdown,
+            save.weapon_upgrade_drop_countdown,
             save.level_end,
             scene.assets.spawn_ai,
             scene.assets.combat,
@@ -419,23 +419,30 @@ impl LevelScene {
     /// matches the original until the first strip's wrap (their values are
     /// not restorable noise either way).
     pub fn to_save(&self) -> crate::savegame::SaveGame {
-        let (records, cursor, orb_drop_countdown, level_end, entities, enemy_shots, effects) =
-            match &self.spawns {
-                Some(spawns) => {
-                    let (records, cursor) = spawns.save_schedule();
+        let (
+            records,
+            cursor,
+            weapon_upgrade_drop_countdown,
+            level_end,
+            entities,
+            enemy_shots,
+            effects,
+        ) = match &self.spawns {
+            Some(spawns) => {
+                let (records, cursor) = spawns.save_schedule();
 
-                    (
-                        records,
-                        cursor,
-                        spawns.orb_drop_countdown(),
-                        spawns.level_end,
-                        spawns.entities.clone(),
-                        spawns.shots.clone(),
-                        spawns.effects.clone(),
-                    )
-                }
-                None => (Vec::new(), 0, 0, false, Vec::new(), Vec::new(), Vec::new()),
-            };
+                (
+                    records,
+                    cursor,
+                    spawns.weapon_upgrade_drop_countdown(),
+                    spawns.level_end,
+                    spawns.entities.clone(),
+                    spawns.shots.clone(),
+                    spawns.effects.clone(),
+                )
+            }
+            None => (Vec::new(), 0, 0, false, Vec::new(), Vec::new(), Vec::new()),
+        };
 
         let layout = crate::savegame::scroll_layout(self.level);
         let consts = crate::savegame::scroll_consts(self.level);
@@ -470,7 +477,7 @@ impl LevelScene {
             state: self.state.clone(),
             records,
             cursor,
-            orb_drop_countdown,
+            weapon_upgrade_drop_countdown,
             level_end,
             entities,
             enemy_shots,
@@ -822,7 +829,9 @@ impl LevelScene {
                                 // orb-drop countdown (L2 0x788b..0x7935 has
                                 // no cs:0x2848 write): the pebble cadence
                                 // carries across deaths.
-                                fresh.set_orb_drop_countdown(old.orb_drop_countdown());
+                                fresh.set_weapon_upgrade_drop_countdown(
+                                    old.weapon_upgrade_drop_countdown(),
+                                );
                                 fresh.effects = old.effects;
                                 fresh.rng = old.rng;
                             }
@@ -1077,8 +1086,8 @@ impl LevelScene {
             }
         }
 
-        if events.orb_dropped {
-            self.sfx.orb_dropped(&self.assets.sfx, audio);
+        if events.weapon_upgrade_dropped {
+            self.sfx.weapon_upgrade_dropped(&self.assets.sfx, audio);
         }
 
         if events.pickup {

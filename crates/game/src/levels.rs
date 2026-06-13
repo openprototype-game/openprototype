@@ -86,10 +86,11 @@ pub struct CombatData {
     /// indexed `roll_frame * 2`, one 12-byte block pointer per roll band.
     pub ship_rect_table: usize,
     /// The four pickup kinds at the body-contact dispatch, in the order
-    /// weapon orb, smart bomb, invincibility, extra life.
+    /// weapon upgrade, smart bomb, invincibility, extra life.
     pub pickups: [u16; 4],
-    /// The AI arg installed on the orb-drop conversion (L1 5, L3/L5 0).
-    pub orb_arg: u16,
+    /// The AI arg installed on the weapon-upgrade-drop conversion (L1 5,
+    /// L3/L5 0).
+    pub weapon_upgrade_arg: u16,
     /// Dying entities whose current sprite is in this inclusive range
     /// release one gate count (the orbiter/sweeper frame run).
     pub gate_release: (u16, u16),
@@ -162,7 +163,7 @@ const L1_COMBAT: CombatData = CombatData {
         l1::INVINCIBILITY,
         l1::EXTRA_LIFE,
     ],
-    orb_arg: 5,
+    weapon_upgrade_arg: 5,
     gate_release: (0x392e, 0x399c),
     level_end_sprite: 0x3ae8,
     level_end_clears_gate: true,
@@ -592,7 +593,7 @@ impl Level {
                 combat: CombatData {
                     ship_rect_table: 0x4237,
                     pickups: [0x3974, 0x3898, 0x38fe, 0x3a3a],
-                    orb_arg: 0,
+                    weapon_upgrade_arg: 0,
                     // No gate and no death-driven level end in race mode
                     // (the finish entity's AI raises the flag instead).
                     gate_release: (1, 0),
@@ -702,7 +703,7 @@ impl Level {
                         l3::INVINCIBILITY,
                         l3::EXTRA_LIFE,
                     ],
-                    orb_arg: 0,
+                    weapon_upgrade_arg: 0,
                     gate_release: (0x54d6, 0x5698),
                     level_end_sprite: 0x5c20,
                     level_end_clears_gate: false,
@@ -814,7 +815,7 @@ impl Level {
                 combat: CombatData {
                     ship_rect_table: 0x42af,
                     pickups: [0x39ec, 0x3910, 0x3976, 0x3ab2],
-                    orb_arg: 0,
+                    weapon_upgrade_arg: 0,
                     // No gate and no death-driven level end in race mode
                     // (the finish entity's AI raises the flag instead).
                     gate_release: (1, 0),
@@ -922,7 +923,7 @@ impl Level {
                         l5::INVINCIBILITY,
                         l5::EXTRA_LIFE,
                     ],
-                    orb_arg: 0,
+                    weapon_upgrade_arg: 0,
                     gate_release: (0x3b70, 0x3c3e),
                     level_end_sprite: 0x426e,
                     level_end_clears_gate: true,
@@ -1029,7 +1030,7 @@ impl Level {
                 combat: CombatData {
                     ship_rect_table: 0x47af,
                     pickups: [0x3eec, 0x3e10, 0x3e76, 0x3fb2],
-                    orb_arg: 0,
+                    weapon_upgrade_arg: 0,
                     // No gate and no death-driven level end in race mode
                     // (the finish entity's AI raises the flag instead).
                     gate_release: (1, 0),
@@ -1129,7 +1130,7 @@ impl Level {
                 combat: CombatData {
                     ship_rect_table: 0x5b47,
                     pickups: [0x4291, 0x41b5, 0x421b, 0x4357],
-                    orb_arg: 0,
+                    weapon_upgrade_arg: 0,
                     gate_release: (0x4959, 0x4a27),
                     level_end_sprite: 0x4cbd,
                     level_end_clears_gate: false,

@@ -6,7 +6,7 @@
 //! collision boxes, and the first overlap spends the shot's damage budget.
 //! Overkill pierces: the shot keeps the remainder and flies on. Deaths pay
 //! the type's score (a dword in its descriptor block), and every Nth kill
-//! converts the dying enemy into a weapon-orb pickup in place.
+//! converts the dying enemy into a weapon-upgrade pickup in place.
 //!
 //! Still TODO at their sites: hit sparks and death debris (the effects
 //! buffer), death SFX triggers, and the boss/orbiter gate release.
@@ -30,8 +30,8 @@ pub struct CombatEvents {
     /// The kinds that died this pass, in death order (the per-type death
     /// sounds share a channel, so the last one wins, like the original).
     pub kills: Vec<u16>,
-    /// A kill converted into the weapon orb (`0xaca3`).
-    pub orb_dropped: bool,
+    /// A kill converted into the weapon-upgrade pickup (`0xaca3`).
+    pub weapon_upgrade_dropped: bool,
     /// A chaingun round / missile connected (`0xad83`/`0xad63`).
     pub chaingun_impact: bool,
     pub missile_impact: bool,
@@ -206,7 +206,7 @@ fn boxes_overlap(entity: &Entity, x: i32, y: i32, size_x: i32, size_y: i32) -> b
 }
 
 /// Processes entities whose health reached zero: the death handler (file
-/// `0xbda9`) plus the update loop's orb-drop conversion.
+/// `0xbda9`) plus the update loop's weapon-upgrade-drop conversion.
 pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut CombatEvents) {
     let mut index = 0;
 
@@ -248,32 +248,33 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
             .unwrap_or(spawns.entities[index].debris);
         spawn_debris(spawns, wad, cs_base, debris, px, py);
 
-        // A dying orb pickup is simply removed; everything else feeds the
-        // every-Nth orb-drop countdown and may convert in place.
-        let orb = spawns.combat.pickups[0];
+        // A dying weapon-upgrade pickup is simply removed; everything else
+        // feeds the every-Nth weapon-upgrade-drop countdown and may convert
+        // in place.
+        let weapon_upgrade = spawns.combat.pickups[0];
 
-        if kind != orb && spawns.orb_drop_due() {
-            let orb_arg = spawns.combat.orb_arg;
+        if kind != weapon_upgrade && spawns.weapon_upgrade_drop_due() {
+            let weapon_upgrade_arg = spawns.combat.weapon_upgrade_arg;
             let center = center_offset(wad, cs_base, kind);
             let entity = &mut spawns.entities[index];
-            entity.sprite = orb;
-            entity.kind = orb;
+            entity.sprite = weapon_upgrade;
+            entity.kind = weapon_upgrade;
             entity.x += center.0;
             entity.y += center.1;
-            entity.hitboxes = descriptor_hitboxes(wad, cs_base, orb);
-            entity.debris = descriptor_debris(wad, cs_base, orb);
+            entity.hitboxes = descriptor_hitboxes(wad, cs_base, weapon_upgrade);
+            entity.debris = descriptor_debris(wad, cs_base, weapon_upgrade);
             entity.mode = 0;
-            entity.arg = orb_arg;
+            entity.arg = weapon_upgrade_arg;
             entity.health = 0x15e;
             // The conversion writes seen=1 (byte-identical in all 7 WADs),
-            // so an off-screen kill's orb culls immediately instead of
-            // surviving until first sight.
+            // so an off-screen kill's weapon-upgrade culls immediately
+            // instead of surviving until first sight.
             entity.seen = true;
             entity.anim = 0;
             entity.tick = 0;
             entity.phase_a = 0;
             entity.phase_b = 0;
-            events.orb_dropped = true;
+            events.weapon_upgrade_dropped = true;
             index += 1;
             continue;
         }
@@ -328,7 +329,7 @@ fn score_value(wad: &[u8], cs_base: usize, kind: u16) -> u32 {
     u32::from_le_bytes([wad[at], wad[at + 1], wad[at + 2], wad[at + 3]])
 }
 
-/// The type's center offset (descriptor +0x1a/+0x1c), where the dropped orb
+/// The type's center offset (descriptor +0x1a/+0x1c), where the dropped weapon-upgrade
 /// appears.
 fn center_offset(wad: &[u8], cs_base: usize, kind: u16) -> (i32, i32) {
     let at = usize::from(kind) + cs_base + 0x1a;
@@ -436,9 +437,9 @@ mod tests {
             crate::levels::Level::L1.data().combat,
             test_rng(),
         );
-        let mut orb = entity(100, 50, 350);
-        orb.kind = 0x36ea;
-        spawns.entities.push(orb);
+        let mut weapon_upgrade = entity(100, 50, 350);
+        weapon_upgrade.kind = 0x36ea;
+        spawns.entities.push(weapon_upgrade);
 
         let mut state = fresh_state();
         let mut events = CombatEvents::default();
@@ -486,7 +487,7 @@ mod tests {
     }
 
     #[test]
-    fn the_first_orb_drops_on_the_third_kill() {
+    fn the_first_weapon_upgrade_drops_on_the_third_kill() {
         let mut spawns = Spawns::new(
             Vec::new(),
             None,
@@ -502,13 +503,17 @@ mod tests {
             let converted = spawns.entities.first().is_some_and(|e| e.kind == 0x36ea);
             assert_eq!(converted, kill == 3, "kill {kill}");
 
-            // The conversion writes seen=1, so an off-screen orb culls.
+            // The conversion writes seen=1, so an off-screen weapon-upgrade culls.
             if converted {
                 assert!(spawns.entities[0].seen);
             }
 
-            assert_eq!(events.orb_dropped, kill == 3, "jingle on kill {kill}");
-            events.orb_dropped = false;
+            assert_eq!(
+                events.weapon_upgrade_dropped,
+                kill == 3,
+                "jingle on kill {kill}"
+            );
+            events.weapon_upgrade_dropped = false;
 
             spawns.entities.clear();
         }
@@ -667,11 +672,11 @@ pub fn body_contact(
             continue;
         }
 
-        let [orb, smart_bomb, invincibility, extra_life] = spawns.combat.pickups;
+        let [weapon_upgrade, smart_bomb, invincibility, extra_life] = spawns.combat.pickups;
         let kind = entity.kind;
 
         // TODO: the HUD bar pickup effect.
-        if kind == orb {
+        if kind == weapon_upgrade {
             state.level_up();
             events.pickup = true;
             spawns.entities.remove(index);

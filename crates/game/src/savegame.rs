@@ -272,8 +272,8 @@ pub struct SaveGame {
     /// place) and the consumer's position in it.
     pub records: Vec<Record>,
     pub cursor: usize,
-    /// The orb/pebble-drop countdown.
-    pub orb_drop_countdown: i32,
+    /// The weapon-upgrade-drop countdown.
+    pub weapon_upgrade_drop_countdown: i32,
     /// The win flag.
     pub level_end: bool,
     pub entities: Vec<Entity>,
@@ -435,7 +435,7 @@ impl SaveGame {
             state,
             records,
             cursor,
-            orb_drop_countdown: i32::from(word(ramp + 0x24) as i16),
+            weapon_upgrade_drop_countdown: i32::from(word(ramp + 0x24) as i16),
             level_end: byte(map.win_at) == 1,
             entities,
             enemy_shots,
@@ -541,7 +541,11 @@ impl SaveGame {
         put_word(block, ramp + 2, self.ship_x as u16);
         put_word(block, ramp + 4, self.ship_y as u16);
         put_word(block, ramp + 0x22, (self.ship_roll * 0x12) as u16);
-        put_word(block, ramp + 0x24, self.orb_drop_countdown as u16);
+        put_word(
+            block,
+            ramp + 0x24,
+            self.weapon_upgrade_drop_countdown as u16,
+        );
         block[ramp + 0x27 - BLOCK_BASE] = self.state.lives.get();
         put_word(block, ramp + 0x28, self.state.invincible_ticks);
 
@@ -842,7 +846,7 @@ mod tests {
                 },
             ],
             cursor: 1,
-            orb_drop_countdown: 4,
+            weapon_upgrade_drop_countdown: 4,
             level_end: false,
             entities: vec![Entity {
                 sprite: 0x3C5A,
@@ -964,7 +968,7 @@ mod tests {
         assert_eq!(save.state.level(Weapon::Missile).get(), 1);
         assert_eq!(save.records.len(), 67);
         assert_eq!(save.cursor, 5);
-        assert_eq!(save.orb_drop_countdown, 3);
+        assert_eq!(save.weapon_upgrade_drop_countdown, 3);
         assert!(!save.level_end);
         assert_eq!((save.ship_x, save.ship_y), (120, 23));
         assert_eq!(save.ship_ramp, 10);
@@ -999,7 +1003,7 @@ mod tests {
         assert_eq!(save.ship_ramp, 10);
         assert_eq!(save.ship_roll, 0);
         assert_eq!(save.speed_level, 22);
-        assert_eq!(save.orb_drop_countdown, 7);
+        assert_eq!(save.weapon_upgrade_drop_countdown, 7);
         assert_eq!(save.scroll_accums.len(), 10);
         assert_eq!(save.entities.len(), 1);
         assert_eq!(save.entities[0].kind, 0x3308);
@@ -1020,7 +1024,7 @@ mod tests {
         // The side-view idle pose: roll frame 21.
         assert_eq!(save.ship_roll, 21);
         assert_eq!(save.speed_level, 32);
-        assert_eq!(save.orb_drop_countdown, 5);
+        assert_eq!(save.weapon_upgrade_drop_countdown, 5);
         assert_eq!(save.scroll_accums.len(), 5);
         assert_eq!(save.entities.len(), 1);
         assert_eq!(save.entities[0].kind, 0x58B0);
@@ -1039,7 +1043,7 @@ mod tests {
         assert_eq!((save.ship_x, save.ship_y), (100, 91));
         assert_eq!(save.ship_roll, 3);
         assert_eq!(save.speed_level, 32);
-        assert_eq!(save.orb_drop_countdown, 6);
+        assert_eq!(save.weapon_upgrade_drop_countdown, 6);
         assert_eq!(save.scroll_accums.len(), 7);
         assert_eq!(save.entities.len(), 4);
         assert_eq!(save.entities[0].kind, 0x3C4E);
@@ -1058,7 +1062,7 @@ mod tests {
         assert_eq!(save.cursor, 16);
         assert_eq!((save.ship_x, save.ship_y), (16, 3));
         assert_eq!(save.speed_level, 0);
-        assert_eq!(save.orb_drop_countdown, 2);
+        assert_eq!(save.weapon_upgrade_drop_countdown, 2);
         assert_eq!(save.scroll_accums.len(), 68);
         assert_eq!(save.entities.len(), 4);
         assert_eq!(save.entities[0].kind, 0x4A2F);
@@ -1075,7 +1079,7 @@ mod tests {
         assert_eq!(save.state.score, 0);
         assert_eq!(save.records.len(), 82);
         assert_eq!(save.cursor, 3);
-        assert_eq!(save.orb_drop_countdown, 3);
+        assert_eq!(save.weapon_upgrade_drop_countdown, 3);
         assert_eq!((save.ship_x, save.ship_y), (0, 19));
         assert_eq!(save.entities.len(), 3);
         assert_eq!(save.entities[0].kind, 0x3D86);

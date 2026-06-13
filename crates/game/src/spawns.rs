@@ -236,10 +236,11 @@ pub struct Spawns {
     ai: Option<SpawnAi>,
     /// The engine PRNG the AI functions draw from (shooter fire chances).
     pub(crate) rng: EngineRng,
-    /// The orb-drop countdown (L1 `cs:0x2666`; relinked per WAD, e.g. L5
-    /// `cs:0x2653`): every Nth killed enemy converts into the weapon-orb
+    /// The weapon-upgrade-drop countdown (L1 `cs:0x2666`; relinked per WAD,
+    /// e.g. L5 `cs:0x2653`): every Nth killed enemy converts into the
+    /// weapon-upgrade
     /// pickup.
-    orb_drop_countdown: i32,
+    weapon_upgrade_drop_countdown: i32,
     /// The boss/orbiter gate (L1 `cs:0x269c`; relinked per WAD, e.g. L5
     /// `cs:0x2689`): while nonzero the parallax scroll and the spawn clock
     /// hold until the gated enemies die.
@@ -287,8 +288,8 @@ impl Spawns {
             ai,
             rng,
             // The WAD's data image initializes the countdown to 3, so the
-            // first orb drops on the third kill; rng(4)+5 reseeds after.
-            orb_drop_countdown: 3,
+            // first weapon-upgrade drops on the third kill; rng(4)+5 reseeds after.
+            weapon_upgrade_drop_countdown: 3,
             gate: 0,
             level_end: false,
             boss: ai_l1::BossState::default(),
@@ -304,7 +305,7 @@ impl Spawns {
     ///
     /// The original decays the head record's delay in the table itself, so
     /// the saved `records[cursor].delay` IS the live countdown; everything
-    /// else restores verbatim. The orb RNG reseeds from the clock (its state
+    /// else restores verbatim. The weapon-upgrade RNG reseeds from the clock (its state
     /// lives outside the original's saved block too), and the entities'
     /// debris pointers re-derive from their type descriptors (the saved
     /// record has no debris field; the death handler reads the descriptor).
@@ -315,7 +316,7 @@ impl Spawns {
         mut entities: Vec<Entity>,
         shots: Vec<Shot>,
         effects: Vec<Effect>,
-        orb_drop_countdown: i32,
+        weapon_upgrade_drop_countdown: i32,
         level_end: bool,
         ai: Option<SpawnAi>,
         combat: CombatData,
@@ -337,7 +338,7 @@ impl Spawns {
         spawns.entities = entities;
         spawns.shots = shots;
         spawns.effects = effects;
-        spawns.orb_drop_countdown = orb_drop_countdown;
+        spawns.weapon_upgrade_drop_countdown = weapon_upgrade_drop_countdown;
         spawns.level_end = level_end;
 
         spawns
@@ -357,15 +358,15 @@ impl Spawns {
         (records, self.cursor)
     }
 
-    /// The orb-drop countdown, for the savegame snapshot.
-    pub fn orb_drop_countdown(&self) -> i32 {
-        self.orb_drop_countdown
+    /// The weapon-upgrade-drop countdown, for the savegame snapshot.
+    pub fn weapon_upgrade_drop_countdown(&self) -> i32 {
+        self.weapon_upgrade_drop_countdown
     }
 
     /// Carry the countdown across a race course restart: the respawn
     /// handler never resets it.
-    pub fn set_orb_drop_countdown(&mut self, countdown: i32) {
-        self.orb_drop_countdown = countdown;
+    pub fn set_weapon_upgrade_drop_countdown(&mut self, countdown: i32) {
+        self.weapon_upgrade_drop_countdown = countdown;
     }
 
     /// One PIT tick of the spawn clock: decrement the head delay and pull
@@ -643,17 +644,18 @@ impl Spawns {
         }
     }
 
-    /// Decrements the orb-drop countdown (`cs:0x2666`); `true` means this
-    /// kill converts into the weapon-orb pickup, and the countdown reseeds as
+    /// Decrements the weapon-upgrade-drop countdown (`cs:0x2666`); `true` means
+    /// this kill converts into the weapon-upgrade pickup, and the countdown
+    /// reseeds as
     /// `rng(4) + 5`.
-    pub fn orb_drop_due(&mut self) -> bool {
-        self.orb_drop_countdown -= 1;
+    pub fn weapon_upgrade_drop_due(&mut self) -> bool {
+        self.weapon_upgrade_drop_countdown -= 1;
 
-        if self.orb_drop_countdown > 0 {
+        if self.weapon_upgrade_drop_countdown > 0 {
             return false;
         }
 
-        self.orb_drop_countdown = i32::from(self.rng.next(4)) + 5;
+        self.weapon_upgrade_drop_countdown = i32::from(self.rng.next(4)) + 5;
         true
     }
 

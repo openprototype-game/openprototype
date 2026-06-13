@@ -136,8 +136,8 @@ impl Sfx {
         play(bank, SLOT_PICKUP, EVENT_CHANNEL, false, audio);
     }
 
-    /// A dying enemy converted into the weapon orb (`0xaca3`).
-    pub fn orb_dropped(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
+    /// A dying enemy converted into the weapon-upgrade pickup (`0xaca3`).
+    pub fn weapon_upgrade_dropped(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, SLOT_PEBBLE, EVENT_CHANNEL, false, audio);
     }
 
