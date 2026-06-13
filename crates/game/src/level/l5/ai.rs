@@ -9,6 +9,10 @@
 //! sub-step, while the fixture (func 40, 0xe3c7) keeps its spawn-time
 //! boxes for life. Everything else uses L1-style 8-byte cycle frames.
 
+use super::{
+    BOSS, DESTROYER, DRONE_L, DRONE_R, EXTRA_LIFE, FIGHTER, GUNSHIP, INVINCIBILITY, RAIDER,
+    SMART_BOMB, TANK, WEAPON_UPGRADE,
+};
 use crate::level::ai_common::{pickup, word};
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
@@ -96,10 +100,10 @@ fn segment_base(segment: usize) -> usize {
 /// Runs AI function `arg` for one sub-step.
 pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
-        0 => pickup(entity, 0x3764, 0x37c2),
-        1 => pickup(entity, 0x3688, 0x36e6),
-        2 => pickup(entity, 0x36ee, 0x375c),
-        3 => pickup(entity, 0x382a, 0x3870),
+        0 => pickup(entity, WEAPON_UPGRADE, 0x37c2),
+        1 => pickup(entity, SMART_BOMB, 0x36e6),
+        2 => pickup(entity, INVINCIBILITY, 0x375c),
+        3 => pickup(entity, EXTRA_LIFE, 0x3870),
         4 => dasher(entity),
         5 => turret(entity, ctx),
         7 => {
@@ -146,8 +150,8 @@ fn dasher(entity: &mut Entity) {
     if entity.anim == 4 {
         entity.anim = 0;
         entity.sprite = match entity.sprite {
-            0x3a2c => 0x3a4a,
-            0x3a72 => 0x3a2c,
+            RAIDER => 0x3a4a,
+            0x3a72 => RAIDER,
             other => other + 8,
         };
     }
@@ -175,8 +179,8 @@ fn turret(entity: &mut Entity, ctx: &mut AiContext) {
         if entity.anim == 4 {
             entity.anim = 0;
             entity.sprite = match entity.sprite {
-                0x3ac2 => 0x3ae0,
-                0x3b10 => 0x3ac2,
+                GUNSHIP => 0x3ae0,
+                0x3b10 => GUNSHIP,
                 other => other + 8,
             };
         }
@@ -230,8 +234,8 @@ fn cycler_a(entity: &mut Entity) {
     if entity.anim == 4 {
         entity.anim = 0;
         entity.sprite = match entity.sprite {
-            0x3c4e => 0x3c6c,
-            0x3c7c => 0x3c4e,
+            DRONE_L => 0x3c6c,
+            0x3c7c => DRONE_L,
             other => other + 8,
         };
     }
@@ -245,8 +249,8 @@ fn cycler_b(entity: &mut Entity) {
     if entity.anim == 4 {
         entity.anim = 0;
         entity.sprite = match entity.sprite {
-            0x3c84 => 0x3ca2,
-            0x3cb2 => 0x3c84,
+            DRONE_R => 0x3ca2,
+            0x3cb2 => DRONE_R,
             other => other + 8,
         };
     }
@@ -265,19 +269,19 @@ fn shooter_anim(entity: &mut Entity, ctx: &mut AiContext) {
 
     if entity.phase_a == 0 {
         entity.sprite = match entity.sprite {
-            0x3a2c => 0x3a4a,
+            RAIDER => 0x3a4a,
             0x3a72 => {
                 entity.phase_a += 1;
-                0x3a2c
+                RAIDER
             }
             other => other + 8,
         };
     } else {
         entity.sprite = match entity.sprite {
-            0x3a2c => 0x3a4a,
+            RAIDER => 0x3a4a,
             0x3aba => {
                 entity.phase_a = 0;
-                0x3a2c
+                RAIDER
             }
             other => {
                 let next = other + 8;
@@ -335,7 +339,7 @@ fn tilt_anim(entity: &mut Entity, dy: i32) {
     entity.anim = 0;
 
     if dy > 0 {
-        if entity.sprite == 0x3cf0 {
+        if entity.sprite == FIGHTER {
             entity.sprite = 0x3d0e;
         } else if entity.sprite >= 0x3d26 {
             neutral(entity);
@@ -343,7 +347,7 @@ fn tilt_anim(entity: &mut Entity, dy: i32) {
             entity.sprite += 8;
         }
     } else if dy < 0 {
-        if entity.sprite <= 0x3cf0 {
+        if entity.sprite <= FIGHTER {
             entity.sprite = 0x3d26;
         } else if entity.sprite < 0x3d3e {
             entity.sprite += 8;
@@ -353,12 +357,12 @@ fn tilt_anim(entity: &mut Entity, dy: i32) {
     }
 
     fn neutral(entity: &mut Entity) {
-        if entity.sprite == 0x3cf0 {
+        if entity.sprite == FIGHTER {
             return;
         }
 
         if entity.sprite == 0x3d26 || entity.sprite == 0x3d0e {
-            entity.sprite = 0x3cf0;
+            entity.sprite = FIGHTER;
         } else {
             entity.sprite -= 8;
         }
@@ -378,7 +382,7 @@ fn fixture(entity: &mut Entity, ctx: &mut AiContext) {
         entity.sprite += 0x1e;
 
         if entity.sprite >= 0x3d82 {
-            entity.sprite = 0x3d46;
+            entity.sprite = DESTROYER;
         }
     }
 
@@ -393,7 +397,7 @@ fn fixture(entity: &mut Entity, ctx: &mut AiContext) {
         });
     }
 
-    // The shared 0x3d46 descriptor's debris slot (cs:0x3d5a): both the
+    // The shared DESTROYER descriptor's debris slot (cs:0x3d5a): both the
     // fixture and the walker patch it every step, last writer wins. The
     // fixture has NO hitbox copy -- its spawn boxes hold for life.
     ctx.debris_overrides.insert(entity.kind, 0x2f83);
@@ -490,7 +494,7 @@ fn walk_cycle(entity: &mut Entity, ctx: &mut AiContext) {
 /// The walker's retreat: morph back down to the fixture frame, then follow
 /// path segment 0x18b off screen (one entry per call).
 fn retreat(entity: &mut Entity, wad: &[u8]) {
-    if entity.sprite != 0x3d46 {
+    if entity.sprite != DESTROYER {
         entity.anim += 1;
 
         if entity.anim >= 4 {
@@ -526,10 +530,10 @@ fn sweeper(entity: &mut Entity, ctx: &mut AiContext) {
         if entity.anim >= 5 {
             entity.anim = 0;
 
-            if entity.sprite == 0x3b70 {
+            if entity.sprite == TANK {
                 entity.sprite = 0x3b8e;
             } else if entity.sprite == 0x3bbe {
-                entity.sprite = 0x3b70;
+                entity.sprite = TANK;
 
                 if entity.x <= 0x780 {
                     entity.phase_a = 1;
@@ -680,7 +684,7 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
         }
         _ => {
             if entity.sprite >= 0x4520 {
-                entity.sprite = 0x426e;
+                entity.sprite = BOSS;
                 ctx.boss.phase = 0;
             } else {
                 entity.sprite += 0x1e;

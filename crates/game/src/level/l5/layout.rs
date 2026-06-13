@@ -4,6 +4,10 @@
 //! running game (seed `0x2d93` reproduces the GET-READY capture). See
 //! `reference/formats/level-layout.md`.
 
+use super::{
+    BOSS, DESTROYER, DRONE_L, DRONE_R, EXTRA_LIFE, FIGHTER, GUNSHIP, INVINCIBILITY, RAIDER,
+    SMART_BOMB, TANK, WEAPON_UPGRADE,
+};
 use crate::level::slot::{Cell, Emitter, Fill, RowStyle, Step, XStart, rand, step};
 
 // Per-sprite-type spawn health, read by the original from runtime slots
@@ -25,7 +29,7 @@ const PICKUP_HEALTH: u16 = 0xfa;
 
 fn once_3688() -> Emitter {
     Emitter::Once {
-        sprite: 0x3688,
+        sprite: SMART_BOMB,
         health: PICKUP_HEALTH,
         spawn_row: rand(3, 0),
     }
@@ -33,7 +37,7 @@ fn once_3688() -> Emitter {
 
 fn once_36ee() -> Emitter {
     Emitter::Once {
-        sprite: 0x36ee,
+        sprite: INVINCIBILITY,
         health: PICKUP_HEALTH,
         spawn_row: rand(3, 3),
     }
@@ -41,7 +45,7 @@ fn once_36ee() -> Emitter {
 
 fn once_382a() -> Emitter {
     Emitter::Once {
-        sprite: 0x382a,
+        sprite: EXTRA_LIFE,
         health: PICKUP_HEALTH,
         spawn_row: rand(3, 6),
     }
@@ -56,7 +60,7 @@ fn single_3a2c_a(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(9, 0xc),
         fill: Fill::Baked {
-            sprite: 0x3a2c,
+            sprite: RAIDER,
             health: D_3A2C_A,
         },
     }
@@ -67,7 +71,7 @@ fn single_3a2c_b(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(6, 0x54),
         fill: Fill::Baked {
-            sprite: 0x3a2c,
+            sprite: RAIDER,
             health: D_3A2C_B,
         },
     }
@@ -78,7 +82,7 @@ fn single_3ac2(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(3, 0x5a),
         fill: Fill::Baked {
-            sprite: 0x3ac2,
+            sprite: GUNSHIP,
             health: D_3AC2,
         },
     }
@@ -89,7 +93,7 @@ fn single_3c84(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(0xb, 0x1e),
         fill: Fill::Baked {
-            sprite: 0x3c84,
+            sprite: DRONE_R,
             health: D_3C4E,
         },
     }
@@ -100,7 +104,7 @@ fn single_3c4e_2(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(0xe, 0x29),
         fill: Fill::Baked {
-            sprite: 0x3c4e,
+            sprite: DRONE_L,
             health: D_3C4E,
         },
     }
@@ -111,7 +115,7 @@ fn single_3c84_2(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(0xe, 0x37),
         fill: Fill::Baked {
-            sprite: 0x3c84,
+            sprite: DRONE_R,
             health: D_3C4E,
         },
     }
@@ -122,7 +126,7 @@ fn single_3d46_a(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(7, 0x49),
         fill: Fill::Baked {
-            sprite: 0x3d46,
+            sprite: DESTROYER,
             health: D_3D46_A,
         },
     }
@@ -133,7 +137,7 @@ fn single_3d46_b(ax: u16, bx: u16) -> Emitter {
         count: rand(ax, bx),
         spawn_row: rand(3, 0x50),
         fill: Fill::Baked {
-            sprite: 0x3d46,
+            sprite: DESTROYER,
             health: D_3D46_B,
         },
     }
@@ -145,7 +149,7 @@ fn single_3d46_b(ax: u16, bx: u16) -> Emitter {
 fn row_3a2c(ax: u16, bx: u16) -> Emitter {
     Emitter::Row {
         count: rand(ax, bx),
-        sprite: 0x3a2c,
+        sprite: RAIDER,
         health: D_3A2C_A,
         spawn_row: rand(9, 0xc),
         style: RowStyle::Stepped,
@@ -155,7 +159,7 @@ fn row_3a2c(ax: u16, bx: u16) -> Emitter {
 fn row_3c84(ax: u16, bx: u16) -> Emitter {
     Emitter::Row {
         count: rand(ax, bx),
-        sprite: 0x3c84,
+        sprite: DRONE_R,
         health: D_3C4E,
         spawn_row: rand(0xb, 0x1e),
         style: RowStyle::Stepped,
@@ -169,7 +173,7 @@ fn row_3c84(ax: u16, bx: u16) -> Emitter {
 fn grid_3cf0(ax: u16, bx: u16) -> Emitter {
     Emitter::PairedRows {
         rows: rand(ax, bx),
-        sprite: 0x3cf0,
+        sprite: FIGHTER,
         health: D_3CF0,
         pair_when_one: (0x47, 0x48),
         pair_otherwise: (0x45, 0x46),
@@ -185,7 +189,7 @@ fn fixed_3b70() -> Emitter {
         cells: vec![Cell {
             x_base: 0,
             x_start: XStart::Step,
-            sprite: 0x3b70,
+            sprite: TANK,
             health: D_3B70,
             spawn_row: 0x53,
         }],
@@ -200,7 +204,7 @@ fn tail_426e() -> Emitter {
     let bg = |x_base: u16, spawn_row: u16| Cell {
         x_base,
         x_start: XStart::None,
-        sprite: 0x3764,
+        sprite: WEAPON_UPGRADE,
         health: PICKUP_HEALTH,
         spawn_row,
     };
@@ -211,7 +215,7 @@ fn tail_426e() -> Emitter {
             Cell {
                 x_base: 0,
                 x_start: XStart::Step,
-                sprite: 0x426e,
+                sprite: BOSS,
                 health: D_426E,
                 spawn_row: 0x5d,
             },
