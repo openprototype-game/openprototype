@@ -9,6 +9,7 @@
 //! Most frames are full 0x1e-byte descriptors with per-frame hitboxes,
 //! refreshed every sub-step.
 
+use crate::level::ai_common::{pickup, word};
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
@@ -86,15 +87,6 @@ impl Default for BossState {
             wobble_phase_y: 0,
         }
     }
-}
-
-/// Reads an i16 word from the WAD image.
-fn word(wad: &[u8], at: usize) -> i32 {
-    if wad.len() < at + 2 {
-        return 0;
-    }
-
-    i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
 }
 
 /// Re-copies the current frame's hitboxes (file `0x1020c`).
@@ -185,25 +177,6 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
         48 => dragonfly(entity, ctx.wad, Facing::Rightward, true),
         49 => snake(entity, ctx),
         _ => {}
-    }
-}
-
-/// Pickups and the pebble (funcs 0..3): drift left, 8-byte cycle frames
-/// after a 0x1e-byte rest descriptor; the hitboxes stay from spawn.
-fn pickup(entity: &mut Entity, rest: u16, last: u16) {
-    entity.x -= 0x14;
-    entity.tick += 1;
-    entity.anim += 1;
-
-    if entity.anim == 4 {
-        entity.anim = 0;
-        entity.sprite = if entity.sprite == rest {
-            rest + 0x1e
-        } else if entity.sprite == last {
-            rest
-        } else {
-            entity.sprite + 8
-        };
     }
 }
 

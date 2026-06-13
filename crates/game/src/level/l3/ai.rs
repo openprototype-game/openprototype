@@ -10,6 +10,7 @@
 //! Positions are 12.4 fixed point; data tables are read from the WAD image
 //! at their file offsets.
 
+use crate::level::ai_common::{pickup, word};
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
@@ -89,15 +90,6 @@ impl Default for BossState {
             explosion_dy: 0,
         }
     }
-}
-
-/// Reads an i16 word from the WAD image.
-fn word(wad: &[u8], at: usize) -> i32 {
-    if wad.len() < at + 2 {
-        return 0;
-    }
-
-    i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
 }
 
 /// Re-copies the current frame's hitboxes (file `0x100c3`); the 0x1e-byte
@@ -194,25 +186,6 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
             copy_hitbox(entity, ctx.wad);
         }
         _ => {}
-    }
-}
-
-/// Pickup drifters (funcs 0-3): drift left, 8-byte cycle frames after a
-/// 0x1e-byte rest descriptor.
-fn pickup(entity: &mut Entity, rest: u16, last: u16) {
-    entity.x -= 0x14;
-    entity.tick += 1;
-    entity.anim += 1;
-
-    if entity.anim == 4 {
-        entity.anim = 0;
-        entity.sprite = if entity.sprite == rest {
-            rest + 0x1e
-        } else if entity.sprite == last {
-            rest
-        } else {
-            entity.sprite + 8
-        };
     }
 }
 

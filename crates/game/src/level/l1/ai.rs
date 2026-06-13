@@ -12,6 +12,7 @@
 //! (savegame-visible state only). The effects queue, the SFX triggers and
 //! the boss/orbiter scroll gate are implemented.
 
+use crate::level::ai_common::word;
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
@@ -68,11 +69,6 @@ impl Default for BossState {
 
 /// The carrier pod's deploy sample (gegrocke, the per-level slot 8).
 const SLOT_ENEMY_VOICE: usize = 8;
-
-/// Reads an i16 word from the WAD image.
-fn word(wad: &[u8], at: usize) -> i32 {
-    i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
-}
 
 /// Runs AI function `arg` for one sub-step.
 pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {

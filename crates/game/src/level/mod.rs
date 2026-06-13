@@ -6,6 +6,7 @@
 //! dispatcher script, and the emitter library that writes the spawn records.
 //! See `reference/formats/level-layout.md` for the disassembly it mirrors.
 
+pub mod ai_common;
 pub mod l1;
 pub mod l3;
 pub mod l5;

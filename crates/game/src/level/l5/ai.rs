@@ -9,6 +9,7 @@
 //! sub-step, while the fixture (func 40, 0xe3c7) keeps its spawn-time
 //! boxes for life. Everything else uses L1-style 8-byte cycle frames.
 
+use crate::level::ai_common::{pickup, word};
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
 
@@ -65,15 +66,6 @@ pub(crate) struct BossState {
     explosion_timer: i32,
     explosion_dx: i32,
     explosion_dy: i32,
-}
-
-/// Reads an i16 word from the WAD image.
-fn word(wad: &[u8], at: usize) -> i32 {
-    if wad.len() < at + 2 {
-        return 0;
-    }
-
-    i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
 }
 
 /// Re-copies the current frame's hitboxes (the 0x1e-stride families).
@@ -141,25 +133,6 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
         42 => sweeper(entity, ctx),
         43 => boss(entity, ctx),
         _ => {}
-    }
-}
-
-/// Pickup drifters (funcs 0-3): drift left at 1.25 px, period-4 cycle
-/// `rest -> rest+0x1e -> +8 steps -> last -> rest`.
-fn pickup(entity: &mut Entity, rest: u16, last: u16) {
-    entity.x -= 0x14;
-    entity.tick += 1;
-    entity.anim += 1;
-
-    if entity.anim == 4 {
-        entity.anim = 0;
-        entity.sprite = if entity.sprite == rest {
-            rest + 0x1e
-        } else if entity.sprite == last {
-            rest
-        } else {
-            entity.sprite + 8
-        };
     }
 }
 
