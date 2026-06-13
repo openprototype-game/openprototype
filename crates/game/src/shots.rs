@@ -2,11 +2,13 @@
 //! shot pool, and the chaingun muzzle flash.
 //!
 //! Reverse-engineered from `LEVEL_1.WAD` (state machine file `0xb68a`,
-//! dispatch `0x9a1d`, spawners `0x96f2..`, update loop `0xc35e`); the spawn
-//! offsets, velocities, damages and fire rates are identical in all seven
-//! WADs. Shots live in window/buffer coordinates like the ship, in 1/16-pixel
-//! fixed point, and move by their velocity each tick. They despawn outside
-//! x in (-32, 288) and y in (-10, 160), and the pool caps at 95 records (the
+//! dispatch `0x9a1d`, spawners `0x96f2..`, update loop `0xc35e`); the spawner
+//! constants are identical in all seven WADs, with three exceptions carried
+//! per level: the despawn x bound ([`crate::levels::CombatData::shot_x_max`]),
+//! L5's missile spawn rows, and the L3/L7 fire var-block shift. Shots live in
+//! window/buffer coordinates like the ship, in 1/16-pixel fixed point, and
+//! move by their velocity each tick. They despawn outside x in (-32,
+//! shot_x_max) and y in (-10, 160), and the pool caps at 95 records (the
 //! original's "Too-many-Shots" bound).
 //!
 //! One fire button, held with auto-repeat: a cooldown counter runs up to the
