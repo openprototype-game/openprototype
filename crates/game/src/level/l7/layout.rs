@@ -29,7 +29,7 @@ fn grid(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
 
 // Landmark `Once` emitters: one record, delay = x_start, pickup health.
 
-fn once_41b5() -> Emitter {
+fn smart_bomb_once() -> Emitter {
     Emitter::Once {
         sprite: SMART_BOMB,
         health: PICKUP_HEALTH,
@@ -37,7 +37,7 @@ fn once_41b5() -> Emitter {
     }
 }
 
-fn once_421b() -> Emitter {
+fn invincibility_once() -> Emitter {
     Emitter::Once {
         sprite: INVINCIBILITY,
         health: PICKUP_HEALTH,
@@ -45,7 +45,7 @@ fn once_421b() -> Emitter {
     }
 }
 
-fn once_4357() -> Emitter {
+fn extra_life_once() -> Emitter {
     Emitter::Once {
         sprite: EXTRA_LIFE,
         health: PICKUP_HEALTH,
@@ -53,10 +53,10 @@ fn once_4357() -> Emitter {
     }
 }
 
-// Fixed `0x4959` landmark blocks (no PRNG). The lead delay is x_start alone
+// Fixed TWIN_GUN landmark blocks (no PRNG). The lead delay is x_start alone
 // (no step).
 
-fn lead_4959(spawn_row: u16) -> Cell {
+fn twin_gun_lead(spawn_row: u16) -> Cell {
     Cell {
         x_base: 0,
         x_start: XStart::Consume,
@@ -66,7 +66,7 @@ fn lead_4959(spawn_row: u16) -> Cell {
     }
 }
 
-fn tail_4959(x_base: u16, spawn_row: u16) -> Cell {
+fn twin_gun_tail(x_base: u16, spawn_row: u16) -> Cell {
     Cell {
         x_base,
         x_start: XStart::None,
@@ -76,24 +76,28 @@ fn tail_4959(x_base: u16, spawn_row: u16) -> Cell {
     }
 }
 
-fn fixed_4959_1() -> Emitter {
+fn twin_gun_block_1() -> Emitter {
     Emitter::Fixed {
         repeat: None,
-        cells: vec![lead_4959(0x7d)],
+        cells: vec![twin_gun_lead(0x7d)],
     }
 }
 
-fn fixed_4959_2() -> Emitter {
+fn twin_gun_block_2() -> Emitter {
     Emitter::Fixed {
         repeat: None,
-        cells: vec![lead_4959(0x7b), tail_4959(0x28, 0x7e)],
+        cells: vec![twin_gun_lead(0x7b), twin_gun_tail(0x28, 0x7e)],
     }
 }
 
-fn fixed_4959_3() -> Emitter {
+fn twin_gun_block_3() -> Emitter {
     Emitter::Fixed {
         repeat: None,
-        cells: vec![lead_4959(0x7d), tail_4959(0, 0x81), tail_4959(0, 0x83)],
+        cells: vec![
+            twin_gun_lead(0x7d),
+            twin_gun_tail(0, 0x81),
+            twin_gun_tail(0, 0x83),
+        ],
     }
 }
 
@@ -143,7 +147,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x96)
             .spawn_row_offset(0x3f)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
-        step().emit(once_4357()),
+        step().emit(extra_life_once()),
         step()
             .x_start(0x64)
             .x_step(0x0)
@@ -152,7 +156,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x32)
             .spawn_row_offset(0x67)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
-        step().x_start(0x64).emit(fixed_4959_1()),
+        step().x_start(0x64).emit(twin_gun_block_1()),
         step()
             .x_start(0x64)
             .x_step(0x14)
@@ -161,7 +165,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x96)
             .spawn_row_offset(0x3f)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
-        step().x_start(0x2).emit(once_421b()),
+        step().x_start(0x2).emit(invincibility_once()),
         step()
             .x_start(0x64)
             .x_step(0x0)
@@ -178,7 +182,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x96)
             .spawn_row_offset(0x35)
             .emit(grid(0x5, 0x6, 0x5, 0x5)),
-        step().x_start(0xc8).emit(fixed_4959_2()),
+        step().x_start(0xc8).emit(twin_gun_block_2()),
         step()
             .x_start(0x64)
             .x_step(0x0)
@@ -187,7 +191,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x32)
             .spawn_row_offset(0x17)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
-        step().x_start(0x2).emit(once_41b5()),
+        step().x_start(0x2).emit(smart_bomb_once()),
         step()
             .x_start(0x64)
             .x_step(0x0)
@@ -196,7 +200,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x32)
             .spawn_row_offset(0x67)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
-        step().x_start(0xc8).emit(fixed_4959_3()),
+        step().x_start(0xc8).emit(twin_gun_block_3()),
         step()
             .x_start(0x64)
             .x_step(0x0)
@@ -221,7 +225,7 @@ pub fn script() -> Vec<Step> {
             .row_reset(0x32)
             .spawn_row_offset(0x49)
             .emit(grid(0x0, 0x1, 0xa, 0x5)),
-        step().x_start(0x2).emit(once_41b5()),
+        step().x_start(0x2).emit(smart_bomb_once()),
         step()
             .x_start(0x64)
             .x_step(0x14)

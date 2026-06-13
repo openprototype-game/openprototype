@@ -17,8 +17,9 @@ const HEALTHS: [u16; 9] = [0x82, 0x47e, 0x15e, 0x64, 0x8c, 0x50, 0xbe, 0xc8, 0x3
 /// The health the landmark pickup `Once` emitters hardcode (`0xfa` = 250).
 const PICKUP_HEALTH: u16 = 0xfa;
 
-// Emitter builders, named for the original routine each transcribes. The
-// dispatcher supplies the per-step counts (and grid row/column spreads).
+// Emitter builders: enemy-specific ones bake their sprite/health; the generic
+// slot/grid builders take the sprite from the step. The dispatcher supplies
+// the per-step counts (and grid row/column spreads).
 
 fn once(sprite: u16, row_base: u16) -> Emitter {
     Emitter::Once {
@@ -28,7 +29,7 @@ fn once(sprite: u16, row_base: u16) -> Emitter {
     }
 }
 
-fn single_56b6(count_mod: u16, count_base: u16) -> Emitter {
+fn pterodactyl_steps(count_mod: u16, count_base: u16) -> Emitter {
     Emitter::Steps {
         count: rand(count_mod, count_base),
         spawn_row: rand(7, 0x57),
@@ -39,7 +40,7 @@ fn single_56b6(count_mod: u16, count_base: u16) -> Emitter {
     }
 }
 
-fn single_5928(count_mod: u16, count_base: u16) -> Emitter {
+fn bat_steps(count_mod: u16, count_base: u16) -> Emitter {
     Emitter::Steps {
         count: rand(count_mod, count_base),
         spawn_row: rand(7, 0x6a),
@@ -50,7 +51,7 @@ fn single_5928(count_mod: u16, count_base: u16) -> Emitter {
     }
 }
 
-fn s123de(count_mod: u16, count_base: u16) -> Emitter {
+fn slot_steps(count_mod: u16, count_base: u16) -> Emitter {
     Emitter::Steps {
         count: rand(count_mod, count_base),
         spawn_row: rand(0xe, 9),
@@ -58,7 +59,7 @@ fn s123de(count_mod: u16, count_base: u16) -> Emitter {
     }
 }
 
-fn s12434(count_mod: u16, count_base: u16) -> Emitter {
+fn slot_steps_2(count_mod: u16, count_base: u16) -> Emitter {
     Emitter::Steps {
         count: rand(count_mod, count_base),
         spawn_row: rand(0xe, 0x17),
@@ -69,7 +70,7 @@ fn s12434(count_mod: u16, count_base: u16) -> Emitter {
 // Grid args mirror the dispatcher registers: inner count = `rng(ax) + bx`, outer
 // row count = `rng(dx) + cx`.
 
-fn grid122eb(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
+fn grid_offset(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
     Emitter::Grid {
         outer: rand(dx, cx),
         inner: rand(ax, bx),
@@ -78,7 +79,7 @@ fn grid122eb(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
     }
 }
 
-fn grid12367(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
+fn grid_plain(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
     Emitter::Grid {
         outer: rand(dx, cx),
         inner: rand(ax, bx),
@@ -87,7 +88,7 @@ fn grid12367(ax: u16, bx: u16, cx: u16, dx: u16) -> Emitter {
     }
 }
 
-fn fixed1248a(count: u16) -> Emitter {
+fn red_beetle_block(count: u16) -> Emitter {
     let sprite = RED_BEETLE;
     let health = HEALTHS[1];
 
@@ -136,7 +137,7 @@ pub fn script() -> Vec<Step> {
             .x_step(0x28)
             .sprite(WASP_L)
             .health(HEALTHS[4])
-            .emit(s123de(0xb, 0xf)),
+            .emit(slot_steps(0xb, 0xf)),
         step()
             .x_start(0x96)
             .x_step(0xf)
@@ -144,12 +145,12 @@ pub fn script() -> Vec<Step> {
             .sprite(BLUE_BEETLE)
             .health(HEALTHS[3])
             .spawn_row_offset(0x28)
-            .emit(grid122eb(6, 0xa, 2, 3)),
+            .emit(grid_offset(6, 0xa, 2, 3)),
         step().x_start(5).emit(once(SMART_BOMB, 0)),
         step()
             .x_start(0xc8)
             .x_step(0x46)
-            .emit(single_56b6(0xb, 0xa)),
+            .emit(pterodactyl_steps(0xb, 0xa)),
         step()
             .x_start(0x64)
             .x_step(0xf)
@@ -157,7 +158,7 @@ pub fn script() -> Vec<Step> {
             .sprite(BLUE_BEETLE)
             .health(HEALTHS[3])
             .spawn_row_offset(0x28)
-            .emit(grid122eb(6, 0xa, 1, 2)),
+            .emit(grid_offset(6, 0xa, 1, 2)),
         step()
             .x_start(0x96)
             .x_step(0xf)
@@ -165,14 +166,14 @@ pub fn script() -> Vec<Step> {
             .sprite(WASP_R)
             .health(HEALTHS[4])
             .spawn_row_offset(0)
-            .emit(grid12367(8, 7, 3, 2)),
+            .emit(grid_plain(8, 7, 3, 2)),
         step().x_start(5).emit(once(INVINCIBILITY, 3)),
         step()
             .x_start(0x64)
             .x_step(0xa)
             .sprite(WASPLING_L)
             .health(HEALTHS[4])
-            .emit(s123de(0xb, 0xf)),
+            .emit(slot_steps(0xb, 0xf)),
         step()
             .x_start(0x64)
             .x_step(0xf)
@@ -180,42 +181,51 @@ pub fn script() -> Vec<Step> {
             .sprite(BLUE_BEETLE)
             .health(HEALTHS[3])
             .spawn_row_offset(0x28)
-            .emit(grid122eb(6, 5, 2, 2)),
-        step().x_start(0xbe).x_step(0x46).emit(single_56b6(6, 0xa)),
+            .emit(grid_offset(6, 5, 2, 2)),
+        step()
+            .x_start(0xbe)
+            .x_step(0x46)
+            .emit(pterodactyl_steps(6, 0xa)),
         step()
             .x_start(0xaa)
             .x_step(0x14)
             .sprite(WASPLING_R)
             .health(HEALTHS[5])
-            .emit(s12434(6, 0xa)),
-        step().x_start(0x64).emit(fixed1248a(2)),
+            .emit(slot_steps_2(6, 0xa)),
+        step().x_start(0x64).emit(red_beetle_block(2)),
         step()
             .x_start(0xaa)
             .x_step(0xf)
             .sprite(MOSQUITO)
             .health(HEALTHS[0])
-            .emit(s123de(6, 0xa)),
+            .emit(slot_steps(6, 0xa)),
         step()
             .x_start(0x96)
             .x_step(0x14)
             .sprite(WASP_R)
             .health(HEALTHS[4])
-            .emit(s12434(6, 0xa)),
-        step().x_start(0x8c).x_step(0x46).emit(single_56b6(6, 5)),
-        step().x_start(0xbe).x_step(0x32).emit(single_5928(6, 0xa)),
+            .emit(slot_steps_2(6, 0xa)),
+        step()
+            .x_start(0x8c)
+            .x_step(0x46)
+            .emit(pterodactyl_steps(6, 5)),
+        step().x_start(0xbe).x_step(0x32).emit(bat_steps(6, 0xa)),
         step()
             .x_start(0xc8)
             .x_step(0x14)
             .sprite(WASP_R)
             .health(HEALTHS[4])
-            .emit(s12434(6, 0xf)),
+            .emit(slot_steps_2(6, 0xf)),
         step()
             .x_start(0xaa)
             .x_step(0xf)
             .sprite(WASPLING_L)
             .health(HEALTHS[5])
-            .emit(s123de(6, 0xf)),
-        step().x_start(0x8c).x_step(0x46).emit(single_56b6(6, 5)),
+            .emit(slot_steps(6, 0xf)),
+        step()
+            .x_start(0x8c)
+            .x_step(0x46)
+            .emit(pterodactyl_steps(6, 5)),
         step()
             .x_start(0x64)
             .x_step(0x19)
@@ -223,7 +233,7 @@ pub fn script() -> Vec<Step> {
             .sprite(WASPLING_L)
             .health(HEALTHS[5])
             .spawn_row_offset(0)
-            .emit(grid122eb(0, 1, 5, 4)),
+            .emit(grid_offset(0, 1, 5, 4)),
         step()
             .x_start(0x64)
             .x_step(0x1e)
@@ -231,23 +241,26 @@ pub fn script() -> Vec<Step> {
             .sprite(WASPLING_R)
             .health(HEALTHS[5])
             .spawn_row_offset(0)
-            .emit(grid12367(0, 1, 5, 4)),
-        step().x_start(0x64).emit(fixed1248a(5)),
-        step().x_start(0x5a).x_step(0x46).emit(single_56b6(6, 0xa)),
+            .emit(grid_plain(0, 1, 5, 4)),
+        step().x_start(0x64).emit(red_beetle_block(5)),
+        step()
+            .x_start(0x5a)
+            .x_step(0x46)
+            .emit(pterodactyl_steps(6, 0xa)),
         step()
             .x_start(0xaa)
             .x_step(0x14)
             .sprite(MOSQUITO)
             .health(HEALTHS[0])
             .spawn_row_offset(0)
-            .emit(s123de(6, 0xf)),
+            .emit(slot_steps(6, 0xf)),
         step()
             .x_start(0xaa)
             .x_step(0xf)
             .sprite(WASP_R)
             .health(HEALTHS[4])
-            .emit(s12434(6, 0xf)),
-        step().x_start(0xbe).x_step(0x32).emit(single_5928(6, 0xa)),
+            .emit(slot_steps_2(6, 0xf)),
+        step().x_start(0xbe).x_step(0x32).emit(bat_steps(6, 0xa)),
         step()
             .x_start(0x64)
             .x_step(0x19)
@@ -255,7 +268,7 @@ pub fn script() -> Vec<Step> {
             .sprite(PTERODACTYL)
             .health(HEALTHS[2])
             .spawn_row_offset(0xa)
-            .emit(grid122eb(0, 1, 5, 4)),
+            .emit(grid_offset(0, 1, 5, 4)),
         step()
             .spawn_row_offset(0)
             .x_start(5)
@@ -266,7 +279,7 @@ pub fn script() -> Vec<Step> {
             .sprite(MOSQUITO)
             .health(HEALTHS[0])
             .spawn_row_offset(0)
-            .emit(s123de(6, 0xf)),
+            .emit(slot_steps(6, 0xf)),
         step()
             .x_start(0x64)
             .x_step(0x1e)
@@ -274,7 +287,7 @@ pub fn script() -> Vec<Step> {
             .sprite(WASPLING_R)
             .health(HEALTHS[5])
             .spawn_row_offset(0)
-            .emit(grid12367(0, 1, 5, 4)),
+            .emit(grid_plain(0, 1, 5, 4)),
         step()
             .x_start(0x96)
             .x_step(0xf)
@@ -282,7 +295,7 @@ pub fn script() -> Vec<Step> {
             .sprite(BLUE_BEETLE)
             .health(HEALTHS[3])
             .spawn_row_offset(0x28)
-            .emit(grid122eb(6, 0xa, 2, 3)),
+            .emit(grid_offset(6, 0xa, 2, 3)),
         step()
             .x_start(0x64)
             .x_step(0x19)
@@ -290,7 +303,7 @@ pub fn script() -> Vec<Step> {
             .sprite(PTERODACTYL)
             .health(HEALTHS[2])
             .spawn_row_offset(0xa)
-            .emit(grid122eb(0, 1, 5, 4)),
+            .emit(grid_offset(0, 1, 5, 4)),
         step()
             .spawn_row_offset(0)
             .x_start(5)
@@ -300,26 +313,26 @@ pub fn script() -> Vec<Step> {
             .x_step(0xf)
             .sprite(MOSQUITO)
             .health(HEALTHS[0])
-            .emit(s123de(6, 0xa)),
-        step().x_start(0xbe).x_step(0x32).emit(single_5928(6, 0xa)),
+            .emit(slot_steps(6, 0xa)),
+        step().x_start(0xbe).x_step(0x32).emit(bat_steps(6, 0xa)),
         step()
             .x_start(0x64)
             .x_step(0xa)
             .sprite(WASPLING_L)
             .health(HEALTHS[4])
-            .emit(s123de(0xb, 0xf)),
+            .emit(slot_steps(0xb, 0xf)),
         step()
             .row_reset(0x96)
             .x_step(0x28)
             .sprite(WASP_L)
             .health(HEALTHS[4])
-            .emit(s123de(0xb, 0xf)),
+            .emit(slot_steps(0xb, 0xf)),
         step()
             .x_start(0xaa)
             .x_step(0x14)
             .sprite(WASPLING_R)
             .health(HEALTHS[5])
-            .emit(s12434(6, 0xa)),
+            .emit(slot_steps_2(6, 0xa)),
     ]
 }
 
