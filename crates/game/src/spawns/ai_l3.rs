@@ -717,15 +717,16 @@ fn fire_volley(entity: &mut Entity, ctx: &mut AiContext, facing: VolleyFacing) {
 
     let muzzle_x = (entity.x + aim_dx) >> 4;
     let muzzle_y = (entity.y + aim_dy) >> 4;
-    let (vx, vy) = aim_at_player(ctx, muzzle_x, muzzle_y);
 
-    ctx.shots.push(Shot {
-        sprite: 0x4e8e,
-        x: entity.x + aim_dx,
-        y: entity.y + aim_dy,
-        vx,
-        vy,
-    });
+    if let Some((vx, vy)) = aim_at_player(ctx, muzzle_x, muzzle_y) {
+        ctx.shots.push(Shot {
+            sprite: 0x4e8e,
+            x: entity.x + aim_dx,
+            y: entity.y + aim_dy,
+            vx,
+            vy,
+        });
+    }
 
     match facing {
         VolleyFacing::Left => {
@@ -767,14 +768,23 @@ fn fire_volley(entity: &mut Entity, ctx: &mut AiContext, facing: VolleyFacing) {
 
 /// The aimed-shot helper (file `0x117a7`): a velocity toward the player's
 /// center at 4 px per step (12.4 per sub-step).
-fn aim_at_player(ctx: &mut AiContext, shooter_x: i32, shooter_y: i32) -> (i32, i32) {
+///
+/// `None` at point-blank range: the original's idiv is unguarded and a
+/// zero scale crashes it with a divide fault (reachable while shielded
+/// inside the boss); the port's deviation is to skip the shot, the same
+/// shape on every level.
+fn aim_at_player(ctx: &mut AiContext, shooter_x: i32, shooter_y: i32) -> Option<(i32, i32)> {
     let diff_x = ctx.player_x + 0x1e + 0xa - shooter_x;
     let diff_y = ctx.player_y + 0xa + 0xa - shooter_y;
     let dist =
         (i64::from(diff_x) * i64::from(diff_x) + i64::from(diff_y) * i64::from(diff_y)).isqrt();
-    let scale = ((dist as i32) / 4).max(1);
+    let scale = (dist as i32) / 4;
 
-    ((diff_x << 4) / scale, (diff_y << 4) / scale)
+    if scale == 0 {
+        return None;
+    }
+
+    Some(((diff_x << 4) / scale, (diff_y << 4) / scale))
 }
 
 /// The boss's continuous explosion bursts below 2000 health (file `0x10bc1`).

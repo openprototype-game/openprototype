@@ -737,27 +737,37 @@ fn fire_due(ctx: &mut AiContext) -> bool {
 
 /// The aimed-shot helper (file `0xf286`): velocity toward the player's
 /// center at 3 px per step.
-fn aim_at_player(ctx: &AiContext, shooter_x: i32, shooter_y: i32) -> (i32, i32) {
+///
+/// `None` at point-blank range: the original's idiv is unguarded and a
+/// zero scale crashes it with a divide fault (reachable while shielded
+/// inside the boss); the port's deviation is to skip the shot, the same
+/// shape on every level.
+fn aim_at_player(ctx: &AiContext, shooter_x: i32, shooter_y: i32) -> Option<(i32, i32)> {
     let diff_x = ctx.player_x + 0x1e + 0xa - shooter_x;
     let diff_y = ctx.player_y + 0xa + 0xa - shooter_y;
     let dist =
         (i64::from(diff_x) * i64::from(diff_x) + i64::from(diff_y) * i64::from(diff_y)).isqrt();
-    let scale = ((dist as i32) / 3).max(1);
+    let scale = (dist as i32) / 3;
 
-    ((diff_x << 4) / scale, (diff_y << 4) / scale)
+    if scale == 0 {
+        return None;
+    }
+
+    Some(((diff_x << 4) / scale, (diff_y << 4) / scale))
 }
 
 /// Volley A (file `0xe806`, facing left): one aimed shot, an up-left fan,
 /// and a rear up-right shot.
 fn volley_a(entity: &mut Entity, ctx: &mut AiContext) {
-    let (vx, vy) = aim_at_player(ctx, (entity.x + 0x2b0) >> 4, (entity.y + 0x420) >> 4);
-    ctx.shots.push(Shot {
-        sprite: 0x340a,
-        x: entity.x + 0x2b0,
-        y: entity.y + 0x420,
-        vx,
-        vy,
-    });
+    if let Some((vx, vy)) = aim_at_player(ctx, (entity.x + 0x2b0) >> 4, (entity.y + 0x420) >> 4) {
+        ctx.shots.push(Shot {
+            sprite: 0x340a,
+            x: entity.x + 0x2b0,
+            y: entity.y + 0x420,
+            vx,
+            vy,
+        });
+    }
 
     for (vx, vy) in [
         (-0x48, -0x20),
@@ -789,14 +799,15 @@ fn volley_a(entity: &mut Entity, ctx: &mut AiContext) {
 /// even shots fire from 167 px left of the boss — verbatim from the
 /// original (a likely sign slip, kept faithful).
 fn volley_b(entity: &mut Entity, ctx: &mut AiContext) {
-    let (vx, vy) = aim_at_player(ctx, (entity.x + 0x7c0) >> 4, (entity.y + 0x430) >> 4);
-    ctx.shots.push(Shot {
-        sprite: 0x340a,
-        x: entity.x + 0x7c0,
-        y: entity.y + 0x430,
-        vx,
-        vy,
-    });
+    if let Some((vx, vy)) = aim_at_player(ctx, (entity.x + 0x7c0) >> 4, (entity.y + 0x430) >> 4) {
+        ctx.shots.push(Shot {
+            sprite: 0x340a,
+            x: entity.x + 0x7c0,
+            y: entity.y + 0x430,
+            vx,
+            vy,
+        });
+    }
 
     for (index, (vx, vy)) in [
         (0x48, -0x20),
