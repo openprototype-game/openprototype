@@ -19,7 +19,9 @@ const PICKUP_HEALTH: u16 = 0xfa;
 
 // Emitter builders: enemy-specific ones bake their sprite/health; the generic
 // slot/grid builders take the sprite from the step. The dispatcher supplies
-// the per-step counts (and grid row/column spreads).
+// the per-step counts (and grid row/column spreads). Original code addresses:
+// slot_steps 123de, slot_steps_2 12434, grid_offset 122eb, grid_plain 12367,
+// red_beetle_block 1248a.
 
 fn once(sprite: u16, row_base: u16) -> Emitter {
     Emitter::Once {

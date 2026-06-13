@@ -27,6 +27,8 @@ const BOSS_HEALTH_2: u16 = 10000;
 const PICKUP_HEALTH: u16 = 250;
 
 // Fixed/repeat record blocks (the emitters with no count loop or a constant body).
+// Original code addresses: ORBITER_PAIR eb35, BOSS_CELL eb72,
+// BOSS_AND_UPGRADES eb92, SNIPER_CELLS ecbd.
 
 const ORBITER_PAIR: [Cell; 2] = [
     Cell {
@@ -145,7 +147,11 @@ const SNIPER_CELLS: [Cell; 6] = [
 
 // Emitter builders: each bakes one emitter's spawn constants; the dispatcher
 // supplies the count (and, for asteroid_scatter, the x spread). Named for the
-// enemy they emit and the emitter shape.
+// enemy they emit and the emitter shape; original code addresses:
+// asteroid_scatter e776, kamikaze_scatter e7bb, cannon_scatter e800,
+// strafer_scatter e845, interceptor_scatter e920, sniper_scatter e965,
+// interceptor_row e88a, sniper_row e8d5, cannon_or_asteroid e9aa,
+// kamikaze_or_asteroid ea2d, interceptor_asteroid_row eab0, sniper_block ecbd.
 
 fn asteroid_scatter(count: Rand, x: Rand) -> Emitter {
     Emitter::Scatter {
