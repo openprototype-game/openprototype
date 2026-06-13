@@ -696,7 +696,12 @@ impl Level {
                 wad: "LEVEL_3.WAD",
                 combat: CombatData {
                     ship_rect_table: 0x63ef,
-                    pickups: [0x51e8, 0x510c, 0x5172, 0x52ae],
+                    pickups: [
+                        l3::WEAPON_UPGRADE,
+                        l3::SMART_BOMB,
+                        l3::INVINCIBILITY,
+                        l3::EXTRA_LIFE,
+                    ],
                     orb_arg: 0,
                     gate_release: (0x54d6, 0x5698),
                     level_end_sprite: 0x5c20,

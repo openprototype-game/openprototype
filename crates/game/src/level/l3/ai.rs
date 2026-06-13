@@ -10,6 +10,10 @@
 //! Positions are 12.4 fixed point; data tables are read from the WAD image
 //! at their file offsets.
 
+use super::{
+    BAT, BLUE_BEETLE, BOSS, EXTRA_LIFE, INVINCIBILITY, PTERODACTYL, RED_BEETLE, SMART_BOMB,
+    WEAPON_UPGRADE,
+};
 use crate::level::ai_common::{pickup, word};
 use crate::level::prng::EngineRng;
 use crate::spawns::{AiSounds, BossExplosionSound, Effect, Entity, Shot, descriptor_hitboxes};
@@ -120,10 +124,10 @@ const ORBITER_WAVE: usize = 0x103fd;
 /// Runs AI function `arg` for one sub-step.
 pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     match entity.arg {
-        0 => pickup(entity, 0x51e8, 0x5246),
-        1 => pickup(entity, 0x510c, 0x516a),
-        2 => pickup(entity, 0x5172, 0x51e0),
-        3 => pickup(entity, 0x52ae, 0x52f4),
+        0 => pickup(entity, WEAPON_UPGRADE, 0x5246),
+        1 => pickup(entity, SMART_BOMB, 0x516a),
+        2 => pickup(entity, INVINCIBILITY, 0x51e0),
+        3 => pickup(entity, EXTRA_LIFE, 0x52f4),
         4 => {
             entity.x -= 0x30;
             flap(entity);
@@ -177,7 +181,7 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
             if entity.anim == 4 {
                 entity.anim = 0;
                 entity.sprite = if entity.sprite == 0x5a36 {
-                    0x5928
+                    BAT
                 } else {
                     entity.sprite + 0x1e
                 };
@@ -213,7 +217,7 @@ fn walker_anim(entity: &mut Entity) {
     if entity.anim == 4 {
         entity.anim = 0;
         entity.sprite = if entity.sprite == 0x57c4 {
-            0x56b6
+            PTERODACTYL
         } else {
             entity.sprite + 0x1e
         };
@@ -228,8 +232,8 @@ fn popper_anim(entity: &mut Entity) {
     if entity.anim == 4 {
         entity.anim = 0;
         entity.sprite = match entity.sprite {
-            0x57e2 => 0x5800,
-            0x5810 => 0x57e2,
+            BLUE_BEETLE => 0x5800,
+            0x5810 => BLUE_BEETLE,
             other => other + 8,
         };
     }
@@ -310,7 +314,7 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, approach_ticks: u16, shape:
     // The attack animation only starts near the player's row (the firing
     // plasma bypasses the check); once past the rest frame it runs the full
     // 16-frame cycle back to rest.
-    if entity.sprite == 0x54d6
+    if entity.sprite == RED_BEETLE
         && !ctx.firing_plasma
         && ((entity.y >> 4) - ctx.player_y).abs() > 0x28
     {
@@ -324,7 +328,7 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, approach_ticks: u16, shape:
     if entity.anim == 3 {
         entity.anim = 0;
         entity.sprite = if entity.sprite == 0x5698 {
-            0x54d6
+            RED_BEETLE
         } else {
             entity.sprite + 0x1e
         };
@@ -344,14 +348,14 @@ fn slow_drifter(entity: &mut Entity, wad: &[u8]) {
         if entity.anim == 4 {
             entity.anim = 0;
             entity.sprite = if entity.sprite == 0x5a36 {
-                0x5928
+                BAT
             } else {
                 entity.sprite + 0x1e
             };
         }
     }
 
-    if entity.sprite >= 0x5928 {
+    if entity.sprite >= BAT {
         entity.x -= 0xa;
     }
 
@@ -637,7 +641,7 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
 
         if state.pattern_count & 1 == 0 {
             if entity.sprite == 0x60d0 {
-                entity.sprite = 0x5c20;
+                entity.sprite = BOSS;
             } else {
                 entity.sprite += 0x1e;
 
@@ -655,7 +659,7 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
         state.tick = 0x1a5;
         state.creep_x = state.home_x;
         entity.x = state.home_x;
-        entity.sprite = 0x5c20;
+        entity.sprite = BOSS;
     }
 
     // Every call after the phase machine: the volley timer.
