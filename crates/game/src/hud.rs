@@ -96,18 +96,14 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &m
     draw_weapon_bars(state, assets, panel_top, frame);
     draw_smart_bombs(state.smart_bombs.get(), assets, panel_top, frame);
     draw_selector(state.selected, assets, panel_top, frame);
-    draw_weapon_pod(
-        state.active_weapon(),
-        POD_SETTLED_FRAME,
-        assets,
-        panel_top,
-        frame,
-    );
 }
 
 /// Draw the `active` weapon's pod at animation frame `pod_frame` into the
-/// panel's right recess. Frame `0` is empty (hidden), [`POD_SETTLED_FRAME`] is
-/// the settled state; switching weapons plays `0` up to settled.
+/// panel's right recess. Frame `0` draws NOTHING -- the original's rise and
+/// lower phases blit sheet rows 1..5 only, so the panel background's empty
+/// recess shows through (sheet row 0 is the first animation frame, not an
+/// empty cell). [`POD_SETTLED_FRAME`] is the settled state. The scene owns
+/// this call, keyed on its pod latch, not the live resolve.
 pub fn draw_weapon_pod(
     active: ActiveWeapon,
     pod_frame: usize,
@@ -115,6 +111,10 @@ pub fn draw_weapon_pod(
     panel_top: i32,
     frame: &mut Framebuffer,
 ) {
+    if pod_frame == 0 {
+        return;
+    }
+
     let pod = pod_cell(&assets.weapon_pods, pod_column(active), pod_frame);
     let (x, y) = di_to_screen(POD_DI, panel_top);
 
