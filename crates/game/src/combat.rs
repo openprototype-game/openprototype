@@ -8,8 +8,8 @@
 //! the type's score (a dword in its descriptor block), and every Nth kill
 //! converts the dying enemy into a weapon-upgrade pickup in place.
 //!
-//! Still TODO at their sites: hit sparks and death debris (the effects
-//! buffer), death SFX triggers, and the boss/orbiter gate release.
+//! Still TODO: the HUD bar pickup effect (the pickup updates state but
+//! draws no bar feedback, file `0xc0a4`'s pickup branch).
 
 use crate::shots::Weapons;
 use crate::spawns::{Effect, Entity, Spawns, descriptor_debris, descriptor_hitboxes};
@@ -173,7 +173,6 @@ fn apply_shot(
             continue;
         }
 
-        // TODO: hit spark into the effects buffer (skipped for plasma).
         if entity.health >= damage {
             entity.health -= damage;
             return ShotOutcome::Absorbed;

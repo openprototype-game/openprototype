@@ -7,11 +7,10 @@
 //! wobbles) are read straight from the WAD image at their file offsets, like
 //! the sprite descriptors.
 //!
-//! Side effects the port does not carry yet are marked `TODO` at their
-//! sites; the open ones are the orbiter's plasma proximity-gate bypass
-//! (`cs:0xcb5 == 3`) and the flapper funcs' dropped tick increment
-//! (savegame-visible state only). The effects queue, the SFX triggers and
-//! the boss/orbiter scroll gate are implemented.
+//! The one side effect the port does not carry yet is marked `TODO` at its
+//! site: the orbiter's plasma proximity-gate bypass (`cs:0xcb5 == 3`). The
+//! effects queue, the SFX triggers and the boss/orbiter scroll gate are
+//! implemented.
 
 use super::{
     ASTEROID, CANNON, EXTRA_LIFE, INTERCEPTOR, INVINCIBILITY, KAMIKAZE, ORBITER, SMART_BOMB,
@@ -177,7 +176,6 @@ fn cannon(entity: &mut Entity, ctx: &mut AiContext) {
             vx: -0x40,
             vy: 0,
         });
-        // TODO: enemy-shot SFX trigger (0xae33).
     }
 
     entity.anim += 1;
@@ -283,7 +281,6 @@ fn random_aimed_shot(entity: &Entity, ctx: &mut AiContext) {
             vx,
             vy,
         });
-        // TODO: enemy-shot SFX trigger (0xae33).
     }
 }
 
@@ -747,7 +744,6 @@ fn boss_fire(entity: &Entity, ctx: &mut AiContext) {
                 vx,
                 vy,
             });
-            // TODO: enemy-shot SFX trigger (0xae33).
         }
     }
 }
