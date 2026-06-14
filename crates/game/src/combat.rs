@@ -8,8 +8,11 @@
 //! the type's score (a dword in its descriptor block), and every Nth kill
 //! converts the dying enemy into a weapon-upgrade pickup in place.
 //!
-//! Still TODO: the HUD bar pickup effect (the pickup updates state but
-//! draws no bar feedback, file `0xc0a4`'s pickup branch).
+//! The original redraws individual HUD readouts on pickup (weapon bar, bomb
+//! icons, lives digit) because its HUD is a persisted VRAM panel poked on
+//! change. The port rebuilds the whole HUD from game state every frame, so
+//! those readouts already update the same frame a pickup lands -- nothing
+//! extra to draw here.
 
 use crate::shots::Weapons;
 use crate::spawns::{Effect, Entity, Spawns, descriptor_debris, descriptor_hitboxes};
@@ -683,7 +686,6 @@ pub fn body_contact(
         let [weapon_upgrade, smart_bomb, invincibility, extra_life] = spawns.combat.pickups;
         let kind = entity.kind;
 
-        // TODO: the HUD bar pickup effect.
         if kind == weapon_upgrade {
             state.level_up();
             events.pickup = true;

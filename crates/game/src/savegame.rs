@@ -470,9 +470,10 @@ impl SaveGame {
             block[at - BLOCK_BASE..at - BLOCK_BASE + 2].copy_from_slice(&value.to_le_bytes());
         }
 
-        // Weapons: firing resolves on the first unfreeze; storing the
-        // selected weapon (or 0 on an empty slot) matches the original's
-        // resolve. TODO: the firing freeze across a held burst is lost.
+        // Weapons: a load resumes through GET READY (fire-released-then-
+        // pressed), so the firing weapon re-resolves on the first unfrozen
+        // tick in both engines; the stored cs:0xcb5 is never a held-burst
+        // continuation. Storing the selected weapon (0 on empty) matches.
         let firing = match self.state.active_weapon() {
             openprototype_core::ActiveWeapon::Chaingun => 0,
             openprototype_core::ActiveWeapon::Selected(weapon) => weapon_index(weapon),
@@ -499,8 +500,9 @@ impl SaveGame {
         // Cooldown, flash and the orb flags stay 0 like a fresh level. The
         // baked reload/stage above already avoids the original's zeroing bug
         // (a written 0 stage killed the orb machine for the rest of a
-        // cross-engine session); carrying the live cooldown/flash/stage is a
-        // remaining refinement that matters only for cross-engine saves.
+        // cross-engine session); the live values are not carried by design --
+        // a load resumes through GET READY, which makes this transient fire
+        // state unobservable after resume.
         if let Some(reload_at) = map.reload_at {
             block[reload_at - BLOCK_BASE] = 6;
         }
@@ -685,8 +687,13 @@ fn encode_shots(buffer: &mut [u8], shots: &[Shot]) {
         buffer[at + 4..at + 6].copy_from_slice(&(shot.y as u16).to_le_bytes());
         buffer[at + 6..at + 8].copy_from_slice(&(shot.vx as u16).to_le_bytes());
         buffer[at + 8..at + 10].copy_from_slice(&(shot.vy as u16).to_le_bytes());
-        // TODO at +0xa/+0xb/+0xe: the enemy-shot sizes and damage; the
-        // port's ship hit test does not read them from the record yet.
+        // +0xa/+0xb (size) and +0xe (damage) stay zero. The spawn helper
+        // (file 0xdd78) copies size from the sprite descriptor +8/+9 -- the
+        // same bytes the port re-derives at collision time -- and never
+        // writes +0xe (the enemy hit consequence 0xc4b7 ignores it).
+        // Reconstructing size would need the WAD in this WAD-free codec, so
+        // it is left zero; cross-engine, an in-flight enemy shot loses its
+        // collision box in the original until it expires.
     }
 }
 
