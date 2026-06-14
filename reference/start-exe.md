@@ -397,11 +397,12 @@ highscore fly-in's absolute pace is the one number with no authored source
 (machine-bound in the original); the port uses 125 ms per step, calibrated to
 DOSBox at its default cycles.
 
-## Open / TBD
+## The launcher IPC the port replaces
 
-These remaining items are level-WAD-side (a separate binary). The save format
-itself is decoded in [savegame.md](savegame.md); the LOAD GAME handoff is above.
-
-- The `message`-file content: which bytes the level WAD writes map to which
-  `cs:[0x46ff]` state and the next `cs:[0x4703]` level.
-- The level WAD exit-code values (the `bl` compared at `0x2b16`).
+The original passes level outcomes back through a `message` file the level WAD
+writes and START.EXE reads (`cs:[0x46ff]` state, `cs:[0x4703]` next level, the
+exit code `bl` compared at `0x2b16`). The port is one process: it carries the
+level-to-level state in memory as a `Handoff` and drives outcomes from the level
+scene's flow, so it never reads or writes that file. The exact `message` byte
+layout is level-WAD-side and the port does not need it. The save format itself is
+decoded in [savegame.md](savegame.md); the LOAD GAME handoff is above.

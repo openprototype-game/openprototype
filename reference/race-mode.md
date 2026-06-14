@@ -101,18 +101,18 @@ code anchors differ.
 | AI table (file)  | `0xA476` | `0xA4EE` | `0xA9EE` |
 | Ship-rect table  | `0x4237` | `0x42AF` | `0x47AF` |
 
-## Open questions
+## Completion and a latent edge
 
-Two race details are not fully traced:
+A race completes the same way a shooter does: the finish entity raises the
+level-end flag (`cs:0xcc3`), which the port carries as `level_end` and the level
+scene turns into the win flyout and the next-level handoff. The original's
+separate `cs:0xcc4` "completed" analog (checked at file `0x6ff4`) is never
+written, so it is dead; the port needs nothing more to tell a finished race from
+a game-over.
 
-- **Completion handoff.** Nothing in LEVEL_2 sets a `cs:0xcc4` "completed"
-  analog the way L1 sets `cs:0xcc2` on a boss kill, and the game-over status byte
-  stays at its image value 5 through the win flyout. How START.EXE tells a
-  finished race from a game-over was not traced. The `cs:0xcc4` spawn-clock
-  override is checked at file `0x6ff4` but never written, so it is dead.
-- **Killable finish gate.** The finish entity carries health 20. A player shot
-  reaching past its spawn x the frame after it appears could in principle kill it
-  before its AI sets the level-end flag, leaving the race unwinnable. The hit-test
-  geometry makes this hard (shot hit tests stop at x <= 0x120, the gate's first
-  box starts near 290) but it has not been proven impossible. The port keeps the
-  health value as-is.
+One latent edge stays faithful rather than guarded: the finish entity carries
+health 20, so a player shot reaching past its spawn x the frame after it appears
+could in principle kill it before its AI sets the level-end flag, leaving the
+race unwinnable. The hit-test geometry makes this hard (shot hit tests stop at
+x <= 0x120, the gate's first box starts near 290) but it is not proven
+impossible. The port keeps the original's health value as-is.

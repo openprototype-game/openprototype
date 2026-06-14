@@ -539,13 +539,10 @@ table's file offset, and `SpawnSource::records` resolves either into the shared
 `Record` buffer (the generated arm takes the PRNG seed, the static arm the WAD
 image). The race arm's field mapping is provisional until the render validation.
 
-## Open
-
-- Static landmark records at vaddr `0x5418`: `{0x96,0x3f8e,0x2710,0x45}` and
-  `{0xfa,0x3f8e,0x1770,0x46}` in record form, then the default template
-  `(8,0x7d00,0x3308,10)`.
-- Sprite resolution is solved: `word1` is a cs-offset to an 8-byte descriptor
-  `{cell_count, width, height, catalog_index}`; `catalog_index` indexes the OUT.BIN
-  catalog `decode_banked` produces, and the sprite spans `cell_count` consecutive
-  cells (see `bin.md`). Open: wire resolve-and-blit into the parallax render (place
-  at `canyon_x - scroll`, `canyon_y - camera`).
+The on-disk obstacle buffer holds only the default template
+`(8, 0x7d00, 0x3308, 10)` and two static landmark records at vaddr `0x5418`; the
+generator overwrites the whole buffer at init, so those disk values never reach
+the runtime. The spawn record's sprite resolves through its descriptor's
+`catalog_index` into the BIN catalog, and the port assembles and blits each
+entity from it (`spawns.rs`); the one L1 layer still outside the port is the
+decorative compiled-sprite front pass noted above.
