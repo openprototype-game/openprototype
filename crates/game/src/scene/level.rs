@@ -95,7 +95,7 @@ const GET_READY_TEXT: &str = "GET READY..";
 /// The freeze pulse's palette entries and their full-brightness colors.
 ///
 /// 6-bit DAC; RGB tables at L2 file `0x7832`, byte-identical in every WAD. In
-/// FONT.RAW these four indices appear only in the `>` glyph -- the pause menu's
+/// FONT.RAW these four indices appear only in the `>` glyph, the pause menu's
 /// cursor, the one thing on a frozen screen that visibly pulses. The level
 /// palettes bake placeholders at `0xd0..0xd2` (magenta on the races); this pulse
 /// is their only writer.
@@ -135,7 +135,7 @@ const ERIK_LETTER_TICKS: u32 = 60;
 /// What the cheat grants, every time the sequence completes.
 ///
 /// The original writes 0x7d00 invincibility ticks and fills all four weapon bars
-/// to 0x20 (charge level 4) -- L1 file 0xb2b0..0xb2d2.
+/// to 0x20 (charge level 4). L1 file 0xb2b0..0xb2d2.
 const ERIK_INVINCIBILITY: u16 = 0x7D00;
 
 /// The level's run state (the original's freeze and dying globals, `cs:0x29f7`
@@ -245,7 +245,7 @@ pub struct LevelScene {
     /// The original requires E+R+I+K held simultaneously (checker at L1
     /// file 0xb287, per unfrozen tick); the port deviates to a typed
     /// sequence because 4-key chords ghost on many modern keyboard
-    /// matrices -- the original chord only ever had to work on the NEO
+    /// matrices; the original chord only ever had to work on the NEO
     /// team's own boards (ERIK tops the shipped highscore list).
     erik_progress: usize,
     /// Ticks left for the next ERIK letter before the progress resets.
@@ -260,8 +260,8 @@ impl LevelScene {
     /// Builds the level scene at GET READY, fast-forwarding `skip_ticks`.
     pub fn new(assets: Rc<LevelAssets>, level: Level, handoff: Handoff, skip_ticks: u32) -> Self {
         // The level start runs the original's spawn handler on its respawn
-        // path (the handoff flag -- `cs:0xb12b` in the race WADs, `cs:0xcb88`
-        // in L1 -- bakes 0 and only an `f:message` mode byte changes it), so
+        // path (the handoff flag, `cs:0xb12b` in the race WADs, `cs:0xcb88`
+        // in L1, bakes 0 and only an `f:message` mode byte changes it), so
         // on top of the carried payload's entry math it arms the same
         // invincibility a death respawn does.
         let mut state = GameState::enter_level(handoff);
@@ -1517,7 +1517,7 @@ impl Scene for LevelScene {
         {
             // The press-wait has a level-end escape (the 0x3af check at
             // L1 0x9e3b -> 0x9e77): a level completing during the wait --
-            // a boss death racing the player's -- skips it so the flyout
+            // a boss death racing the player's, skips it so the flyout
             // plays out unfrozen.
             if self.level_end_countdown.is_some() {
                 self.flow = Flow::Running;

@@ -4,7 +4,7 @@
 //! mid-level snapshot the level writes from its in-game menu (the writer at
 //! LEVEL_2 file `0xb8da`, the loader at `0xb9d3`; see `re/savegame.md`).
 //! A file is the level's variable block (whose first byte is the level
-//! number) followed by both parities of each live-object buffer -- A player
+//! number) followed by both parities of each live-object buffer: A player
 //! shots, B enemy shots, C entities, D fire staging, E effects, in that
 //! order in every WAD. Everything is little-endian, no header, no padding.
 //!
@@ -359,7 +359,7 @@ impl SaveGame {
         let mut bytes = vec![0u8; map.file_len()];
         self.encode_block(&map, &mut bytes[..map.block_len]);
 
-        // A: player shots, both parities. Left empty by design -- see the
+        // A: player shots, both parities. Left empty by design: see the
         // SaveGame doc; the in-flight shots self-correct within a frame.
 
         // B: enemy shots, both parities (identical copies are consistent;
@@ -544,7 +544,7 @@ impl SaveGame {
         // rather than zeros. Reload = 6 (the consumer is incb cooldown/
         // cmp reload/jb at L2 0x9211, so a written 0 means every-tick fire
         // until the next weapon resolve); the pod/orb stage byte = 1 (the
-        // hold stage -- all 14 consumers in L2 0x8b76..0x8c50 compare
+        // hold stage; all 14 consumers in L2 0x8b76..0x8c50 compare
         // against 1..4 and nothing else ever writes it, so a 0 kills the
         // orb machine for the rest of an original-engine session).
         // Cooldown, flash and the orb flags stay 0 like a fresh level. The
@@ -666,7 +666,7 @@ impl SaveGame {
 #[derive(Clone, Copy)]
 pub enum ScrollSlot {
     /// A scenery layer's accumulator (the port's layer index; the save
-    /// order does not always match the layer order -- L1's three layers
+    /// order does not always match the layer order: L1's three layers
     /// save as {16, 6, 10} against draw order {6, 10, 16}).
     Scenery(usize),
     /// A free-running accumulator the port does not model: the races' two
@@ -753,8 +753,8 @@ fn encode_shots(buffer: &mut [u8], shots: &[Shot]) {
         buffer[at + 6..at + 8].copy_from_slice(&(shot.vx as u16).to_le_bytes());
         buffer[at + 8..at + 10].copy_from_slice(&(shot.vy as u16).to_le_bytes());
         // +0xa/+0xb (size) and +0xe (damage) stay zero. The spawn helper
-        // (file 0xdd78) copies size from the sprite descriptor +8/+9 -- the
-        // same bytes the port re-derives at collision time -- and never
+        // (file 0xdd78) copies size from the sprite descriptor +8/+9 (the
+        // same bytes the port re-derives at collision time) and never
         // writes +0xe (the enemy hit consequence 0xc4b7 ignores it).
         // Reconstructing size would need the WAD in this WAD-free codec, so
         // it is left zero; cross-engine, an in-flight enemy shot loses its
@@ -805,7 +805,7 @@ fn encode_entities(buffer: &mut [u8], entities: &[Entity], buf_len: usize) {
         put_word(0x18, entity.health as u16);
         // The fire-pattern word (+0x1b, 0xffff = none) stays unset by design:
         // the original's pattern pass (table cs:0x46b3) is latent in the
-        // shipping game -- DOSBox-confirmed inert -- and the port drives enemy
+        // shipping game (DOSBox-confirmed inert) and the port drives enemy
         // fire from the AI functions directly. Intentional deviation.
         put_word(0x1B, 0xFFFF);
         put_word(0x20, entity.tick);

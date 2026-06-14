@@ -537,8 +537,8 @@ const SFX_DMA_BLOCK: usize = 250;
 ///
 /// Reads the WAD's NUL-padded filename table and pulls each `.SMP` off the disc,
 /// cut to its trigger's authored length rounded up to the next 250-byte DMA
-/// block (the original frees a channel only at block boundaries -- the position
-/// check at L1 0x7b63 compares after each consumed block -- so every trigger
+/// block (the original frees a channel only at block boundaries, the position
+/// check at L1 0x7b63 compares after each consumed block, so every trigger
 /// plays up to ~249 bytes of real file data past the authored cut, about 22 ms).
 /// The files are raw signed 8-bit mono at 11111 Hz and are kept that way; the
 /// platform's mixer does the format conversion.

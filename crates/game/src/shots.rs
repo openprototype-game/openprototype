@@ -19,7 +19,7 @@
 //! The plasma weapon is the satellite orbs: they trail the ship, riding its
 //! position history (delays 0/2/5/7 ticks) with a bobbing wave sampled at
 //! staggered phases and growing amplitude down the trail. Holding fire
-//! deploys every charged orb at once -- the fire dispatch re-sets all four
+//! deploys every charged orb at once; the fire dispatch re-sets all four
 //! orb flags from the charge bar on each held tick (L1 file `0x9b48`,
 //! congruent in all 7 WADs), overriding the stage machine at `0xafe2`,
 //! which only paces the retract (stage `cs:[0xcde]`); each deployed orb

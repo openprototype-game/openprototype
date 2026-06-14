@@ -207,7 +207,7 @@ impl Ship {
 
     /// Resets for a respawn: position, fly-in ramp, and roll restart.
     ///
-    /// The free-running animation phases carry over -- the original's respawn
+    /// The free-running animation phases carry over; the original's respawn
     /// never resets the idle-flicker phase, the roll divider, or the shield
     /// animation frame/hold (L1 0xb601-area state untouched by the respawn
     /// handler), and they keep stepping through the death sequence.

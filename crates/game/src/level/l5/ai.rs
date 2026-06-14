@@ -443,7 +443,7 @@ fn fixture(entity: &mut Entity, ctx: &mut AiContext) {
 
     // The shared DESTROYER descriptor's debris slot (cs:0x3d5a): both the
     // fixture and the walker patch it every step, last writer wins. The
-    // fixture has NO hitbox copy -- its spawn boxes hold for life.
+    // fixture has NO hitbox copy; its spawn boxes hold for life.
     ctx.debris_overrides.insert(entity.kind, 0x2f83);
 }
 

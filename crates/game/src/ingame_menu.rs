@@ -9,7 +9,7 @@
 //!
 //! LOAD GAME and SAVE GAME open a five-slot picker (rows `GAME 1..5`, drawn
 //! bright when the slot's file exists and dim otherwise through the WAD's
-//! half-brightness text table -- every WAD builds `/3` for the playfield
+//! half-brightness text table; every WAD builds `/3` for the playfield
 //! freeze and `/2` for dim text, and the list drawer reads `/2` (L1 glyph
 //! drawer file `0xe8d8`, the shared picker at L2 file `0x7dd3`).
 //! Saving writes any slot; loading needs an occupied one. Both flash a toast
@@ -25,7 +25,7 @@
 //! model yet. GRAPHICS... and JOYSTICK... are drawn DISABLED (the slot
 //! picker's dim-text treatment) and the cursor skips them: their submenus
 //! (detail system, gamepad support) are unported, and a dimmed item reads
-//! more honestly than the original's working-looking one -- a deliberate
+//! more honestly than the original's working-looking one, a deliberate
 //! deviation until they land.
 //!
 //! The menu is pure UI state; the [`LevelScene`](crate::scene::level) owns

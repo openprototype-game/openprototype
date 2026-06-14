@@ -11,7 +11,7 @@
 //! The original redraws individual HUD readouts on pickup (weapon bar, bomb
 //! icons, lives digit) because its HUD is a persisted VRAM panel poked on
 //! change. The port rebuilds the whole HUD from game state every frame, so
-//! those readouts already update the same frame a pickup lands -- nothing
+//! those readouts already update the same frame a pickup lands; nothing
 //! extra to draw here.
 
 use crate::shots::Weapons;
@@ -85,8 +85,8 @@ pub fn player_shots(
             events.missile_impact |= shot.is_missile();
 
             // The hit spark by shot SPRITE family, like the dispatch at L1
-            // 0xc0df: everything below the burning threshold -- the chaingun
-            // AND all four multishot levels -- takes the chaingun spark;
+            // 0xc0df: everything below the burning threshold (the chaingun
+            // AND all four multishot levels) takes the chaingun spark;
             // the burning window its own; missiles theirs; plasma none.
             let effects = spawns.combat.effects;
             let x = shot.x >> 4;

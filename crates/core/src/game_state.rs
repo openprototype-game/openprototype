@@ -285,7 +285,7 @@ impl GameState {
     ///
     /// The original's per-tick updater (`div 0x2710`, all seven WADs) grants one
     /// life per check and snaps its milestone to the full quotient, so crossing
-    /// two boundaries in one tick -- a smart bomb reaping a dense wave -- still
+    /// two boundaries in one tick (a smart bomb reaping a dense wave) still
     /// pays one life and never pays the skipped boundary later. The snap is
     /// implicit here: the milestone derives from the score itself.
     pub fn add_score(&mut self, points: u32) -> bool {

@@ -108,7 +108,7 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &m
 
 /// Draws the `active` weapon's pod at animation frame `pod_frame`.
 ///
-/// Drawn into the panel's right recess. Frame `0` draws NOTHING -- the
+/// Drawn into the panel's right recess. Frame `0` draws NOTHING; the
 /// original's rise and lower phases blit sheet rows 1..5 only, so the panel
 /// background's empty recess shows through (sheet row 0 is the first animation
 /// frame, not an empty cell). [`POD_SETTLED_FRAME`] is the settled state. The
