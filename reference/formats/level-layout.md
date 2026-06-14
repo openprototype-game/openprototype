@@ -159,14 +159,6 @@ path, in order: back, mid, then (after the ship and enemies) front. A layer's de
 is its call position; there is no depth field in the tilemap. Each layer scrolls on
 its own accumulator (`cs:0x25f6`, `0x25fa`, `0x25f2`) for the parallax rate.
 
-### Compiled-sprite front pass
-
-LEVEL_1 has a second front pass of compiled sprites, drawn after the ship by routine
-`0x8d2b`. It reads a table at `cs:0x43ea` of 18-byte rows `{count, two pieces × four
-plane addresses}` and far-calls each piece's compiled blit code in segment `EC00`
-(the compiled-sprite format is in `bin.md`). The three tilemap layers cover the
-visible lattice; this pass is not yet in the port.
-
 ### Port
 
 `scenery.rs` and `assets.rs` decode one loop per tilemap and composite the
@@ -544,5 +536,4 @@ The on-disk obstacle buffer holds only the default template
 generator overwrites the whole buffer at init, so those disk values never reach
 the runtime. The spawn record's sprite resolves through its descriptor's
 `catalog_index` into the BIN catalog, and the port assembles and blits each
-entity from it (`spawns.rs`); the one L1 layer still outside the port is the
-decorative compiled-sprite front pass noted above.
+entity from it (`spawns.rs`).
