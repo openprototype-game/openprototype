@@ -24,6 +24,10 @@ roadmap instead.
   the DMA buffer and wraps on overflow, so loud simultaneous effects clip into
   noise. The port saturates instead, keeping the same mix at normal levels
   without the wrap artifact (see [sfx.md](sfx.md)).
+- **Sample tail past the trigger length.** The original frees a mixer channel
+  only at a 250-byte DMA block boundary, so it plays up to ~249 bytes of file
+  data past a sample's authored length. The port cuts each sample at its
+  authored length (see [sfx.md](sfx.md)), dropping the block-boundary tail.
 
 ## Crashes the port degrades instead of reproducing
 
