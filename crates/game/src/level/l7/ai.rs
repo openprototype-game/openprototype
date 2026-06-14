@@ -1,6 +1,6 @@
 //! LEVEL_7's 50 mode-0 enemy AI functions, transcribed from the disassembly.
 //!
-//! See `re/l7-ai-functions.md` (pointer table at file `0x10f8b`).
+//! See `reference/enemy-ai.md` (pointer table at file `0x10f8b`).
 //!
 //! Same engine as L1 with a different AI set. No enemy aims (the aimed-fire
 //! helper is dead code); the boss is a five-entity composite lava serpent at

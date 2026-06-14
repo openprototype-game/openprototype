@@ -1,7 +1,7 @@
 //! The enemy/pickup spawn layer: scheduling, live entities, and their render.
 //!
 //! Mirrors the original's consumer (see `reference/formats/level-layout.md`,
-//! "The spawn consumer", and `re/spawn-consumer.md`): the timer ISR decrements
+//! "The spawn consumer"): the timer ISR decrements
 //! the head record's delay once per tick and the update loop pulls every due
 //! record into a live entity, placing it from the level's spawn-position
 //! table. Entities draw in buffer order through the catalog-cell blitter; the
@@ -71,7 +71,7 @@ pub fn decode_rows(wad: &[u8], table: usize, rows: usize) -> anyhow::Result<Vec<
 
 /// One live enemy or pickup, the port's view of the original's 0x40-byte entity.
 ///
-/// Field offsets per `re/l1-ai-functions.md`.
+/// Field offsets per `reference/enemy-ai.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     /// The current sprite descriptor cs-pointer (the animation frame).
@@ -131,7 +131,7 @@ pub(crate) fn descriptor_hitboxes(wad: &[u8], cs_base: usize, sprite: u16) -> [[
 
 /// One visual effect (the original's 16-byte buffer-E record).
 ///
-/// An animated sprite at a fixed pixel position (`re/l1-effects.md`).
+/// An animated sprite at a fixed pixel position (`reference/entity-buffers.md`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Effect {
     /// The current sprite descriptor cs-pointer; advances by `step` as the

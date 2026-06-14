@@ -1,6 +1,6 @@
 //! LEVEL_5's 44 mode-0 enemy AI functions, transcribed from the disassembly.
 //!
-//! See `re/l5-ai-functions.md` (pointer table at file `0xeb55`).
+//! See `reference/enemy-ai.md` (pointer table at file `0xeb55`).
 //!
 //! Same engine as L1 with a different AI set. All enemy fire is
 //! deterministic (no random-fire helper); the boss is a stationary fixture

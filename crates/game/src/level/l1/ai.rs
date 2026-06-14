@@ -1,16 +1,14 @@
 //! LEVEL_1's 24 mode-0 enemy AI functions, transcribed from the disassembly.
 //!
-//! See `re/l1-ai-functions.md` (pointer table at file `0xd6c3`).
+//! See `reference/enemy-ai.md` (pointer table at file `0xd6c3`).
 //!
 //! Each function runs once per movement sub-step with the entity's registers
 //! loaded; positions are 12.4 fixed point. The data tables (paths, waves,
 //! wobbles) are read straight from the WAD image at their file offsets, like
 //! the sprite descriptors.
 //!
-//! The one side effect the port does not carry yet is marked `TODO` at its
-//! site: the orbiter's plasma proximity-gate bypass (`cs:0xcb5 == 3`). The
-//! effects queue, the SFX triggers and the boss/orbiter scroll gate are
-//! implemented.
+//! The orbiter's plasma proximity-gate bypass (`cs:0xcb5 == 3`), the effects
+//! queue, the SFX triggers, and the boss/orbiter scroll gate are all carried.
 
 use super::{
     ASTEROID, CANNON, EXTRA_LIFE, INTERCEPTOR, INVINCIBILITY, KAMIKAZE, ORBITER, SMART_BOMB,

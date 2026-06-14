@@ -24,7 +24,7 @@ use super::prng::EngineRng;
 /// points. `spawn_row` indexes the level's spawn-position table (`{x, y,
 /// movement mode, movement arg}` rows); it is not a screen coordinate. The
 /// generator's "x axis" (the `x_start`/`x_step` engine slots) is therefore the
-/// spawn timeline in ticks. See `re/spawn-consumer.md`.
+/// spawn timeline in ticks. See `reference/formats/level-layout.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Record {
     pub delay: u16,

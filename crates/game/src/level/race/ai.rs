@@ -1,6 +1,6 @@
 //! The race levels' 6 mode-0 AI functions, transcribed from LEVEL_2.WAD.
 //!
-//! See `re/race-mode.md` (table file `0xa476`, identical relinked code in
+//! See `reference/race-mode.md` (table file `0xa476`, identical relinked code in
 //! LEVEL_4/LEVEL_6).
 //!
 //! Everything drifts left at a constant 5 px per sub-step. Args 0..3 are the

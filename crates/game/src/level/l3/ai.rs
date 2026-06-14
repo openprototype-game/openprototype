@@ -1,6 +1,6 @@
 //! LEVEL_3's 56 mode-0 enemy AI functions, transcribed from the disassembly.
 //!
-//! See `re/l3-ai-functions.md` (pointer table at file `0x11066`).
+//! See `reference/enemy-ai.md` (pointer table at file `0x11066`).
 //!
 //! Same engine as L1 with a different AI set. The big structural difference:
 //! most L3 sprite families are runs of 0x1e-byte full descriptors per frame

@@ -27,7 +27,7 @@ pub enum SpawnSource {
     ///
     /// `table` is the file offset of the first record. The records are the
     /// shooter consumer's exact shape (`{delay, sprite, health, spawn_row}`,
-    /// see `re/race-mode.md`); a record with sprite 0 terminates the run.
+    /// see `reference/race-mode.md`); a record with sprite 0 terminates the run.
     StaticTable { table: usize },
 }
 

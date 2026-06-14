@@ -2,7 +2,7 @@
 //!
 //! Reverse-engineered from `LEVEL_1.WAD` (trigger battery file `0xac83..`,
 //! mixer feed `0x7a80`) and byte-verified across all seven WADs
-//! (`re/find_sfx_per_level.py`). The original mixes three channels into the
+//! (see `reference/sfx.md`). The original mixes three channels into the
 //! Sound Blaster's DMA buffer and assigns them by sound category: explosions
 //! and impacts on 0, the player's weapons on 1, pickups/enemy/weapon-switch
 //! events on 2. A trigger overwrites its channel immediately; there is no

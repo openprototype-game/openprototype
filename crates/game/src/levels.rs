@@ -196,8 +196,8 @@ const L1_COMBAT: CombatData = CombatData {
 ///
 /// The shot sprites' directory records (`{ncells, width, height, cell}`, like
 /// the shield's), the chaingun muzzle-flash directory, and the per-roll-frame
-/// barrel offsets. All file offsets, located per WAD by spawner-code byte scans
-/// (`re/find_shot_dirs.py`, `re/find_weapon_tables.py`); the spawn offsets,
+/// barrel offsets. All file offsets, located per WAD by spawner-code byte scans; the spawn
+/// offsets,
 /// velocities, damages and fire rates are identical in all seven WADs and live
 /// in [`crate::shots`].
 #[derive(Clone, Copy)]
@@ -476,15 +476,15 @@ pub struct SpawnPositionsData {
 /// The per-level pointer-table functions mode-0 spawn rows select by `arg`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SpawnAi {
-    /// LEVEL_1's 24 functions (`re/l1-ai-functions.md`).
+    /// LEVEL_1's 24 functions (`reference/enemy-ai.md`).
     L1,
-    /// LEVEL_3's 56 functions (`re/l3-ai-functions.md`).
+    /// LEVEL_3's 56 functions (`reference/enemy-ai.md`).
     L3,
-    /// LEVEL_5's 44 functions (`re/l5-ai-functions.md`).
+    /// LEVEL_5's 44 functions (`reference/enemy-ai.md`).
     L5,
-    /// LEVEL_7's 50 functions (`re/l7-ai-functions.md`).
+    /// LEVEL_7's 50 functions (`reference/enemy-ai.md`).
     L7,
-    /// The race levels' 6 functions (`re/race-mode.md`; identical relinked
+    /// The race levels' 6 functions (`reference/race-mode.md`; identical relinked
     /// code in LEVEL_2/4/6).
     Race,
 }
