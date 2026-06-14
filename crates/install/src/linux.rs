@@ -40,11 +40,9 @@ pub fn integrate(exe: &Path, icon: &IconImage, disc: &Path) -> Result<Report> {
     std::fs::write(&launcher, desktop_entry(&binary))
         .with_context(|| format!("writing {}", launcher.display()))?;
 
-    // Best effort: refresh the icon cache so the entry's icon shows at once.
-    let _ = std::process::Command::new("gtk-update-icon-cache")
-        .arg("-tq")
-        .arg(data.join("icons/hicolor"))
-        .status();
+    // No icon-cache rebuild: GNOME finds a per-user icon by scanning the
+    // hicolor dir, and `gtk-update-icon-cache` on a dir without an index.theme
+    // just warns. GTK ignores a stale cache and scans anyway.
 
     Ok(Report {
         binary,
@@ -70,11 +68,6 @@ pub fn remove(removed: &mut Vec<std::path::PathBuf>) -> Result<()> {
         removed,
     );
     remove_path(&data.join(format!("applications/{BINARY_NAME}.desktop")), removed);
-
-    let _ = std::process::Command::new("gtk-update-icon-cache")
-        .arg("-tq")
-        .arg(data.join("icons/hicolor"))
-        .status();
 
     Ok(())
 }
