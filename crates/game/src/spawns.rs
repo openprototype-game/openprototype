@@ -472,6 +472,7 @@ impl Spawns {
                     rng: &mut self.rng,
                     player_x: player.x,
                     player_y: player.y,
+                    firing_plasma: player.firing_plasma,
                     shots: &mut self.shots,
                     effects: &mut self.effects,
                     boss: &mut self.boss,

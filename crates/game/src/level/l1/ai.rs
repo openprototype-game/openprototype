@@ -27,6 +27,8 @@ pub(crate) struct AiContext<'a> {
     /// Player position in pixels (camera-inclusive buffer coordinates).
     pub player_x: i32,
     pub player_y: i32,
+    /// Whether the player is firing plasma this tick (`cs:0xcb5 == 3`).
+    pub firing_plasma: bool,
     pub shots: &'a mut Vec<Shot>,
     pub effects: &'a mut Vec<Effect>,
     pub boss: &'a mut BossState,
@@ -401,10 +403,12 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
         entity.x += 0x20;
     }
 
-    // Attack animation, gated by vertical proximity to the player.
-    // TODO: the original bypasses the gate while the firing weapon
-    // (cs:0xcb5) is 3.
-    if entity.sprite == ORBITER && ((entity.y >> 4) - ctx.player_y - 0xc).abs() > 0xf {
+    // Attack animation, gated by vertical proximity to the player; firing
+    // plasma (cs:0xcb5 == 3) bypasses the gate, so the claw animates off-row.
+    if entity.sprite == ORBITER
+        && !ctx.firing_plasma
+        && ((entity.y >> 4) - ctx.player_y - 0xc).abs() > 0xf
+    {
         return;
     }
 
