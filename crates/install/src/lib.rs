@@ -21,6 +21,10 @@ use prototype_formats::{Palette, Sprite, wad};
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
 
 /// The application identity, shared with the runtime's `directories` lookups
 /// and the window's WM_CLASS.
@@ -30,8 +34,10 @@ const APPLICATION: &str = "OpenPrototype";
 
 /// The installed executable's filename.
 const BINARY_NAME: &str = "openprototype";
-/// The launcher's display name and the WM_CLASS the window sets.
+/// The launcher's display name.
 const DISPLAY_NAME: &str = "OpenPrototype";
+/// The WM_CLASS the window sets, matched by the Linux `.desktop` entry.
+#[cfg(target_os = "linux")]
 const APP_ID: &str = "OpenPrototype";
 
 /// Where to find the icon source in the disc (LEVEL_1's ship).
@@ -156,10 +162,20 @@ fn integrate(exe: &Path, icon: &IconImage, disc: &Path) -> Result<Report> {
         linux::integrate(exe, icon, disc)
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows::integrate(exe, icon, disc)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        macos::integrate(exe, icon, disc)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     {
         let _ = (exe, icon, disc);
-        bail!("`install` is not implemented on this platform yet");
+        bail!("`install` is not implemented on this platform");
     }
 }
 
@@ -238,11 +254,77 @@ fn remove_integration(removed: &mut Vec<PathBuf>) -> Result<()> {
         linux::remove(removed)
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows::remove(removed)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        macos::remove(removed)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     {
         let _ = removed;
-        bail!("`uninstall` is not implemented on this platform yet");
+        bail!("`uninstall` is not implemented on this platform");
     }
+}
+
+/// The macOS bundle identifier, `de.dasprids.OpenPrototype`.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) fn bundle_id() -> String {
+    format!("{QUALIFIER}.{ORGANIZATION}.{APPLICATION}")
+}
+
+/// The `Info.plist` for the macOS app bundle.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) fn macos_info_plist() -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \
+         \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+         <plist version=\"1.0\">\n\
+         <dict>\n\
+         \t<key>CFBundleName</key>\t<string>{DISPLAY_NAME}</string>\n\
+         \t<key>CFBundleDisplayName</key>\t<string>{DISPLAY_NAME}</string>\n\
+         \t<key>CFBundleIdentifier</key>\t<string>{id}</string>\n\
+         \t<key>CFBundleExecutable</key>\t<string>{BINARY_NAME}</string>\n\
+         \t<key>CFBundleIconFile</key>\t<string>AppIcon</string>\n\
+         \t<key>CFBundlePackageType</key>\t<string>APPL</string>\n\
+         \t<key>CFBundleVersion</key>\t<string>{version}</string>\n\
+         \t<key>CFBundleShortVersionString</key>\t<string>{version}</string>\n\
+         \t<key>NSHighResolutionCapable</key>\t<true/>\n\
+         </dict>\n\
+         </plist>\n",
+        id = bundle_id(),
+        version = env!("CARGO_PKG_VERSION"),
+    )
+}
+
+/// A single-quoted PowerShell string, doubling embedded quotes.
+#[cfg(any(target_os = "windows", test))]
+fn ps_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+/// The PowerShell command that writes a Start Menu shortcut via WScript.Shell.
+///
+/// Avoids a shortcut-writing crate by driving the COM object Windows ships.
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn powershell_shortcut(lnk: &str, target: &str, icon: &str, workdir: &str) -> String {
+    format!(
+        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut({lnk}); \
+         $s.TargetPath = {target}; \
+         $s.IconLocation = {icon}; \
+         $s.WorkingDirectory = {workdir}; \
+         $s.Description = '{DISPLAY_NAME}'; \
+         $s.Save()",
+        lnk = ps_quote(lnk),
+        target = ps_quote(target),
+        icon = ps_quote(icon),
+        workdir = ps_quote(workdir),
+    )
 }
 
 /// Removes a file or directory, recording it; a missing path is a no-op.
@@ -389,6 +471,33 @@ mod tests {
 
         // A corner is transparent (in the margin).
         assert_eq!(&icon.rgba[0..4], &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn the_info_plist_names_the_bundle() {
+        let plist = macos_info_plist();
+
+        assert!(plist.contains("<key>CFBundleIdentifier</key>\t<string>de.dasprids.OpenPrototype</string>"));
+        assert!(plist.contains("<key>CFBundleExecutable</key>\t<string>openprototype</string>"));
+        assert!(plist.contains("<key>CFBundleIconFile</key>\t<string>AppIcon</string>"));
+        assert_eq!(bundle_id(), "de.dasprids.OpenPrototype");
+    }
+
+    #[test]
+    fn the_shortcut_command_quotes_paths() {
+        let lnk = r"C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OpenPrototype.lnk";
+        let exe = r"C:\Users\me\AppData\Local\Programs\OpenPrototype\openprototype.exe";
+        let cmd = powershell_shortcut(
+            lnk,
+            exe,
+            r"C:\Users\me\AppData\Local\Programs\OpenPrototype\openprototype.ico",
+            r"C:\Users\me\AppData\Local\Programs\OpenPrototype",
+        );
+
+        assert!(cmd.contains(&format!("CreateShortcut('{lnk}')")));
+        assert!(cmd.contains(&format!("$s.TargetPath = '{exe}'")));
+        // An embedded single quote is doubled, not broken out of.
+        assert_eq!(ps_quote("a'b"), "'a''b'");
     }
 
     #[test]
