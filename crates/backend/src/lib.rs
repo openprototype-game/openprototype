@@ -9,4 +9,4 @@ pub(crate) mod compositor;
 pub(crate) mod renderer;
 pub(crate) mod window;
 
-pub use window::run;
+pub use window::{WindowIcon, run};

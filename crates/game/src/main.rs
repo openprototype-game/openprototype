@@ -22,9 +22,11 @@ mod desktop {
     use openprototype::levels::Level;
     use openprototype::savegame::SaveGame;
     use openprototype::scene::SceneId;
-    use openprototype_backend::run;
+    use openprototype_backend::{WindowIcon, run};
     use openprototype_core::game_state::Handoff;
-    use prototype_disc::{DiscImage, manifest};
+    use prototype_disc::{AssetSource, DiscImage, manifest};
+    use prototype_formats::bin::decode_ship;
+    use prototype_formats::{Palette, Sprite, wad};
     use tracing_subscriber::EnvFilter;
 
     /// Which scene to boot straight into, bypassing the normal intro flow.
@@ -97,6 +99,81 @@ mod desktop {
         );
     }
 
+    /// Builds the window icon from the player ship, decoded from the disc.
+    ///
+    /// Bundles no art: the pixels come from `PTURN1.BN1` over LEVEL_1's palette,
+    /// the same files the game plays from. A read or decode failure (an odd
+    /// disc) just leaves the window without an icon.
+    fn window_icon(disc: &DiscImage) -> Option<WindowIcon> {
+        build_window_icon(disc)
+            .map_err(|error| tracing::warn!(%error, "no window icon"))
+            .ok()
+    }
+
+    fn build_window_icon(disc: &DiscImage) -> Result<WindowIcon> {
+        let data = Level::L1.data();
+        let wad = disc
+            .read(data.wad)
+            .with_context(|| format!("reading {}", data.wad))?;
+        let pturn1 = disc.read("PTURN1.BN1").context("reading PTURN1.BN1")?;
+        let frames =
+            decode_ship(&pturn1, &wad, data.ship.catalog).context("decoding PTURN1.BN1")?;
+        let palette =
+            wad::palette_at(&wad, data.palette_offset).context("reading the level palette")?;
+        let sprite = frames
+            .sprites
+            .first()
+            .context("PTURN1.BN1 has no ship frames")?;
+
+        Ok(ship_icon(sprite, &palette))
+    }
+
+    /// Composites one ship frame into a transparent square RGBA icon.
+    ///
+    /// Nearest-upscaled to the level's 1.5 pixel aspect (a 2:3 integer scale, so
+    /// it stays crisp) and centered, so the desktop compositor downscales a large
+    /// clean source instead of smoothing the ~37-pixel sprite up.
+    fn ship_icon(sprite: &Sprite, palette: &Palette) -> WindowIcon {
+        const SCALE_X: u32 = 8;
+        const SCALE_Y: u32 = 12;
+        const MARGIN: u32 = 18;
+
+        let (sprite_w, sprite_h) = (sprite.size.width, sprite.size.height);
+        let (scaled_w, scaled_h) = (sprite_w * SCALE_X, sprite_h * SCALE_Y);
+        let side = scaled_w.max(scaled_h) + MARGIN * 2;
+        let (origin_x, origin_y) = ((side - scaled_w) / 2, (side - scaled_h) / 2);
+
+        let mut rgba = vec![0u8; (side * side * 4) as usize];
+
+        for y in 0..sprite_h {
+            for x in 0..sprite_w {
+                let Some(index) = sprite.pixels[(y * sprite_w + x) as usize] else {
+                    continue;
+                };
+
+                let color = palette.colors[usize::from(index)];
+
+                for block_y in 0..SCALE_Y {
+                    for block_x in 0..SCALE_X {
+                        let px = origin_x + x * SCALE_X + block_x;
+                        let py = origin_y + y * SCALE_Y + block_y;
+                        let at = ((py * side + px) * 4) as usize;
+                        rgba[at] = color.r;
+                        rgba[at + 1] = color.g;
+                        rgba[at + 2] = color.b;
+                        rgba[at + 3] = 0xff;
+                    }
+                }
+            }
+        }
+
+        WindowIcon {
+            rgba,
+            width: side,
+            height: side,
+        }
+    }
+
     pub fn main() -> Result<()> {
         init_tracing();
 
@@ -145,7 +222,9 @@ mod desktop {
             });
         }
 
-        run(Box::new(app), disc)
+        let icon = window_icon(&disc);
+
+        run(Box::new(app), disc, icon)
     }
 }
 

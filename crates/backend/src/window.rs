@@ -32,7 +32,7 @@ use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
-use winit::window::{Window, WindowId};
+use winit::window::{Icon, Window, WindowId};
 
 use crate::audio::{MusicPlayer, SfxPlayer, make_music_player, make_sfx_player};
 use crate::renderer::Renderer;
@@ -70,12 +70,24 @@ fn backlog_steps(behind: Duration, interval: Duration) -> u32 {
 ///
 /// `disc` is handed to the audio backend so it can stream the CD-DA tracks on
 /// demand.
-pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
+/// A straight-RGBA window icon, decoded by the caller (the repo bundles none).
+///
+/// `width * height * 4` bytes, row-major. Built large and pre-scaled so the
+/// desktop compositor downscales a crisp source rather than smoothing a small
+/// one up.
+pub struct WindowIcon {
+    pub rgba: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>, icon: Option<WindowIcon>) -> Result<()> {
     let event_loop = EventLoop::new().context("creating the event loop")?;
     let mut app = App {
         game,
         music: make_music_player(disc),
         sfx: make_sfx_player(),
+        icon,
         renderer: None,
         pending_input: Vec::new(),
         modifiers: ModifiersState::empty(),
@@ -98,6 +110,8 @@ struct App {
     game: Box<dyn Game>,
     music: Box<dyn MusicPlayer>,
     sfx: Box<dyn SfxPlayer>,
+    /// The window icon, consumed when the window is created.
+    icon: Option<WindowIcon>,
     renderer: Option<Renderer>,
     /// Keys that arrived since the last frame, drained into the next step.
     pending_input: Vec<KeyEvent>,
@@ -202,7 +216,7 @@ impl ApplicationHandler for App {
 
         let source = self.game.framebuffer().image.size;
 
-        match create_renderer(event_loop, source) {
+        match create_renderer(event_loop, source, self.icon.take()) {
             Ok(renderer) => {
                 self.renderer = Some(renderer);
                 self.request_redraw(); // draw the first frame
@@ -305,13 +319,24 @@ impl ApplicationHandler for App {
 ///
 /// The 4:3 shape means the content fills the window with no letterbox bars.
 /// Sized for the initial `source` frame.
-fn create_renderer(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<Renderer> {
+fn create_renderer(
+    event_loop: &ActiveEventLoop,
+    source: Dimensions,
+    icon: Option<WindowIcon>,
+) -> Result<Renderer> {
     let width = source.width * INITIAL_SCALE;
     let height = width * 3 / 4;
-    let attributes = Window::default_attributes()
-        .with_title("Prototype")
+    let mut attributes = Window::default_attributes()
+        .with_title("OpenPrototype")
         .with_inner_size(LogicalSize::new(width, height))
         .with_min_inner_size(LogicalSize::new(source.width, source.width * 3 / 4));
+
+    if let Some(icon) = icon {
+        match Icon::from_rgba(icon.rgba, icon.width, icon.height) {
+            Ok(icon) => attributes = attributes.with_window_icon(Some(icon)),
+            Err(error) => tracing::warn!(%error, "ignoring an invalid window icon"),
+        }
+    }
 
     let window = Arc::new(
         event_loop
