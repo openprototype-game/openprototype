@@ -3,7 +3,9 @@
 use crate::color::Palette;
 use crate::error::{DecodeError, Result};
 
-/// Pixel dimensions. RAW and BDY store no header, so the caller supplies these.
+/// Pixel dimensions.
+///
+/// RAW and BDY store no header, so the caller supplies these.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Dimensions {
     pub width: u32,
@@ -11,6 +13,7 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
+    /// Builds dimensions of `width` x `height` pixels.
     pub fn new(width: u32, height: u32) -> Self {
         Self { width, height }
     }
@@ -29,7 +32,7 @@ pub struct IndexedImage {
 }
 
 impl IndexedImage {
-    /// Wrap raw indices, checking the count matches `size`.
+    /// Wraps raw indices, checking the count matches `size`.
     pub fn new(size: Dimensions, pixels: Vec<u8>) -> Result<Self> {
         if pixels.len() != size.pixel_count() {
             return Err(DecodeError::SizeMismatch {
@@ -41,7 +44,7 @@ impl IndexedImage {
         Ok(Self { size, pixels })
     }
 
-    /// Resolve through a palette to packed 8-bit RGB (`width * height * 3` bytes).
+    /// Resolves through a palette to packed 8-bit RGB (`width * height * 3` bytes).
     pub fn to_rgb8(&self, palette: &Palette) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.pixels.len() * 3);
 

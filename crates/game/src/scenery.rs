@@ -19,13 +19,15 @@ use prototype_formats::bin::SpriteSheet;
 /// One scenery column is one Mode X catalog cell wide.
 const TILE_WIDTH: i32 = 32;
 
-/// Scroll positions are 1/16-pixel fixed point, matching the parallax background,
-/// so slow far layers can move at fractional speeds while keeping exact ratios.
+/// Scroll positions are 1/16-pixel fixed point, matching the parallax background.
+///
+/// Slow far layers can move at fractional speeds while keeping exact ratios.
 const SUBPIXEL: u32 = 16;
 
-/// One parallax scenery layer's data: a tilemap of catalog-cell indices, the
-/// screen row it draws from, and its scroll speed. Immutable; the scroll position
-/// lives in [`SceneryScroll`].
+/// One parallax scenery layer's data.
+///
+/// A tilemap of catalog-cell indices, the screen row it draws from, and its
+/// scroll speed. Immutable; the scroll position lives in [`SceneryScroll`].
 pub struct SceneryLayer {
     /// The cell to draw in each 32-pixel column, `None` for an empty column. The
     /// strip repeats as the layer scrolls.
@@ -37,22 +39,24 @@ pub struct SceneryLayer {
 }
 
 impl SceneryLayer {
+    /// Builds a layer from its tilemap, top row, and scroll speed.
     pub fn new(tiles: Vec<Option<usize>>, top: i32, speed: u32) -> Self {
         Self { tiles, top, speed }
     }
 
-    /// The strip's full length in 1/16-pixel units; restored savegame
-    /// accumulators wrap here as a bounds guard.
+    /// The strip's full length in 1/16-pixel units.
+    ///
+    /// Restored savegame accumulators wrap here as a bounds guard.
     fn span(&self) -> u32 {
         self.tiles.len() as u32 * TILE_WIDTH as u32 * SUBPIXEL
     }
 
-    /// The scroll position whose 10-cell window first reads the stream's
-    /// terminating 0xFF jump byte: the walker zeroes the accumulator there
-    /// (remainder included), so the strip loops at `len - 9` tiles and the
-    /// streams' designed 9-tile head/tail overlap shows exactly once
-    /// (reset re-derived at L1 file `0x9299`, L3 `0xcc51`; the idiom is in
-    /// all seven WADs).
+    /// The scroll position whose 10-cell window first reads the stream's 0xFF jump.
+    ///
+    /// The walker zeroes the accumulator there (remainder included), so the strip
+    /// loops at `len - 9` tiles and the streams' designed 9-tile head/tail overlap
+    /// shows exactly once (reset re-derived at L1 file `0x9299`, L3 `0xcc51`; the
+    /// idiom is in all seven WADs).
     fn reset_at(&self) -> u32 {
         self.tiles.len().saturating_sub(9) as u32 * TILE_WIDTH as u32 * SUBPIXEL
     }
@@ -72,6 +76,7 @@ pub struct Scenery {
 }
 
 impl Scenery {
+    /// Builds the stack, with `front_layers` trailing layers drawn in front.
     pub fn new(layers: Vec<SceneryLayer>, front_layers: usize) -> Self {
         debug_assert!(front_layers <= layers.len());
 
@@ -88,8 +93,9 @@ impl Scenery {
         }
     }
 
-    /// Place one layer's raw scroll position (a savegame's accumulator, in
-    /// 1/16-pixel units), wrapped to the layer's tile span.
+    /// Places one layer's raw scroll position, wrapped to the layer's tile span.
+    ///
+    /// The position is a savegame's accumulator, in 1/16-pixel units.
     pub fn restore_offset(&self, scroll: &mut SceneryScroll, layer: usize, offset: u32) {
         if let (Some(slot), Some(layer)) = (scroll.offsets.get_mut(layer), self.layers.get(layer))
             && !layer.tiles.is_empty()
@@ -98,10 +104,11 @@ impl Scenery {
         }
     }
 
-    /// Advance every layer's scroll by `ticks` of its own speed. A layer
-    /// whose previous frame reached [`SceneryLayer::reset_at`] restarts from
-    /// zero first: the original resets mid-draw, after the frame composed,
-    /// so the touching frame renders un-reset and the next one starts over.
+    /// Advances every layer's scroll by `ticks` of its own speed.
+    ///
+    /// A layer whose previous frame reached `reset_at` restarts from zero
+    /// first: the original resets mid-draw, after the frame composed, so
+    /// the touching frame renders un-reset and the next one starts over.
     pub fn advance(&self, scroll: &mut SceneryScroll, ticks: u32) {
         for (layer, offset) in self.layers.iter().zip(&mut scroll.offsets) {
             if layer.tiles.is_empty() {
@@ -116,8 +123,9 @@ impl Scenery {
         }
     }
 
-    /// Composite the layers behind the playfield sprites, in draw order,
-    /// looking each column's cell up in `catalog`. Off-screen blits clip.
+    /// Composites the layers behind the playfield sprites, in draw order.
+    ///
+    /// Each column's cell is looked up in `catalog`. Off-screen blits clip.
     /// `camera_y` is the playfield's vertical scroll, applied to every layer so
     /// the scenery pans with the background as the ship moves up and down (the
     /// original scrolls the whole playfield buffer, scenery included).
@@ -131,8 +139,9 @@ impl Scenery {
         self.render_range(scroll, catalog, frame, camera_y, false);
     }
 
-    /// Composite the layers in front of the playfield sprites (see
-    /// [`Scenery::render_behind`]).
+    /// Composites the layers in front of the playfield sprites.
+    ///
+    /// See [`Scenery::render_behind`].
     pub fn render_front(
         &self,
         scroll: &SceneryScroll,
@@ -167,21 +176,23 @@ impl Scenery {
     }
 }
 
-/// The per-layer scroll positions for a [`Scenery`], advanced each tick. Held by
-/// the scene, like the parallax offsets.
+/// The per-layer scroll positions for a [`Scenery`], advanced each tick.
+///
+/// Held by the scene, like the parallax offsets.
 pub struct SceneryScroll {
     offsets: Vec<u32>,
 }
 
 impl SceneryScroll {
-    /// One layer's raw scroll position (the savegame's accumulator view), or
+    /// One layer's raw scroll position (the savegame's accumulator view).
+    ///
     /// 0 when the layer does not exist (synthetic test assets carry none).
     pub fn offset(&self, layer: usize) -> u32 {
         self.offsets.get(layer).copied().unwrap_or(0)
     }
 }
 
-/// Blit one layer's visible columns at scroll `offset` (1/16-pixel).
+/// Blits one layer's visible columns at scroll `offset` (1/16-pixel).
 fn render_layer(
     layer: &SceneryLayer,
     offset: u32,

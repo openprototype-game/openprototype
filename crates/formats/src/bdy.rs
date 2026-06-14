@@ -8,7 +8,7 @@
 use crate::error::DecodeError;
 use crate::{Dimensions, IndexedImage, Result};
 
-/// Decode an RLE BODY chunk into an indexed image of the given dimensions.
+/// Decodes an RLE BODY chunk into an indexed image of the given dimensions.
 pub fn decode(bytes: &[u8], size: Dimensions) -> Result<IndexedImage> {
     IndexedImage::new(size, unpack_byte_run1(bytes)?)
 }

@@ -18,6 +18,7 @@ pub struct PaletteFade {
 }
 
 impl PaletteFade {
+    /// Builds a fade from `from` to `to` over `duration`.
     pub fn new(from: Palette, to: Palette, duration: Duration) -> Self {
         Self {
             from,
@@ -27,15 +28,17 @@ impl PaletteFade {
         }
     }
 
-    /// Advance by `dt`, clamping at the end. Returns the part of `dt` past the
-    /// fade's end, so the caller can roll it into whatever follows and beat
-    /// boundaries lose no time.
+    /// Advances by `dt`, clamping at the end.
+    ///
+    /// Returns the part of `dt` past the fade's end, so the caller can roll it
+    /// into whatever follows and beat boundaries lose no time.
     pub fn advance(&mut self, dt: Duration) -> Duration {
         let remaining = self.duration.saturating_sub(self.elapsed);
         self.elapsed = (self.elapsed + dt).min(self.duration);
         dt.saturating_sub(remaining)
     }
 
+    /// Whether the fade has reached its end.
     pub fn finished(&self) -> bool {
         self.elapsed >= self.duration
     }

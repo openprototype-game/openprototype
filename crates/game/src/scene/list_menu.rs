@@ -1,5 +1,7 @@
-//! A cursor-driven list menu: a background, a column of labels, and a `>`
-//! cursor on the selected row, with wraparound navigation.
+//! A cursor-driven list menu.
+//!
+//! A background, a column of labels, and a `>` cursor on the selected row, with
+//! wraparound navigation.
 //!
 //! Both the main menu and the jukebox are this widget; they differ in their
 //! labels, their [`MenuLayout`], and what Enter does. It owns the framebuffer
@@ -19,6 +21,7 @@ const ROW_HEIGHT: i32 = 16;
 const CURSOR_GLYPH: &str = ">";
 
 /// Where a list menu draws: the label and cursor columns and the first row.
+///
 /// The main menu and the jukebox use different positions in `START.EXE`.
 pub struct MenuLayout {
     pub label_x: i32,
@@ -38,6 +41,7 @@ pub struct ListMenu {
 }
 
 impl ListMenu {
+    /// Builds and renders the menu over `labels` (which must be non-empty).
     pub fn new(assets: Rc<MenuAssets>, labels: Vec<String>, layout: MenuLayout) -> Self {
         debug_assert!(!labels.is_empty(), "a list menu needs at least one row");
 
@@ -59,8 +63,9 @@ impl ListMenu {
         menu
     }
 
-    /// Mark rows to draw through the dim table (`START.EXE` halves the
-    /// brightness of unoccupied slot labels) and re-render.
+    /// Marks rows to draw through the dim table, then re-renders.
+    ///
+    /// `START.EXE` halves the brightness of unoccupied slot labels.
     pub fn set_dim_rows(&mut self, dim_rows: Vec<bool>) {
         debug_assert_eq!(dim_rows.len(), self.labels.len());
 
@@ -72,27 +77,32 @@ impl ListMenu {
         self.layout.first_row_y + index as i32 * ROW_HEIGHT
     }
 
+    /// The selected row index.
     pub fn selected(&self) -> usize {
         self.selected
     }
 
+    /// The rendered frame.
     pub fn framebuffer(&self) -> &Framebuffer {
         &self.framebuffer
     }
 
+    /// Moves the cursor up one row, wrapping, and re-renders.
     pub fn move_up(&mut self) {
         self.selected = (self.selected + self.labels.len() - 1) % self.labels.len();
         self.render();
     }
 
+    /// Moves the cursor down one row, wrapping, and re-renders.
     pub fn move_down(&mut self) {
         self.selected = (self.selected + 1) % self.labels.len();
         self.render();
     }
 
-    /// Draw the background and labels without the cursor. The intro fades this
-    /// in before the menu loop starts; the original draws the cursor only once
-    /// the loop runs.
+    /// Draws the background and labels without the cursor.
+    ///
+    /// The intro fades this in before the menu loop starts; the original draws
+    /// the cursor only once the loop runs.
     pub fn render_without_cursor(&mut self) {
         self.framebuffer.blit_screen(&self.assets.background);
 

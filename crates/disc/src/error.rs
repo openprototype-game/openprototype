@@ -7,6 +7,7 @@ use thiserror::Error;
 /// Convenience alias: every fallible operation in this crate returns this.
 pub type Result<T> = std::result::Result<T, DiscError>;
 
+/// What went wrong opening the disc image or reading a file from it.
 #[derive(Debug, Error)]
 pub enum DiscError {
     /// Wraps an underlying filesystem error (opening or reading the image).

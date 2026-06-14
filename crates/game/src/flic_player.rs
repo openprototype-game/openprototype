@@ -23,8 +23,9 @@ pub struct FlicFrame {
     pub delay: Duration,
 }
 
-/// Plays a pre-decoded FLI once, advancing by elapsed time and stopping on the
-/// last frame.
+/// Plays a pre-decoded FLI once, advancing by elapsed time.
+///
+/// Stops on the last frame.
 pub struct FlicPlayer {
     frames: Vec<FlicFrame>,
     index: usize,
@@ -32,7 +33,7 @@ pub struct FlicPlayer {
 }
 
 impl FlicPlayer {
-    /// Decode every frame of `bytes` up front.
+    /// Decodes every frame of `bytes` up front.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         let mut flic = Flic::new(bytes)?;
         let mut frames = Vec::with_capacity(flic.header().frame_count as usize);
@@ -59,10 +60,11 @@ impl FlicPlayer {
         })
     }
 
-    /// Advance by `dt`, moving to later frames as their delays elapse. Holds on
-    /// the last frame. Returns the part of `dt` past the last frame's full
-    /// delay, so the caller can roll it into whatever follows and the playback
-    /// end loses no time.
+    /// Advances by `dt`, moving to later frames as their delays elapse.
+    ///
+    /// Holds on the last frame. Returns the part of `dt` past the last frame's
+    /// full delay, so the caller can roll it into whatever follows and the
+    /// playback end loses no time.
     pub fn advance(&mut self, dt: Duration) -> Duration {
         self.elapsed += dt;
 
@@ -82,10 +84,11 @@ impl FlicPlayer {
         Duration::ZERO
     }
 
-    /// Decode every frame, but play at a fixed `frame_delay` instead of the
-    /// FLI's own speed. The original's player (`START.EXE` `0x31fd`) ignores the
-    /// header speed and delays a caller-set tick count after each frame, so the
-    /// intro plays each FLI at its own rate; this mirrors that.
+    /// Decodes every frame, but plays at a fixed `frame_delay`.
+    ///
+    /// Ignores the FLI's own speed. The original's player (`START.EXE` `0x31fd`)
+    /// ignores the header speed and delays a caller-set tick count after each
+    /// frame, so the intro plays each FLI at its own rate; this mirrors that.
     pub fn decode_at(bytes: &[u8], frame_delay: Duration) -> Result<Self> {
         let mut player = Self::decode(bytes)?;
 
@@ -96,16 +99,20 @@ impl FlicPlayer {
         Ok(player)
     }
 
-    /// Restart from the first frame. Used to loop a short animation (the intro
-    /// credits replay `credz.fli` under each text page).
+    /// Restarts from the first frame.
+    ///
+    /// Used to loop a short animation (the intro credits replay `credz.fli`
+    /// under each text page).
     pub fn restart(&mut self) {
         self.index = 0;
         self.elapsed = Duration::ZERO;
     }
 
-    /// Drop the final frame. The original's credits player (`START.EXE`
-    /// `0x3293`) runs one frame short of the header count (`dec cx` before its
-    /// frame loop), unlike the intro player (`0x31fd`) which plays them all.
+    /// Drops the final frame.
+    ///
+    /// The original's credits player (`START.EXE` `0x3293`) runs one frame short
+    /// of the header count (`dec cx` before its frame loop), unlike the intro
+    /// player (`0x31fd`) which plays them all.
     pub fn clip_last_frame(&mut self) {
         if self.frames.len() > 1 {
             self.frames.pop();

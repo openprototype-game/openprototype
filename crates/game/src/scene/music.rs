@@ -21,20 +21,23 @@ const TRACK_COUNT: usize = 7;
 /// CD track of MUSIC 1 (track 1 is data; the songs are tracks 2..=8).
 const FIRST_MUSIC_TRACK: u8 = 2;
 
-/// The jukebox's own positions, not the main menu's: labels at x=120
-/// (`di = 0x39f8`, ... in `0x439a`), the `>` cursor at x=80 (`0x39d0`), first
-/// row at y=46.
+/// The jukebox's own positions, not the main menu's.
+///
+/// Labels at x=120 (`di = 0x39f8`, ... in `0x439a`), the `>` cursor at x=80
+/// (`0x39d0`), first row at y=46.
 const LAYOUT: MenuLayout = MenuLayout {
     label_x: 120,
     cursor_x: 80,
     first_row_y: 46,
 };
 
+/// The jukebox menu scene.
 pub struct MusicMenu {
     list: ListMenu,
 }
 
 impl MusicMenu {
+    /// Builds the jukebox over MUSIC 1..7.
     pub fn new(assets: Rc<MenuAssets>) -> Self {
         let labels = (1..=TRACK_COUNT).map(|n| format!("MUSIC {n}")).collect();
 

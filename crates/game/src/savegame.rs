@@ -4,7 +4,7 @@
 //! mid-level snapshot the level writes from its in-game menu (the writer at
 //! LEVEL_2 file `0xb8da`, the loader at `0xb9d3`; see `re/savegame.md`).
 //! A file is the level's variable block (whose first byte is the level
-//! number) followed by both parities of each live-object buffer — A player
+//! number) followed by both parities of each live-object buffer -- A player
 //! shots, B enemy shots, C entities, D fire staging, E effects, in that
 //! order in every WAD. Everything is little-endian, no header, no padding.
 //!
@@ -14,7 +14,7 @@
 //! its accumulators, then the ship cluster, then the score cluster, with
 //! each level's own AI state woven around them. The races share every
 //! delta but not their anchors (each race WAD's spawn table has its own
-//! length). [`BlockMap`] carries the per-level anchors; everything else
+//! length). `BlockMap` carries the per-level anchors; everything else
 //! sits at fixed deltas from them, validated field-by-field against real
 //! DOSBox saves of all seven levels (`tests/fixtures/`).
 //!
@@ -35,8 +35,9 @@ use crate::spawns::{Effect, Entity, Shot};
 use openprototype_core::game_state::Handoff;
 use openprototype_core::{GameState, Lives, PerWeapon, SmartBombs, Weapon, WeaponLevel};
 
-/// The variable block's cs base; byte 0 of the file is `cs:0xcb4`, the
-/// level number.
+/// The variable block's cs base.
+///
+/// Byte 0 of the file is `cs:0xcb4`, the level number.
 const BLOCK_BASE: usize = 0xCB4;
 
 /// One shot buffer (A/B/D): a count word and 16-byte records.
@@ -47,9 +48,10 @@ const ENTITY_RECORD_LEN: usize = 0x40;
 /// One effects buffer (E): a count word and 399 16-byte records.
 const EFFECT_BUF_LEN: usize = 0x1900;
 
-/// The per-tick scroll constants each level's block carries beside its
-/// accumulators (ground truth from the fixtures; the tail entries are the
-/// SP background strip rates, matching `background.rs`).
+/// The per-tick scroll constants each level's block carries.
+///
+/// Beside its accumulators. Ground truth from the fixtures; the tail entries
+/// are the SP background strip rates, matching `background.rs`.
 const RACE_SCROLL_CONSTS: &[u32] = &[0x30, 6, 0xA, 0x20];
 const L1_SCROLL_CONSTS: &[u32] = &[0x10, 6, 0xA, 0x10, 0xA, 6, 3, 6, 0xA, 0x10];
 const L3_SCROLL_CONSTS: &[u32] = &[0xA, 0x10, 0x20, 4, 0xA];
@@ -66,8 +68,10 @@ const L7_SCROLL_CONSTS: &[u32] = &[
     0xE3, 0xEA, 0xF1, 0xF8, 0x100,
 ];
 
-/// One level's block geometry: the anchors that differ per WAD. All other
-/// field addresses derive from these at fixed deltas (see the accessors).
+/// One level's block geometry: the anchors that differ per WAD.
+///
+/// All other field addresses derive from these at fixed deltas (see the
+/// accessors).
 struct BlockMap {
     level_byte: u8,
     /// The block's length; the buffers follow it in the file.
@@ -206,8 +210,9 @@ impl BlockMap {
         self.scroll_consts.len()
     }
 
-    /// The scroll list pointer (its value is [`Self::accums_at`]) and the
-    /// count word, right after the cursor.
+    /// The scroll list pointer (its value is [`Self::accums_at`]) and the count word.
+    ///
+    /// Right after the cursor.
     fn list_at(&self) -> usize {
         self.cursor_at + 2
     }
@@ -216,15 +221,18 @@ impl BlockMap {
         self.cursor_at + 6
     }
 
-    /// The ship cluster's base: the fly-in ramp, then x/y, the two trail
-    /// rings, the roll offset, the orb countdown, the respawn flag, lives,
-    /// and invincibility, all at fixed deltas.
+    /// The ship cluster's base.
+    ///
+    /// The fly-in ramp, then x/y, the two trail rings, the roll offset, the orb
+    /// countdown, the respawn flag, lives, and invincibility, all at fixed
+    /// deltas.
     fn ramp_at(&self) -> usize {
         self.accums_at() + self.scroll_count() * 8
     }
 
-    /// The camera pair (`camera * 0x50`, then the camera row). The races
-    /// keep their contact-grace word in front of it.
+    /// The camera pair (`camera * 0x50`, then the camera row).
+    ///
+    /// The races keep their contact-grace word in front of it.
     fn camera50_at(&self) -> usize {
         self.ramp_at() + 0x2A + usize::from(self.has_grace) * 2
     }
@@ -237,8 +245,9 @@ impl BlockMap {
             + 2 * EFFECT_BUF_LEN
     }
 
-    /// The byte offsets of the ten buffer copies after the block, in array
-    /// order A/A B/B C/C D/D E/E (the writers dump them in this order in
+    /// The byte offset of buffer copy `index`, after the block.
+    ///
+    /// Array order A/A B/B C/C D/D E/E (the writers dump them in this order in
     /// every WAD).
     fn buffer_at(&self, index: usize) -> usize {
         let sizes = [
@@ -295,13 +304,14 @@ pub struct SaveGame {
 }
 
 impl SaveGame {
-    /// The carried payload embedded in the snapshot, for code that wants
-    /// the handoff view of it.
+    /// The carried payload embedded in the snapshot.
+    ///
+    /// For code that wants the handoff view of it.
     pub fn handoff(&self) -> Handoff {
         self.state.handoff()
     }
 
-    /// Encode as the original `.psg` for this save's level.
+    /// Encodes as the original `.psg` for this save's level.
     pub fn encode(&self) -> Vec<u8> {
         let map = BlockMap::of(self.level);
         let mut bytes = vec![0u8; map.file_len()];
@@ -338,7 +348,7 @@ impl SaveGame {
         bytes
     }
 
-    /// Decode a `.psg` of any level.
+    /// Decodes a `.psg` of any level.
     pub fn decode(bytes: &[u8]) -> Result<SaveGame> {
         let Some(level) = bytes.first().copied().and_then(BlockMap::level_of_byte) else {
             bail!("not a savegame: unknown level byte");
@@ -449,10 +459,11 @@ impl SaveGame {
         })
     }
 
-    /// Fill the variable block. Unmodeled engine scratch — each level's AI
-    /// tail and prefix extras included — is left at zero; the loaded engine
-    /// state that matters lives in the mapped fields and the entity
-    /// records.
+    /// Fills the variable block.
+    ///
+    /// Unmodeled engine scratch (each level's AI tail and prefix extras
+    /// included) is left at zero; the loaded engine state that matters lives in
+    /// the mapped fields and the entity records.
     fn encode_block(&self, map: &BlockMap, block: &mut [u8]) {
         fn put_word(block: &mut [u8], at: usize, value: u16) {
             block[at - BLOCK_BASE..at - BLOCK_BASE + 2].copy_from_slice(&value.to_le_bytes());
@@ -578,12 +589,13 @@ impl SaveGame {
     }
 }
 
-/// What one saved scroll-accumulator slot drives, for the save/restore
-/// mapping between the list and the port's scroll state.
+/// What one saved scroll-accumulator slot drives.
+///
+/// For the save/restore mapping between the list and the port's scroll state.
 #[derive(Clone, Copy)]
 pub enum ScrollSlot {
     /// A scenery layer's accumulator (the port's layer index; the save
-    /// order does not always match the layer order — L1's three layers
+    /// order does not always match the layer order -- L1's three layers
     /// save as {16, 6, 10} against draw order {6, 10, 16}).
     Scenery(usize),
     /// A free-running accumulator the port does not model: the races' two
@@ -594,17 +606,20 @@ pub enum ScrollSlot {
     Derived,
 }
 
-/// One level's saved accumulator order: the leading slots, then the SP
-/// background strips one-to-one, then any trailing slots (L3 keeps a dead
-/// slot after its strip).
+/// One level's saved accumulator order.
+///
+/// The leading slots, then the SP background strips one-to-one, then any
+/// trailing slots (L3 keeps a dead slot after its strip).
 pub struct ScrollLayout {
     pub leading: &'static [ScrollSlot],
     pub strips: usize,
     pub trailing: &'static [ScrollSlot],
 }
 
-/// The level's saved accumulator order (ground truth: the fixtures' rate
-/// constants matched against the port's layer and strip tables).
+/// The level's saved accumulator order.
+///
+/// Ground truth: the fixtures' rate constants matched against the port's layer
+/// and strip tables.
 pub fn scroll_layout(level: Level) -> ScrollLayout {
     use ScrollSlot::{Derived, Scenery};
 
@@ -637,9 +652,10 @@ pub fn scroll_layout(level: Level) -> ScrollLayout {
     }
 }
 
-/// The per-tick rate of each saved accumulator slot, for the derived
-/// slots and the elapsed-tick estimate (the first strip's rate is at
-/// index `leading.len()`).
+/// The per-tick rate of each saved accumulator slot.
+///
+/// For the derived slots and the elapsed-tick estimate (the first strip's rate
+/// is at index `leading.len()`).
 pub fn scroll_consts(level: Level) -> &'static [u32] {
     BlockMap::of(level).scroll_consts
 }
@@ -653,7 +669,7 @@ fn weapon_index(weapon: Weapon) -> u16 {
     }
 }
 
-/// Write a shot list as a count word plus 16-byte records.
+/// Writes a shot list as a count word plus 16-byte records.
 fn encode_shots(buffer: &mut [u8], shots: &[Shot]) {
     let count = shots.len().min((SHOT_BUF_LEN - 2) / SHOT_RECORD_LEN);
     buffer[0..2].copy_from_slice(&(count as u16).to_le_bytes());
@@ -691,8 +707,9 @@ fn decode_shots(buffer: &[u8]) -> Vec<Shot> {
         .collect()
 }
 
-/// Write the entity list as a count word plus 0x40-byte records (the
-/// entity layout from `re/spawn-consumer.md`).
+/// Writes the entity list as a count word plus 0x40-byte records.
+///
+/// The entity layout is from `re/spawn-consumer.md`.
 fn encode_entities(buffer: &mut [u8], entities: &[Entity], buf_len: usize) {
     let count = entities.len().min((buf_len - 2) / ENTITY_RECORD_LEN);
     buffer[0..2].copy_from_slice(&(count as u16).to_le_bytes());
@@ -770,7 +787,7 @@ fn decode_entities(buffer: &[u8]) -> Vec<Entity> {
         .collect()
 }
 
-/// Write the effects list as a count word plus 16-byte records.
+/// Writes the effects list as a count word plus 16-byte records.
 fn encode_effects(buffer: &mut [u8], effects: &[Effect]) {
     let count = effects.len().min((EFFECT_BUF_LEN - 2) / 16);
     buffer[0..2].copy_from_slice(&(count as u16).to_le_bytes());

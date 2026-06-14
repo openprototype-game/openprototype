@@ -10,8 +10,9 @@ use super::{
 };
 use crate::level::slot::{Cell, Emitter, Fill, Overwrite, PostOp, Step, XStart, rand, step};
 
-/// Per-sprite-type spawn health, read by the original from a 9-entry table
-/// at `cs:[dac5..dad5]`.
+/// Per-sprite-type spawn health.
+///
+/// The original reads it from a 9-entry table at `cs:[dac5..dad5]`.
 const HEALTHS: [u16; 9] = [0x82, 0x47e, 0x15e, 0x64, 0x8c, 0x50, 0xbe, 0xc8, 0x3a98];
 
 /// The health the landmark pickup `Once` emitters hardcode (`0xfa` = 250).
@@ -402,9 +403,10 @@ mod tests {
     use crate::level::prng::EngineRng;
     use crate::level::slot::generate;
 
-    /// FNV-1a over the full 508-record buffer (post-pass included) for the
-    /// validated seed. Locks the layout byte-for-byte against refactors;
-    /// regenerate and re-verify against the capture if it ever changes.
+    /// FNV-1a over the full 508-record buffer (post-pass included), validated seed.
+    ///
+    /// Locks the layout byte-for-byte against refactors; regenerate and re-verify
+    /// against the capture if it ever changes.
     const GOLDEN: &str = "79e4215aa84d2327";
 
     #[test]

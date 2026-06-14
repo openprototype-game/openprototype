@@ -28,8 +28,9 @@ pub struct CueTrack {
 }
 
 impl CueTrack {
-    /// The LBA of the first listed index (the pregap `INDEX 00` if present,
-    /// else `INDEX 01`).
+    /// The LBA of the first listed index.
+    ///
+    /// The pregap `INDEX 00` if present, else `INDEX 01`.
     pub fn first_index_lba(&self) -> Option<u32> {
         self.indices.first().map(|&(_, lba)| lba)
     }
@@ -51,6 +52,9 @@ pub struct Cue {
 }
 
 impl Cue {
+    /// Parses a `.cue` sheet.
+    ///
+    /// Reads the `FILE`, `TRACK`, and `INDEX` directives and ignores the rest.
     pub fn parse(text: &str) -> Result<Self> {
         let mut bin_filename = None;
         let mut tracks: Vec<CueTrack> = Vec::new();
@@ -116,8 +120,9 @@ impl Cue {
     }
 }
 
-/// Pull the quoted filename out of a `FILE "name" BINARY` line, falling back to
-/// the second whitespace token if it is not quoted.
+/// Pulls the quoted filename out of a `FILE "name" BINARY` line.
+///
+/// Falls back to the second whitespace token if it is not quoted.
 fn parse_file_name(line: &str) -> Result<String> {
     if let Some(open) = line.find('"') {
         if let Some(close) = line[open + 1..].find('"') {

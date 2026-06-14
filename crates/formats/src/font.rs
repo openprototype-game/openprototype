@@ -26,8 +26,9 @@ pub struct Font {
 }
 
 impl Font {
-    /// Decode a `.RAW` glyph sheet. Width is fixed at 320; height comes from
-    /// the byte count.
+    /// Decodes a `.RAW` glyph sheet.
+    ///
+    /// Width is fixed at 320; height comes from the byte count.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         if bytes.is_empty() || !bytes.len().is_multiple_of(SHEET_WIDTH as usize) {
             return Err(DecodeError::SizeMismatch {
@@ -53,17 +54,19 @@ impl Font {
         self.sheet.pixels[(source_y * SHEET_WIDTH + source_x) as usize]
     }
 
-    /// Composite `text` onto `target` at (`x`, `y`), advancing 16 px per
-    /// character. Glyph pixels of index 0 are transparent; out-of-range
-    /// characters and out-of-bounds pixels are skipped.
+    /// Composites `text` onto `target` at (`x`, `y`), 16 px per character.
+    ///
+    /// Glyph pixels of index 0 are transparent; out-of-range characters and
+    /// out-of-bounds pixels are skipped.
     pub fn draw_into(&self, target: &mut IndexedImage, x: i32, y: i32, text: &str) {
         self.draw(target, x, y, text, None);
     }
 
-    /// Composite like [`Font::draw_into`], remapping every glyph pixel through
-    /// `map` first. The level WADs draw dim text this way (their menu blitter
-    /// at LEVEL_2 file `0xb4bb` routes the glyph bytes through the playfield's
-    /// brightness table).
+    /// Composites like [`Font::draw_into`], but remaps each glyph pixel first.
+    ///
+    /// Each glyph pixel is routed through `map`. The level WADs draw dim text
+    /// this way (their menu blitter at LEVEL_2 file `0xb4bb` routes the glyph
+    /// bytes through the playfield's brightness table).
     pub fn draw_into_mapped(
         &self,
         target: &mut IndexedImage,

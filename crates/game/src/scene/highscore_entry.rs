@@ -5,10 +5,11 @@
 //! at y 82 (both `FONT.RAW`, full-width padded at x 0), and the 13-character
 //! name field at x 48, y 110, dot-filled. Lowercase letters and space type
 //! (stored uppercased); Shift/CapsLock letters type nothing, because the
-//! key filter rejects 0x41..0x60 (file 0x4197..0x419f). Backspace edits,
-//! and Enter or Esc both confirm — the original has no cancel. The entry then inserts into the table (just below every
-//! score it doesn't beat), the table persists, and the flow falls into the
-//! high-score view, which shows the new table and returns to the menu.
+//! key filter rejects 0x41..0x60 (file 0x4197..0x419f). Backspace edits, and
+//! Enter or Esc both confirm; the original has no cancel. The entry then inserts
+//! into the table (just below every score it doesn't beat), the table persists,
+//! and the flow falls into the high-score view, which shows the new table and
+//! returns to the menu.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -22,13 +23,16 @@ use crate::screen::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::{Key, KeyEvent};
 
-/// The two headline strings, exactly as `START.EXE` stores them (`cs:0x562`
-/// and `cs:0x577`; the `=` is a glyph in the sheet, not a typo).
+/// The two headline strings, exactly as `START.EXE` stores them.
+///
+/// At `cs:0x562` and `cs:0x577`; the `=` is a glyph in the sheet, not a typo.
 const CONGRATULATIONS: &str = "  CONGRATULATIONS=  ";
 const ENTER_YOUR_NAME: &str = "  ENTER YOUR NAME   ";
 
-/// Screen positions: the headlines at x 0, y 65/82 (`di` 0x5140/0x6680), the
-/// name field at x 48, y 110 (`di` 0x89b0).
+/// Screen positions.
+///
+/// The headlines at x 0, y 65/82 (`di` 0x5140/0x6680), the name field at x 48,
+/// y 110 (`di` 0x89b0).
 const HEADLINE_Y: i32 = 65;
 const PROMPT_Y: i32 = 82;
 const NAME_X: i32 = 48;
@@ -37,6 +41,7 @@ const NAME_Y: i32 = 110;
 /// The name buffer holds up to 13 characters (`cs:0x5cf`), dot-padded.
 const NAME_CAPACITY: usize = 13;
 
+/// The high-score name-entry scene.
 pub struct HighscoreEntry {
     assets: Rc<MenuAssets>,
     store: Rc<HighscoreStore>,
@@ -46,6 +51,7 @@ pub struct HighscoreEntry {
 }
 
 impl HighscoreEntry {
+    /// Builds the entry scene for a qualifying `score`.
     pub fn new(assets: Rc<MenuAssets>, store: Rc<HighscoreStore>, score: u32) -> Self {
         let framebuffer = Framebuffer::new(
             Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT),

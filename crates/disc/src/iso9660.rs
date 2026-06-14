@@ -32,9 +32,10 @@ pub struct DirRecord {
     pub is_dir: bool,
 }
 
-/// Read and verify the PVD, then return every file on the volume (recursing one
-/// level into `FLI/`, whose children are prefixed `FLI/`). Directories
-/// themselves are not included.
+/// Reads and verifies the PVD, then returns every file on the volume.
+///
+/// Recurses one level into `FLI/`, whose children are prefixed `FLI/`.
+/// Directories themselves are not included.
 pub fn list_files(reader: &SectorReader) -> Result<Vec<DirRecord>> {
     let pvd = reader.read_file(PVD_LBA, USER_DATA as u32)?;
     if pvd.get(1..6) != Some(b"CD001") {
@@ -75,8 +76,9 @@ pub fn list_files(reader: &SectorReader) -> Result<Vec<DirRecord>> {
     Ok(files)
 }
 
-/// Walk a directory extent's records, skipping `.`/`..`. Pure over the bytes so
-/// it can be tested without an image.
+/// Walks a directory extent's records, skipping `.`/`..`.
+///
+/// Pure over the bytes so it can be tested without an image.
 pub fn walk_dir(bytes: &[u8]) -> Vec<DirRecord> {
     let mut entries = Vec::new();
     let mut pos = 0;
@@ -101,8 +103,9 @@ pub fn walk_dir(bytes: &[u8]) -> Vec<DirRecord> {
     entries
 }
 
-/// Parse a single directory record, returning `None` for `.`/`..` or malformed
-/// records.
+/// Parses a single directory record.
+///
+/// Returns `None` for `.`/`..` or malformed records.
 fn parse_record(record: &[u8]) -> Option<DirRecord> {
     let name_len = *record.get(NAME_LEN)? as usize;
     let raw_name = record.get(NAME..NAME + name_len)?;

@@ -2,9 +2,9 @@
 //!
 //! Every generated level scatters its enemy/pickup spawns with one engine RNG:
 //! an additive lagged-Fibonacci generator over a word table that is itself
-//! seeded by a 16-bit linear congruential generator. The same routine drives all four
-//! generated WADs (relinked per level). This mirrors the disassembly in
-//! `reference/formats/level-layout.md` 1:1 — the lag pointers stay as byte
+//! seeded by a 16-bit linear congruential generator. The same routine drives
+//! all four generated WADs (relinked per level). This mirrors the disassembly
+//! in `reference/formats/level-layout.md` 1:1: the lag pointers stay as byte
 //! offsets into the word table, not tidied-up indices, so a transcription error
 //! can't hide behind a cleaner form.
 
@@ -122,13 +122,13 @@ impl EngineRng {
     }
 }
 
-/// The engine's wall-clock seed: `(sec << 8 | centi) + (hour << 8 | min)`, the
-/// DOS get-time formula the original feeds [`EngineRng::new`] at level start.
+/// The engine's wall-clock seed: `(sec << 8 | centi) + (hour << 8 | min)`.
 ///
-/// The components come from the system clock in UTC (std has no local-time
-/// access); a fixed hour/minute offset against DOS's local clock shifts the
-/// seed but not its randomness. Centiseconds keep the modern clock's full
-/// precision instead of re-quantizing to the 18.2 Hz timer.
+/// The DOS get-time formula the original feeds [`EngineRng::new`] at level
+/// start. The components come from the system clock in UTC (std has no
+/// local-time access); a fixed hour/minute offset against DOS's local clock
+/// shifts the seed but not its randomness. Centiseconds keep the modern clock's
+/// full precision instead of re-quantizing to the 18.2 Hz timer.
 pub fn clock_seed() -> u16 {
     let since_epoch = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

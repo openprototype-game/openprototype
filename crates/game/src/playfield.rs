@@ -1,5 +1,7 @@
-//! The level screen's geometry: how the Mode X 320x160 frame splits into the
-//! visible playfield window and the panel band below it.
+//! The level screen's geometry.
+//!
+//! How the Mode X 320x160 frame splits into the visible playfield window and the
+//! panel band below it.
 //!
 //! These are facts about the original's display pipeline, shared by every
 //! renderer that draws into the level frame (the parallax background, the

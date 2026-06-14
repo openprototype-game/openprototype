@@ -13,17 +13,18 @@ const MAX_DAC: u8 = 0x3f;
 const PALETTE_LEN: usize = 768;
 
 /// The bytes a palette block opens with: color 0 is black, color 1 is white.
-/// A 30-step gray ramp follows, but black-then-white already pins the block in
-/// exactly one place per WAD.
+///
+/// A 30-step gray ramp follows, but black-then-white already pins the block
+/// in exactly one place per WAD.
 const SIGNATURE: [u8; 6] = [0x00, 0x00, 0x00, MAX_DAC, MAX_DAC, MAX_DAC];
 
 /// Extracts the level's embedded 256-color palette from a `.WAD`.
 ///
 /// The palette is a raw 768-byte block of 6-bit VGA DAC values (see
 /// [`Palette::from_vga_6bit`]) compiled in at a per-level offset that follows no
-/// rule, so it is located by signature: the block opens black-then-white
-/// ([`SIGNATURE`]) and every byte is a valid DAC value (`<= 0x3f`). That matches
-/// in exactly one place per WAD. See `reference/formats/wad.md`.
+/// rule, so it is located by signature: the block opens black-then-white and
+/// every byte is a valid DAC value (`<= 0x3f`). That matches in exactly one
+/// place per WAD. See `reference/formats/wad.md`.
 ///
 /// # Errors
 ///

@@ -38,54 +38,67 @@ use openprototype_core::game_state::{Handoff, HitOutcome, Severity};
 use openprototype_core::input::{Key, KeyEvent};
 use openprototype_core::{ActiveWeapon, GameState, Weapon, WeaponLevel};
 
-/// The level's frame: hand-programmed Mode X 320x160 (480 scanlines, each row
-/// tripled to give 160 logical rows), shown on a 4:3 CRT so pixels are 1.5x
-/// taller than wide. The compositor fits this 320x160 buffer into 4:3, which
-/// reproduces that stretch. Playfield is rows 0..128, the panel rows 128..160.
+/// The level's frame: hand-programmed Mode X 320x160.
+///
+/// 480 scanlines, each row tripled to give 160 logical rows, shown on a 4:3 CRT
+/// so pixels are 1.5x taller than wide. The compositor fits this 320x160 buffer
+/// into 4:3, which reproduces that stretch. Playfield is rows 0..128, the panel
+/// rows 128..160.
 const SCREEN: Dimensions = Dimensions {
     width: 320,
     height: 160,
 };
 
-/// The game's logic tick. The original is vsync-locked: it calibrates the PIT
-/// against the VGA vertical retrace (L1 file `0x93c4`; START.EXE's twin at
-/// file `0x1160`), so its tick is the display refresh, ~60Hz for the
-/// 480-line mode (confirmed by stopwatch against DOSBox). The parallax
-/// scroll and the pod animation both advance on this tick.
+/// The game's logic tick.
+///
+/// The original is vsync-locked: it calibrates the PIT against the VGA vertical
+/// retrace (L1 file `0x93c4`; START.EXE's twin at file `0x1160`), so its tick is
+/// the display refresh, ~60Hz for the 480-line mode (confirmed by stopwatch
+/// against DOSBox). The parallax scroll and the pod animation both advance on
+/// this tick.
 const TICK: Duration = Duration::from_nanos(1_000_000_000 / 60);
 
-/// Ticks the weapon pod holds on each open/settle frame: the animator steps
-/// its phase on every 6th tick (the divider on `cs:0x269b`, L1 file `0xab4a`,
-/// byte-identical in all seven WADs).
+/// Ticks the weapon pod holds on each open/settle frame.
+///
+/// The animator steps its phase on every 6th tick (the divider on `cs:0x269b`,
+/// L1 file `0xab4a`, byte-identical in all seven WADs).
 const POD_FRAME_TICKS: u32 = 6;
 
-/// The overlay's x. Pinned against footage; it lands on the weapon pod's column
-/// (the pod draws at screen x 252, `di` 0x3f), so the cut-off weapon top sits
-/// directly above its pod. Still nudgeable with A/D.
+/// The overlay's x.
+///
+/// Pinned against footage; it lands on the weapon pod's column (the pod draws at
+/// screen x 252, `di` 0x3f), so the cut-off weapon top sits directly above its
+/// pod. Still nudgeable with A/D.
 const OVERLAY_X: i32 = 251;
 
-/// The overlay's top, as rows above [`playfield::PANEL_TOP`]. Pinned: `-7` is the
-/// overlay's own height, so its bottom edge meets the panel's top row and the
-/// cut-off top extends up from there. Still nudgeable with W/S.
+/// The overlay's top, as rows above [`playfield::PANEL_TOP`].
+///
+/// Pinned: `-7` is the overlay's own height, so its bottom edge meets the
+/// panel's top row and the cut-off top extends up from there. Still nudgeable
+/// with W/S.
 const OVERLAY_OFFSET_Y: i32 = -7;
 
-/// The ship death sequence's length: 23 explosion frames, 4 ticks each
-/// (`cs:0x8f5f` stepping by 8 to `0xb8` on a 4-tick divider, file `0xb354`).
+/// The ship death sequence's length: 23 explosion frames, 4 ticks each.
+///
+/// `cs:0x8f5f` stepping by 8 to `0xb8` on a 4-tick divider, file `0xb354`.
 const DEATH_TICKS: u32 = 92;
 
-/// Where the GET READY text draws: the original blits to VRAM offset `0xfb8`
-/// on the frozen page = row 50, byte 24 of the 80-byte Mode X row = x 96.
+/// Where the GET READY text draws.
+///
+/// The original blits to VRAM offset `0xfb8` on the frozen page = row 50, byte
+/// 24 of the 80-byte Mode X row = x 96.
 const GET_READY_POS: (i32, i32) = (96, 50);
 
 /// The GET READY string as the WAD stores it (`cs:0x6e7`, `$`-terminated).
 const GET_READY_TEXT: &str = "GET READY..";
 
-/// The freeze pulse's palette entries and their full-brightness colors
-/// (6-bit DAC; RGB tables at L2 file `0x7832`, byte-identical in every
-/// WAD). In FONT.RAW these four indices appear only in the `>` glyph — the
-/// pause menu's cursor, the one thing on a frozen screen that visibly
-/// pulses. The level palettes bake placeholders at `0xd0..0xd2` (magenta
-/// on the races); this pulse is their only writer.
+/// The freeze pulse's palette entries and their full-brightness colors.
+///
+/// 6-bit DAC; RGB tables at L2 file `0x7832`, byte-identical in every WAD. In
+/// FONT.RAW these four indices appear only in the `>` glyph -- the pause menu's
+/// cursor, the one thing on a frozen screen that visibly pulses. The level
+/// palettes bake placeholders at `0xd0..0xd2` (magenta on the races); this pulse
+/// is their only writer.
 const PULSE_ENTRIES: [(usize, [u8; 3]); 4] = [
     (0xd0, [0x3f, 0x22, 0x08]),
     (0xd1, [0x3e, 0x04, 0x00]),
@@ -93,13 +106,15 @@ const PULSE_ENTRIES: [(usize, [u8; 3]); 4] = [
     (0xff, [0x3f, 0x3f, 0x3f]),
 ];
 
-/// The pulse's shared dark endpoint (every entry lerps toward the same
-/// near-black blue).
+/// The pulse's shared dark endpoint.
+///
+/// Every entry lerps toward the same near-black blue.
 const PULSE_SOURCE: [u8; 3] = [0x00, 0x00, 0x20];
 
-/// The pulse level's bounce bounds and tick step (L2 stepper file `0x8f98`:
-/// `v` ping-pongs `0x10..=0x40` by 2, endpoints held one tick each, period
-/// 48 ticks).
+/// The pulse level's bounce bounds and tick step.
+///
+/// L2 stepper file `0x8f98`: `v` ping-pongs `0x10..=0x40` by 2, endpoints held
+/// one tick each, period 48 ticks.
 const PULSE_MIN: i32 = 0x10;
 const PULSE_MAX: i32 = 0x40;
 const PULSE_STEP: i32 = 2;
@@ -107,22 +122,24 @@ const PULSE_STEP: i32 = 2;
 /// The pulse level the WAD bakes at level entry, headed down.
 const PULSE_START: i32 = 0x30;
 
-/// The level's run state (the original's freeze and dying globals,
-/// `cs:0x29f7` and `cs:0x46b2`).
 /// Every unfreeze re-arms this many ticks before Esc can reopen the menu.
 const ESC_DEBOUNCE_TICKS: u32 = 0x14;
 
-/// The ERIK cheat's letters, and the typing window per letter (one second;
-/// the sequence-instead-of-chord shape is a documented deviation, see the
-/// `erik_progress` field).
+/// The ERIK cheat's letters, and the typing window per letter.
+///
+/// One second per letter; the sequence-instead-of-chord shape is a documented
+/// deviation, see the `erik_progress` field.
 const ERIK: [char; 4] = ['e', 'r', 'i', 'k'];
 const ERIK_LETTER_TICKS: u32 = 60;
 
-/// What the cheat grants, every time the sequence completes: the original
-/// writes 0x7d00 invincibility ticks and fills all four weapon bars to 0x20
-/// (charge level 4) -- L1 file 0xb2b0..0xb2d2.
+/// What the cheat grants, every time the sequence completes.
+///
+/// The original writes 0x7d00 invincibility ticks and fills all four weapon bars
+/// to 0x20 (charge level 4) -- L1 file 0xb2b0..0xb2d2.
 const ERIK_INVINCIBILITY: u16 = 0x7D00;
 
+/// The level's run state (the original's freeze and dying globals, `cs:0x29f7`
+/// and `cs:0x46b2`).
 enum Flow {
     /// Frozen on the last composed frame with GET READY overlaid, waiting for
     /// fire released-then-pressed (level start and after each death).
@@ -140,6 +157,7 @@ enum Flow {
     GameOver,
 }
 
+/// The in-game level scene: the running level and its dev controls.
 pub struct LevelScene {
     assets: Rc<LevelAssets>,
     /// Which level this is, for the end-of-level chain to the next.
@@ -239,6 +257,7 @@ pub struct LevelScene {
 }
 
 impl LevelScene {
+    /// Builds the level scene at GET READY, fast-forwarding `skip_ticks`.
     pub fn new(assets: Rc<LevelAssets>, level: Level, handoff: Handoff, skip_ticks: u32) -> Self {
         // The level start runs the original's spawn handler on its respawn
         // path (the handoff flag -- `cs:0xb12b` in the race WADs, `cs:0xcb88`
@@ -341,7 +360,7 @@ impl LevelScene {
         scene
     }
 
-    /// Rebuild a level mid-action from a savegame snapshot.
+    /// Rebuilds a level mid-action from a savegame snapshot.
     ///
     /// Mirrors the original's load path: the spawn handler's entry
     /// decrement and spawn shield are skipped (the handoff flag is nonzero
@@ -352,7 +371,7 @@ impl LevelScene {
     /// The scroll accumulators restore through the level's saved slot
     /// order ([`crate::savegame::scroll_layout`]): the scenery layers and
     /// the SP background strips one-to-one. The derived slots (the races'
-    /// star planes, the dead layer slots) have no port state to restore —
+    /// star planes, the dead layer slots) have no port state to restore --
     /// the original cannot restore the star scatter either.
     pub fn from_save(assets: Rc<LevelAssets>, save: crate::savegame::SaveGame) -> Self {
         let mut scene = Self::new(assets, save.level, save.handoff(), 0);
@@ -407,8 +426,9 @@ impl LevelScene {
         scene
     }
 
-    /// Snapshot the running level as a savegame, the inverse of
-    /// [`LevelScene::from_save`].
+    /// Snapshots the running level as a savegame.
+    ///
+    /// The inverse of [`LevelScene::from_save`].
     ///
     /// The schedule stores the head record's delay decayed to the live
     /// countdown, the way the original's ISR-mutated table reads when the
@@ -491,7 +511,7 @@ impl LevelScene {
         }
     }
 
-    /// Route a key press into the open menu and carry out what it asks for.
+    /// Routes a key press into the open menu and carries out what it asks for.
     fn menu_key(&mut self, key: Key, output: &mut SceneOutput) {
         let Some(menu) = &mut self.menu else {
             return;
@@ -562,7 +582,7 @@ impl LevelScene {
         }
     }
 
-    /// Write the running level into a slot.
+    /// Writes the running level into a slot.
     fn menu_save(&mut self, slot: usize) {
         let save = self.to_save();
 
@@ -571,10 +591,12 @@ impl LevelScene {
         }
     }
 
-    /// Load a slot: in place when the save is for this level (the world
-    /// swaps under the open menu, the way the original's same-WAD load
-    /// does), through the launcher otherwise (the original bounces back to
-    /// START.EXE with the corrected level byte).
+    /// Loads a slot, in place or through the launcher.
+    ///
+    /// In place when the save is for this level (the world swaps under the open
+    /// menu, the way the original's same-WAD load does), through the launcher
+    /// otherwise (the original bounces back to START.EXE with the corrected level
+    /// byte).
     fn menu_load(&mut self, slot: usize, output: &mut SceneOutput) {
         let Some(menu) = &self.menu else {
             return;
@@ -604,8 +626,9 @@ impl LevelScene {
         }
     }
 
-    /// Dev fast-forward (`--skip`): pre-simulates `ticks` of the level with
-    /// the ship parked and shielded, then leaves the respawn shield up so the
+    /// Dev fast-forward (`--skip`): pre-simulates `ticks` of the level.
+    ///
+    /// The ship is parked and shielded, then the respawn shield is left up so the
     /// player can orient. Sounds from the skipped span are dropped.
     ///
     /// Gate fights can't resolve with a parked ship, so the skip clears them:
@@ -675,15 +698,18 @@ impl LevelScene {
         };
     }
 
-    /// Cycle to the next weapon. The pod replays when the firing weapon
-    /// actually resolves to it, not on the keypress (see `advance`).
+    /// Cycles to the next weapon.
+    ///
+    /// The pod replays when the firing weapon actually resolves to it, not on the
+    /// keypress (see `advance`).
     fn cycle_weapon(&mut self) {
         self.state.cycle_weapon();
     }
 
-    /// One typed letter toward the ERIK cheat (only while running, like the
-    /// original's checker, which is skipped under the freeze flag). A
-    /// completed sequence grants what L1 file 0xb2b0 writes: 0x7d00
+    /// One typed letter toward the ERIK cheat.
+    ///
+    /// Only while running, like the original's checker, which is skipped under the
+    /// freeze flag. A completed sequence grants what L1 file 0xb2b0 writes: 0x7d00
     /// invincibility ticks and all four weapon bars at full charge.
     fn erik_letter(&mut self, letter: char) {
         if !matches!(self.flow, Flow::Running) {
@@ -713,7 +739,7 @@ impl LevelScene {
         }
     }
 
-    /// Report the selected weapon's charge after a dev-key adjustment.
+    /// Reports the selected weapon's charge after a dev-key adjustment.
     fn report_level(&self) {
         eprintln!(
             "{:?} level = {}",
@@ -722,7 +748,7 @@ impl LevelScene {
         );
     }
 
-    /// Move the overlay by `(dx, dy)` and report its position, to pin it live.
+    /// Moves the overlay by `(dx, dy)` and reports its position, to pin it live.
     fn nudge_overlay(&mut self, dx: i32, dy: i32) {
         self.overlay_x += dx;
         self.overlay_offset_y += dy;
@@ -732,17 +758,16 @@ impl LevelScene {
         );
     }
 
-    /// Start the music and loop it on the track-length countdown, like the
-    /// original's timer ISR.
+    /// Starts the music and loops it on the track-length countdown.
     ///
-    /// Whatever was playing stops first: START.EXE calls into the resident
-    /// CD driver before each level launch (the chain also stops it before
-    /// the transition movie, START.EXE file 0x4df8), so a directly entered
-    /// level never inherits a stale track. The start itself waits for the
-    /// first GET READY dismissal: the
-    /// original bakes a pending-start flag (`cs:0x736c`) that the first
-    /// unfreeze consumes (file `0x9e65`), so the opening GET READY is silent
-    /// and respawn freezes don't restart the track.
+    /// Like the original's timer ISR. Whatever was playing stops first: START.EXE
+    /// calls into the resident CD driver before each level launch (the chain also
+    /// stops it before the transition movie, START.EXE file 0x4df8), so a
+    /// directly entered level never inherits a stale track. The start itself
+    /// waits for the first GET READY dismissal: the original bakes a
+    /// pending-start flag (`cs:0x736c`) that the first unfreeze consumes (file
+    /// `0x9e65`), so the opening GET READY is silent and respawn freezes don't
+    /// restart the track.
     fn advance_music(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         if !self.music_started {
             if !self.music_stopped {
@@ -775,9 +800,10 @@ impl LevelScene {
         }
     }
 
-    /// Advance the ship, the parallax scroll, the spawn clock, and the pod
-    /// animation by `ticks`, collecting the fire pass's sound triggers into
-    /// `audio`.
+    /// Advances the world by `ticks`, collecting the fire pass's sound triggers.
+    ///
+    /// Advances the ship, the parallax scroll, the spawn clock, and the pod
+    /// animation; sound triggers go into `audio`.
     fn advance(&mut self, ticks: u32, audio: &mut Vec<AudioCommand>) {
         for _ in 0..ticks {
             // The wear-off fade reads the timer before the decrement (the
@@ -1115,7 +1141,7 @@ impl LevelScene {
         }
     }
 
-    /// Composite the parallax background, the weapon overlay, the HUD, and the pod.
+    /// Composites the parallax background, the weapon overlay, the HUD, and the pod.
     ///
     /// The overlay is a playfield sprite, drawn before the panel so the opaque
     /// `PANEL.RAW` masks its lower rows. While the pod opens its slide keeps it
@@ -1266,11 +1292,12 @@ impl LevelScene {
         }
     }
 
-    /// One tick of the freeze pulse (the stepper every WAD's per-tick input
-    /// block falls into while frozen, L1 file `0xb42d`; DAC upload in the
-    /// frozen ISR, L1 `0x9482`): lerp the four cursor entries between
-    /// [`PULSE_SOURCE`] and their full colors by `v / 0x40`, then bounce
-    /// `v`. The lerp reads `v` before the step, and the last
+    /// One tick of the freeze pulse.
+    ///
+    /// The stepper every WAD's per-tick input block falls into while frozen (L1
+    /// file `0xb42d`; DAC upload in the frozen ISR, L1 `0x9482`): lerp the four
+    /// cursor entries between [`PULSE_SOURCE`] and their full colors by `v /
+    /// 0x40`, then bounce `v`. The lerp reads `v` before the step, and the last
     /// blend persists after unfreeze (nothing restores the entries; the WAD
     /// palette only bakes placeholders there).
     ///
@@ -1318,12 +1345,12 @@ impl LevelScene {
         }
     }
 
-    /// The GET READY freeze darkens the playfield but not the panel: every
-    /// playfield pixel is remapped through the level's third-brightness
-    /// table before the text draws over it. Engine-common: the shooters
-    /// remap at the frozen draw (L1 file `0xe60f`), the races inside their
-    /// freeze capture (L2 file `0xb2fa`, table built at `0xb0dc` with the
-    /// same divisor 3).
+    /// The GET READY freeze darkens the playfield but not the panel.
+    ///
+    /// Every playfield pixel is remapped through the level's third-brightness
+    /// table before the text draws over it. Engine-common: the shooters remap at
+    /// the frozen draw (L1 file `0xe60f`), the races inside their freeze capture
+    /// (L2 file `0xb2fa`, table built at `0xb0dc` with the same divisor 3).
     fn dim_playfield(&mut self) {
         let playfield_pixels = (SCREEN.width * playfield::PANEL_TOP as u32) as usize;
 
@@ -1332,10 +1359,12 @@ impl LevelScene {
         }
     }
 
-    /// Black out everything outside the playfield window, standing in for the
-    /// original's compose-buffer blit: it copies only the window's 72 bytes
-    /// per row to VGA (see [`playfield::LEFT`]), so the VGA side bars are
-    /// never written and whatever the layers bled past the window is dropped.
+    /// Blacks out everything outside the playfield window.
+    ///
+    /// Stands in for the original's compose-buffer blit: it copies only the
+    /// window's 72 bytes per row to VGA (see [`playfield::LEFT`]), so the VGA side
+    /// bars are never written and whatever the layers bled past the window is
+    /// dropped.
     fn mask_playfield_margins(&mut self) {
         let width = self.frame.image.size.width as usize;
         let left = playfield::LEFT as usize;
@@ -1587,8 +1616,10 @@ mod tests {
         scene
     }
 
-    /// A running scene with every weapon charged, for the weapon-cycling and
-    /// pod-replay tests (a fresh start carries only the bare chaingun).
+    /// A running scene with every weapon charged.
+    ///
+    /// For the weapon-cycling and pod-replay tests (a fresh start carries only
+    /// the bare chaingun).
     fn charged_scene() -> LevelScene {
         let mut scene = test_scene();
         scene.state.weapons = PerWeapon::splat(WeaponLevel::new(WeaponLevel::MAX));

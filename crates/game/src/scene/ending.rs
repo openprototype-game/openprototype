@@ -4,7 +4,7 @@
 //! `0x4e06`), after `LAVA.FLI`: the CD stops, the screen fades the
 //! `PVESSEL.RAW` backdrop in from black over 90 steps of one tick each
 //! (the palette interpolation at file `0x30c4`, target palette at image
-//! offset `0x5130` — the menu palette), then twelve 20-character lines
+//! offset `0x5130`, the menu palette), then twelve 20-character lines
 //! (the string table at vaddr `0x5dd`, rows 16 pixels apart from y 4)
 //! land one by one. A key then starts the menu theme and runs the same
 //! high-score check as the game-over flow. During the fade and the text
@@ -17,7 +17,7 @@
 //! with the high-score zoom; see [`crate::zoom`]): per line the screen is
 //! snapshotted, the line is drawn at its final position on a transparent
 //! page, and the page zooms out from 25x over the snapshot. Blank records
-//! run the full zoom with no visual change — deliberate pauses. The original
+//! run the full zoom with no visual change: deliberate pauses. The original
 //! leaves the steps unpaced (no tick wait, CPU-bound); one tick per step
 //! approximates real hardware here.
 
@@ -38,9 +38,10 @@ const TICK: Duration = Duration::from_micros(14_286);
 /// Palette fade-in steps (`dl = 0x5a` at the call site, one tick each).
 const FADE_STEPS: u32 = 90;
 
-/// The twelve ending lines (vaddr `0x5dd`, 22-byte records skipping the
-/// leading marker byte), pre-padded to center in the 20-column screen.
-/// The font maps `=` to the exclamation mark, as everywhere else.
+/// The twelve ending lines, pre-padded to center in the 20-column screen.
+///
+/// From vaddr `0x5dd` (22-byte records, skipping the leading marker byte). The
+/// font maps `=` to the exclamation mark, as everywhere else.
 const LINES: [&str; 12] = [
     "                    ",
     " WITH BLAZING GUNS  ",
@@ -80,6 +81,7 @@ enum Phase {
     AwaitKey,
 }
 
+/// The ending scene: backdrop fade-in, then the zoomed text lines.
 pub struct EndingScene {
     assets: std::rc::Rc<EndingAssets>,
     phase: Phase,
@@ -96,6 +98,7 @@ pub struct EndingScene {
 }
 
 impl EndingScene {
+    /// Builds the ending scene with the backdrop loaded, fade not started.
     pub fn new(assets: std::rc::Rc<EndingAssets>, next: SceneId) -> Self {
         let mut framebuffer = Framebuffer::new(
             assets.backdrop.size,
@@ -132,9 +135,11 @@ impl EndingScene {
         palette
     }
 
-    /// Open a line's zoom: snapshot the screen and draw the line at its
-    /// final position on a transparent page (the original copies VGA into
-    /// the bg buffer and zero-fills the src buffer before each line).
+    /// Opens a line's zoom.
+    ///
+    /// Snapshots the screen and draws the line at its final position on a
+    /// transparent page (the original copies VGA into the bg buffer and
+    /// zero-fills the src buffer before each line).
     fn start_line(&self, line: usize) -> Phase {
         let bg = self.framebuffer.image.clone();
         let mut src = IndexedImage::new(

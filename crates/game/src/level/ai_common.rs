@@ -15,8 +15,10 @@ pub(crate) fn word(wad: &[u8], at: usize) -> i32 {
     i32::from(i16::from_le_bytes([wad[at], wad[at + 1]]))
 }
 
-/// Pickup drifters (the levels' funcs 0-3): drift left at 1.25 px, period-4
-/// cycle `rest -> rest+0x1e -> +8 steps -> last -> rest`.
+/// Pickup drifters (the levels' funcs 0-3).
+///
+/// Drift left at 1.25 px, period-4 cycle `rest -> rest+0x1e -> +8 steps ->
+/// last -> rest`.
 pub(crate) fn pickup(entity: &mut Entity, rest: u16, last: u16) {
     entity.x -= 0x14;
     entity.tick += 1;

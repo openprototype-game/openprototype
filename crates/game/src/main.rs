@@ -62,6 +62,7 @@ mod desktop {
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
+    ///
     /// `RUST_LOG` overrides this entirely when set.
     const DEFAULT_LOG: &str = "warn,openprototype=info,openprototype_backend=info,\
         openprototype_core=info,prototype_disc=info,prototype_formats=info";
@@ -73,9 +74,10 @@ mod desktop {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     }
 
-    /// Check the data track against the build manifest before touching any
-    /// baked-in offsets, so a wrong or corrupted image fails with a per-file
-    /// report instead of a decoder error.
+    /// Checks the data track against the build manifest before using any offsets.
+    ///
+    /// A wrong or corrupted image fails with a per-file report instead of a
+    /// decoder error.
     fn verify_disc(disc: &DiscImage) -> Result<()> {
         let mismatches = manifest::verify(disc).context("verifying the disc image")?;
 

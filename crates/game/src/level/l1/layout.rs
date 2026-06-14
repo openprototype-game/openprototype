@@ -384,9 +384,10 @@ mod tests {
     use crate::level::prng::EngineRng;
     use crate::level::slot::generate;
 
-    /// FNV-1a over the full 446-record buffer for the validated seed. Locks the
-    /// layout byte-for-byte against refactors; regenerate and re-verify against
-    /// the capture (not just rebless) if it ever changes.
+    /// FNV-1a over the full 446-record buffer for the validated seed.
+    ///
+    /// Locks the layout byte-for-byte against refactors; regenerate and re-verify
+    /// against the capture (not just rebless) if it ever changes.
     const GOLDEN: &str = "9538acce1f4be2ae";
 
     #[test]

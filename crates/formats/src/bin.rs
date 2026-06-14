@@ -20,12 +20,15 @@ use std::collections::BTreeSet;
 use crate::error::{DecodeError, Result};
 use crate::image::Dimensions;
 
-/// File offset of `OUT.BIN`'s sprite catalog in `LEVEL_1.WAD` (the banked
-/// blitter loads its `gs` from segment `0x0F7F` = paragraph for file
-/// `0xf9f0`).
+/// File offset of `OUT.BIN`'s sprite catalog in `LEVEL_1.WAD`.
+///
+/// The banked blitter loads its `gs` from segment `0x0F7F` (the paragraph for
+/// file `0xf9f0`).
 pub const OUT_BIN_CATALOG: usize = 0xf9f0;
-/// File offset of the player-ship frame catalog in `LEVEL_1.WAD` (reached
-/// cs-relative: `mov $0x43ea, %di` then cells at `di + 2` = file `0x6ddc`).
+/// File offset of the player-ship frame catalog in `LEVEL_1.WAD`.
+///
+/// Reached cs-relative: `mov $0x43ea, %di`, then cells at `di + 2` (file
+/// `0x6ddc`).
 pub const PTURN1_CATALOG: usize = 0x6ddc;
 
 /// Mode X plane-buffer row stride: 320 columns / 4 planes.
@@ -34,8 +37,9 @@ const PLANE_STRIDE: i64 = 80;
 const EMS_PAGE: usize = 0x4000;
 /// Each draw cell is 32 screen columns wide.
 const CELL_WIDTH: i64 = 32;
-/// A clip-header's first word is a small forward offset; larger values mean the
-/// plane pointer is a direct subroutine instead.
+/// A clip-header's first word is a small forward offset.
+///
+/// Larger values mean the plane pointer is a direct subroutine instead.
 const MAX_HEADER_OFFSET: usize = 0x800;
 
 /// One decoded sprite as a paletted bitmap with transparency.
@@ -86,7 +90,7 @@ enum Step {
     Done,
 }
 
-/// Step over the instruction at `index`, emitting any pixel writes into `out`.
+/// Steps over the instruction at `index`, emitting any pixel writes into `out`.
 ///
 /// `si`/`ax` are the running destination pointer and row stride. Returns `None`
 /// on an unknown opcode or a read past the end (i.e. not a valid subroutine).
@@ -134,7 +138,8 @@ fn step_instruction(
     }
 }
 
-/// Decode the displacement of a `mov [si+disp], imm` from its ModR/M byte:
+/// Decodes the displacement of a `mov [si+disp], imm` from its ModR/M byte.
+///
 /// `0x44` = disp8, `0x84` = disp16, anything else (`0x04`) = `[si]`, no disp.
 fn decode_displacement(bin: &[u8], modrm_index: usize) -> Option<(i64, usize)> {
     match bin.get(modrm_index)? {
@@ -152,8 +157,9 @@ fn write_pixel(offset: i64, value: u8, out: &mut Vec<PlaneWrite>) {
     });
 }
 
-/// Run the plane subroutine at `offset`, returning its pixel writes, or `None`
-/// if it is not a valid `RETF`-terminated subroutine.
+/// Runs the plane subroutine at `offset`, returning its pixel writes.
+///
+/// Returns `None` if it is not a valid `RETF`-terminated subroutine.
 fn run_subroutine(bin: &[u8], offset: usize) -> Option<Vec<PlaneWrite>> {
     let mut writes = Vec::new();
     let mut index = offset;
@@ -168,11 +174,12 @@ fn run_subroutine(bin: &[u8], offset: usize) -> Option<Vec<PlaneWrite>> {
     }
 }
 
-/// How a consumer resolves a banked record's plane pointers. The same catalog
-/// serves two draw paths in the engine: the playfield-sprite blitter follows a
-/// clip-header (`hp + u16(bin[hp])`), while the scenery walker `lcall`s the
-/// pointer directly. The two readings can both parse for the same bytes, so
-/// the consumer's path decides, not the data.
+/// How a consumer resolves a banked record's plane pointers.
+///
+/// The same catalog serves two draw paths in the engine: the playfield-sprite
+/// blitter follows a clip-header (`hp + u16(bin[hp])`), while the scenery
+/// walker `lcall`s the pointer directly. The two readings can both parse for
+/// the same bytes, so the consumer's path decides, not the data.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum PlaneAddressing {
     /// Prefer the clip-header reading (weapon overlays and other playfield
@@ -182,8 +189,10 @@ enum PlaneAddressing {
     Direct,
 }
 
-/// Resolve a banked plane pointer to its subroutine writes, preferring the
-/// `addressing` reading and falling back to the other when it does not parse.
+/// Resolves a banked plane pointer to its subroutine writes.
+///
+/// Prefers the `addressing` reading, falling back to the other when it does
+/// not parse.
 fn resolve_plane(
     bin: &[u8],
     base: usize,
@@ -218,9 +227,10 @@ fn resolve_plane(
     }
 }
 
-/// Interleave plane writes onto the screen and crop to the bounding box. Plane
-/// `p` owns the columns where `x % 4 == p`; `cell` shifts a wide sprite right by
-/// 32 columns per cell.
+/// Interleaves plane writes onto the screen and crops to the bounding box.
+///
+/// Plane `p` owns the columns where `x % 4 == p`; `cell` shifts a wide sprite
+/// right by 32 columns per cell.
 fn assemble(planes: &[(usize, Vec<PlaneWrite>)]) -> Sprite {
     let mut pixels = Vec::new();
 
@@ -240,8 +250,10 @@ fn assemble(planes: &[(usize, Vec<PlaneWrite>)]) -> Sprite {
     build_sprite(&pixels)
 }
 
-/// Crop the absolute pixels to their bounding box. A record whose four planes
-/// draw nothing is a genuine blank catalog slot, returned as a `0x0` sprite.
+/// Crops the absolute pixels to their bounding box.
+///
+/// A record whose four planes draw nothing is a genuine blank catalog slot,
+/// returned as a `0x0` sprite.
 fn build_sprite(pixels: &[Pixel]) -> Sprite {
     if pixels.is_empty() {
         return Sprite {
@@ -272,8 +284,9 @@ fn build_sprite(pixels: &[Pixel]) -> Sprite {
     }
 }
 
-/// Decode a banked scenery BIN (e.g. `OUT.BIN`) against its `.WAD` catalog,
-/// reading plane pointers as clip-headers where they parse (the playfield
+/// Decodes a banked scenery BIN (e.g. `OUT.BIN`) against its `.WAD` catalog.
+///
+/// Plane pointers are read as clip-headers where they parse (the playfield
 /// sprite path; use [`decode_banked_direct`] for scenery cells).
 ///
 /// `catalog_offset` is the table position in `wad` (see [`OUT_BIN_CATALOG`]).
@@ -283,12 +296,12 @@ pub fn decode_banked(bin: &[u8], wad: &[u8], catalog_offset: usize) -> Result<Sp
     decode_banked_with(bin, wad, catalog_offset, PlaneAddressing::Header)
 }
 
-/// Decode a banked BIN like [`decode_banked`], but reading plane pointers the
-/// way the scenery walker does: as direct subroutine offsets.
+/// Decodes a banked BIN like [`decode_banked`], but as the scenery walker does.
 ///
-/// Some scenery cells start with a write instruction whose bytes also parse as
-/// a small clip-header, so the header-preferring decode corrupts them; the
-/// walker never resolves headers.
+/// Plane pointers are read as direct subroutine offsets. Some scenery cells
+/// start with a write instruction whose bytes also parse as a small
+/// clip-header, so the header-preferring decode corrupts them; the walker
+/// never resolves headers.
 pub fn decode_banked_direct(bin: &[u8], wad: &[u8], catalog_offset: usize) -> Result<SpriteSheet> {
     decode_banked_with(bin, wad, catalog_offset, PlaneAddressing::Direct)
 }
@@ -339,8 +352,10 @@ fn finish_banked(sprites: Vec<Sprite>) -> Result<SpriteSheet> {
     Ok(SpriteSheet { sprites })
 }
 
-/// Walk `bin` as a stream of compiled subroutines, returning every subroutine
-/// start offset. Stops at the first byte that is not valid subroutine code.
+/// Walks `bin` as a stream of compiled subroutines.
+///
+/// Returns every subroutine start offset. Stops at the first byte that is not
+/// valid subroutine code.
 fn subroutine_starts(bin: &[u8]) -> BTreeSet<usize> {
     let mut starts = BTreeSet::new();
     let mut index = 0;
@@ -366,7 +381,7 @@ fn subroutine_starts(bin: &[u8]) -> BTreeSet<usize> {
     starts
 }
 
-/// Decode `PTURN1.BN1` against its `.WAD` frame catalog.
+/// Decodes `PTURN1.BN1` against its `.WAD` frame catalog.
 ///
 /// Frames are flat runs of 8-byte cell records `[p0..p3]` (direct subroutine
 /// offsets, one per Mode X plane) terminated by a cell-count word. A frame is

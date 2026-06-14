@@ -5,7 +5,7 @@
 
 use crate::{Dimensions, IndexedImage, Result};
 
-/// Decode raw indexed pixels into an image of the given dimensions.
+/// Decodes raw indexed pixels into an image of the given dimensions.
 pub fn decode(bytes: &[u8], size: Dimensions) -> Result<IndexedImage> {
     IndexedImage::new(size, bytes.to_vec())
 }

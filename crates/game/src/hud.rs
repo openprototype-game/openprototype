@@ -38,9 +38,11 @@ const NUMBER_DIGIT: Dimensions = Dimensions {
     height: 10,
 };
 
-/// Weapon charge bars: four stacked 32x4 gauges. `di` `0x172`, then `+0x230` per
-/// weapon. Each shows a 32-px window into its 64-px gradient row, slid right by
-/// the level (stored as eighths: `0..=4` -> `0,8,16,24,31` source columns).
+/// Weapon charge bars: four stacked 32x4 gauges.
+///
+/// `di` `0x172`, then `+0x230` per weapon. Each shows a 32-px window into its
+/// 64-px gradient row, slid right by the level (stored as eighths: `0..=4` ->
+/// `0,8,16,24,31` source columns).
 const BAR_BASE_DI: i32 = 0x172;
 const BAR_PITCH_DI: i32 = 0x230;
 const BAR_SIZE: Dimensions = Dimensions {
@@ -58,9 +60,11 @@ const SMART_FRAME: Dimensions = Dimensions {
 };
 const SMART_MAX: u8 = 3;
 
-/// Weapon-selector lights: four stacked slots at `di` `0x12b`, `+0x230` each. The
-/// LIGHTS sheet is eight 12x7 glyphs: 0..=3 the unselected slots, 4..=7 the
-/// highlights, so a slot draws glyph `n`, or `4 + n` when it is the active one.
+/// Weapon-selector lights: four stacked slots at `di` `0x12b`, `+0x230` each.
+///
+/// The LIGHTS sheet is eight 12x7 glyphs: 0..=3 the unselected slots, 4..=7
+/// the highlights, so a slot draws glyph `n`, or `4 + n` when it is the active
+/// one.
 const MARKER_BASE_DI: i32 = 0x12b;
 const MARKER_PITCH_DI: i32 = 0x230;
 const MARKER_COUNT: usize = 4;
@@ -69,10 +73,12 @@ const MARKER_SIZE: Dimensions = Dimensions {
     height: 7,
 };
 
-/// Weapon pod in the panel's right recess. The original copies one 56x32 cell
-/// out of the EXTRAS sheet (5 weapons across, 6 animation frames down) to panel
-/// `di` `0x3f` (screen x 252). The firing weapon picks the column; the bottom
-/// row (`5`) is the settled frame. The minigun's pod is the leftmost column.
+/// Weapon pod in the panel's right recess.
+///
+/// The original copies one 56x32 cell out of the EXTRAS sheet (5 weapons
+/// across, 6 animation frames down) to panel `di` `0x3f` (screen x 252). The
+/// firing weapon picks the column; the bottom row (`5`) is the settled frame.
+/// The minigun's pod is the leftmost column.
 const POD_DI: i32 = 0x3f;
 const POD_SIZE: Dimensions = Dimensions {
     width: 56,
@@ -80,15 +86,17 @@ const POD_SIZE: Dimensions = Dimensions {
 };
 pub const POD_SETTLED_FRAME: usize = 5;
 
-/// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`,
-/// with the panel's top edge at `panel_top`.
+/// Screen `(x, y)` of a HUD element from its Mode X destination offset `di`.
+///
+/// The panel's top edge is at `panel_top`.
 fn di_to_screen(di: i32, panel_top: i32) -> (i32, i32) {
     ((di % HUD_STRIDE) * 4, panel_top + di / HUD_STRIDE)
 }
 
-/// Composite the HUD for `state` onto `frame`, with the panel's top edge at
-/// `panel_top`. The weapon pod is drawn in its settled state; the level scene
-/// drives the open/settle animation with [`draw_weapon_pod`].
+/// Composites the HUD for `state` onto `frame`, panel top at `panel_top`.
+///
+/// The weapon pod is drawn in its settled state; the level scene drives the
+/// open/settle animation with [`draw_weapon_pod`].
 pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     frame.blit(&assets.panel, 0, panel_top);
     draw_score(state.score, assets, panel_top, frame);
@@ -98,12 +106,13 @@ pub fn draw_hud(state: &GameState, assets: &HudAssets, panel_top: i32, frame: &m
     draw_selector(state.selected, assets, panel_top, frame);
 }
 
-/// Draw the `active` weapon's pod at animation frame `pod_frame` into the
-/// panel's right recess. Frame `0` draws NOTHING -- the original's rise and
-/// lower phases blit sheet rows 1..5 only, so the panel background's empty
-/// recess shows through (sheet row 0 is the first animation frame, not an
-/// empty cell). [`POD_SETTLED_FRAME`] is the settled state. The scene owns
-/// this call, keyed on its pod latch, not the live resolve.
+/// Draws the `active` weapon's pod at animation frame `pod_frame`.
+///
+/// Drawn into the panel's right recess. Frame `0` draws NOTHING -- the
+/// original's rise and lower phases blit sheet rows 1..5 only, so the panel
+/// background's empty recess shows through (sheet row 0 is the first animation
+/// frame, not an empty cell). [`POD_SETTLED_FRAME`] is the settled state. The
+/// scene owns this call, keyed on its pod latch, not the live resolve.
 pub fn draw_weapon_pod(
     active: ActiveWeapon,
     pod_frame: usize,
@@ -121,8 +130,9 @@ pub fn draw_weapon_pod(
     frame.blit(&pod, x, y);
 }
 
-/// The EXTRAS sheet column for a firing weapon: the chaingun is column `0`, then
-/// the four real weapons in selector order.
+/// The EXTRAS sheet column for a firing weapon.
+///
+/// The chaingun is column `0`, then the four real weapons in selector order.
 fn pod_column(active: ActiveWeapon) -> usize {
     match active {
         ActiveWeapon::Chaingun => 0,
@@ -133,8 +143,9 @@ fn pod_column(active: ActiveWeapon) -> usize {
     }
 }
 
-/// Slice one 56x32 pod cell (weapon `column`, animation `row`) from the EXTRAS
-/// sheet (which is `5 * 56` wide).
+/// Slices one 56x32 pod cell (weapon `column`, animation `row`) from the sheet.
+///
+/// The EXTRAS sheet is `5 * 56` wide.
 fn pod_cell(sheet: &IndexedImage, column: usize, row: usize) -> IndexedImage {
     let sheet_width = sheet.size.width as usize;
     let cell_width = POD_SIZE.width as usize;
@@ -150,7 +161,7 @@ fn pod_cell(sheet: &IndexedImage, column: usize, row: usize) -> IndexedImage {
     IndexedImage::new(POD_SIZE, pixels).expect("pod cell matches its dimensions")
 }
 
-/// Draw the four selector lights, highlighting the selected weapon's slot.
+/// Draws the four selector lights, highlighting the selected weapon's slot.
 fn draw_selector(selected: Weapon, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     for (slot, &weapon) in Weapon::ALL.iter().enumerate() {
         let index = if weapon == selected {
@@ -165,7 +176,7 @@ fn draw_selector(selected: Weapon, assets: &HudAssets, panel_top: i32, frame: &m
     }
 }
 
-/// Draw the smart-bomb indicator for `count`, clamped to the four frames.
+/// Draws the smart-bomb indicator for `count`, clamped to the four frames.
 fn draw_smart_bombs(count: u8, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     let glyph = glyph(
         &assets.smart_frames,
@@ -177,7 +188,7 @@ fn draw_smart_bombs(count: u8, assets: &HudAssets, panel_top: i32, frame: &mut F
     frame.blit(&glyph, x, y);
 }
 
-/// Draw the four weapon charge bars, stacked, each filled to its level.
+/// Draws the four weapon charge bars, stacked, each filled to its level.
 fn draw_weapon_bars(
     state: &GameState,
     assets: &HudAssets,
@@ -194,8 +205,9 @@ fn draw_weapon_bars(
     }
 }
 
-/// Slice the visible 32x4 window for `weapon`'s bar from the gradient sheet,
-/// starting `offset` columns in. The sheet is 64 wide with four rows per weapon.
+/// Slices the visible 32x4 window for `weapon`'s bar from the gradient sheet.
+///
+/// Starts `offset` columns in. The sheet is 64 wide with four rows per weapon.
 fn bar_window(sheet: &IndexedImage, weapon: usize, offset: usize) -> IndexedImage {
     let sheet_width = sheet.size.width as usize;
     let mut pixels = Vec::with_capacity(BAR_SIZE.pixel_count());
@@ -212,7 +224,7 @@ fn bar_window(sheet: &IndexedImage, weapon: usize, offset: usize) -> IndexedImag
     IndexedImage::new(BAR_SIZE, pixels).expect("bar window matches its dimensions")
 }
 
-/// Draw the six-digit score, most significant digit first, with leading zeros.
+/// Draws the six-digit score, most significant digit first, with leading zeros.
 fn draw_score(score: u32, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     for place in 0..SCORE_PLACES {
         let digit = (score / 10u32.pow(SCORE_PLACES - 1 - place) % 10) as usize;
@@ -223,8 +235,10 @@ fn draw_score(score: u32, assets: &HudAssets, panel_top: i32, frame: &mut Frameb
     }
 }
 
-/// Draw the lives digit. The numeral sheet starts at 1, so a count of `n` draws
-/// glyph `n - 1`; zero lives draws nothing.
+/// Draws the lives digit.
+///
+/// The numeral sheet starts at 1, so a count of `n` draws glyph `n - 1`; zero
+/// lives draws nothing.
 fn draw_lives(lives: u8, assets: &HudAssets, panel_top: i32, frame: &mut Framebuffer) {
     if lives == 0 {
         return;
@@ -236,8 +250,10 @@ fn draw_lives(lives: u8, assets: &HudAssets, panel_top: i32, frame: &mut Framebu
     frame.blit(&glyph, x, y);
 }
 
-/// Slice one glyph out of a stacked digit sheet (sheet width == glyph width, so
-/// each glyph is a contiguous run of rows).
+/// Slices one glyph out of a stacked digit sheet.
+///
+/// The sheet width equals the glyph width, so each glyph is a contiguous run
+/// of rows.
 fn glyph(sheet: &IndexedImage, size: Dimensions, index: usize) -> IndexedImage {
     let len = size.pixel_count();
     let start = index * len;

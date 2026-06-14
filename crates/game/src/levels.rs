@@ -10,17 +10,19 @@ use crate::level::spawn::SpawnSource;
 use crate::level::{l1, l3, l5, l7};
 use openprototype_core::PerWeapon;
 
-/// Which catalog cells make up a weapon's overlay sprite: the run of `count`
-/// consecutive cells starting at `first`.
+/// Which catalog cells make up a weapon's overlay sprite.
+///
+/// The run of `count` consecutive cells starting at `first`.
 #[derive(Clone, Copy)]
 pub struct Overlay {
     pub first: usize,
     pub count: usize,
 }
 
-/// One scenery layer's source: where its tilemap stream starts in the WAD
-/// (`cs`-relative), the screen row it draws from, and its scroll speed in
-/// 1/16-pixel units per tick.
+/// One scenery layer's source.
+///
+/// Where its tilemap stream starts in the WAD (`cs`-relative), the screen row it
+/// draws from, and its scroll speed in 1/16-pixel units per tick.
 #[derive(Clone, Copy)]
 pub struct SceneryLayerData {
     pub cs_offset: usize,
@@ -28,8 +30,10 @@ pub struct SceneryLayerData {
     pub speed: u32,
 }
 
-/// One plane of a level's star field: 30 single-pixel stars sweeping left at
-/// `speed` (1/16-pixel per tick), plotted in palette index `color`.
+/// One plane of a level's star field.
+///
+/// 30 single-pixel stars sweeping left at `speed` (1/16-pixel per tick), plotted
+/// in palette index `color`.
 #[derive(Clone, Copy)]
 pub struct StarPlaneData {
     pub speed: u32,
@@ -43,8 +47,9 @@ pub struct StarPlaneData {
     pub seeded: bool,
 }
 
-/// A level's ship table: where its frame catalog sits in the WAD, and which
-/// frame is level flight.
+/// A level's ship table.
+///
+/// Where its frame catalog sits in the WAD, and which frame is level flight.
 ///
 /// Every level shares `PTURN1.BN1` and the same 27-frame barrel-roll cycle,
 /// but the levels disagree on the camera angle of level flight: most idle on
@@ -77,9 +82,10 @@ pub struct ShipData {
     pub explosion: Option<usize>,
 }
 
-/// A level's combat constants: the kind/sprite values and engine bounds the
-/// combat passes key on. Each WAD links the same engine with different data,
-/// so these are pointer values into that WAD's descriptor blocks.
+/// A level's combat constants: the kind/sprite values and engine bounds.
+///
+/// What the combat passes key on. Each WAD links the same engine with different
+/// data, so these are pointer values into that WAD's descriptor blocks.
 #[derive(Clone, Copy)]
 pub struct CombatData {
     /// The ship hit-rect pointer table (cs-relative; L1 `cs:0x4771`),
@@ -134,12 +140,12 @@ pub struct CombatData {
     pub effects: EffectData,
 }
 
-/// The spark/trail effect descriptors the engine's spawn helpers pre-write
-/// (cs offsets). Every WAD has its own set, located by an independent
-/// `64 c7 05` effect-record writer scan; the spark dispatch picks by shot
-/// sprite family: below the burning threshold (chaingun AND all four
-/// multishot levels) takes the chaingun spark, the burning window its own,
-/// missiles theirs.
+/// The spark/trail effect descriptors the engine's spawn helpers pre-write.
+///
+/// cs offsets. Every WAD has its own set, located by an independent `64 c7 05`
+/// effect-record writer scan; the spark dispatch picks by shot sprite family:
+/// below the burning threshold (chaingun AND all four multishot levels) takes
+/// the chaingun spark, the burning window its own, missiles theirs.
 #[derive(Clone, Copy)]
 pub struct EffectData {
     /// The chaingun-family hit spark (every multishot hit too; L1 `0x356a`).
@@ -186,13 +192,14 @@ const L1_COMBAT: CombatData = CombatData {
     },
 };
 
-/// Where a level's WAD keeps the player-fire data: the shot sprites' directory
-/// records (`{ncells, width, height, cell}`, like the shield's), the chaingun
-/// muzzle-flash directory, and the per-roll-frame barrel offsets. All file
-/// offsets, located per WAD by spawner-code byte scans
+/// Where a level's WAD keeps the player-fire data.
+///
+/// The shot sprites' directory records (`{ncells, width, height, cell}`, like
+/// the shield's), the chaingun muzzle-flash directory, and the per-roll-frame
+/// barrel offsets. All file offsets, located per WAD by spawner-code byte scans
 /// (`re/find_shot_dirs.py`, `re/find_weapon_tables.py`); the spawn offsets,
-/// velocities, damages and fire rates are identical in all seven WADs and
-/// live in [`crate::shots`].
+/// velocities, damages and fire rates are identical in all seven WADs and live
+/// in [`crate::shots`].
 #[derive(Clone, Copy)]
 pub struct FireData {
     /// The chaingun shot's directory record.
@@ -230,17 +237,19 @@ pub struct FireData {
     pub barrel_table: usize,
 }
 
-/// A level's sound effects: where its `.SMP` filename table sits in the WAD,
-/// and how much of each sample its triggers play.
+/// A level's sound effects.
+///
+/// Where its `.SMP` filename table sits in the WAD, and how much of each sample
+/// its triggers play.
 ///
 /// Each WAD bakes in a table of 16-byte, NUL-padded sample filenames (17 in
 /// L5), loaded whole at level start. The trigger routines play each sample to
 /// an authored length constant, around 200 bytes short of the file, with real
-/// per-level quirks (L1's multisho stops 2 bytes earlier than the others';
-/// L1 plays 1542 of extraabg's 1980 bytes where every other level plays
-/// 1580). Slot meanings are
-/// positional and identical across levels, except slot 8, the per-level enemy
-/// sound (gegrocke, lgegshot, kanone or scheren), and L5's extra slot 16.
+/// per-level quirks (L1's multisho stops 2 bytes earlier than the others'; L1
+/// plays 1542 of extraabg's 1980 bytes where every other level plays 1580).
+/// Slot meanings are positional and identical across levels, except slot 8, the
+/// per-level enemy sound (gegrocke, lgegshot, kanone or scheren), and L5's extra
+/// slot 16.
 #[derive(Clone, Copy)]
 pub struct SfxData {
     /// File offset of the filename table in the level's WAD.
@@ -250,9 +259,11 @@ pub struct SfxData {
     pub sample_lengths: &'static [usize],
 }
 
-/// A level's scenery: the segment-to-file base for its WAD (`file = cs_offset +
-/// cs_base`), the cell-base offset, and its layers, back to front. The asset
-/// loader decodes this into renderable layers.
+/// A level's scenery: its file base, cell base, and layers.
+///
+/// The segment-to-file base for its WAD (`file = cs_offset + cs_base`), the
+/// cell-base offset, and its layers, back to front. The asset loader decodes
+/// this into renderable layers.
 #[derive(Clone, Copy)]
 pub struct SceneryData {
     pub cs_base: usize,
@@ -269,10 +280,11 @@ pub struct SceneryData {
     pub front_layers: usize,
 }
 
-/// The race levels' shared star field: four blue planes over the nebula,
-/// brightness tracking speed (the nebula itself scrolls at 32, so one plane
-/// drifts behind it and two ahead). The engine code and tables are identical
-/// in L2/4/6; the second table is the one the original never seeds.
+/// The race levels' shared star field: four blue planes over the nebula.
+///
+/// Brightness tracks speed (the nebula itself scrolls at 32, so one plane drifts
+/// behind it and two ahead). The engine code and tables are identical in L2/4/6;
+/// the second table is the one the original never seeds.
 const RACE_STARS: &[StarPlaneData] = &[
     StarPlaneData {
         speed: 0x1c,
@@ -300,8 +312,10 @@ const RACE_STARS: &[StarPlaneData] = &[
     },
 ];
 
-/// L1's per-slot trigger lengths. Slot 8 is gegrocke, and the multisho and
-/// extraabg constants differ from every other level's (see [`SfxData`]).
+/// L1's per-slot trigger lengths.
+///
+/// Slot 8 is gegrocke, and the multisho and extraabg constants differ from every
+/// other level's (see [`SfxData`]).
 const L1_SFX_LENGTHS: &[usize] = &[
     0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0x2d62, 0x11e4, 0x1e68, 0x1912,
     0x6f4, 0x606, 0x1482, 0x604,
@@ -319,8 +333,9 @@ const L3_SFX_LENGTHS: &[usize] = &[
     0x6f4, 0x62c, 0x1482, 0x606,
 ];
 
-/// L5's per-slot trigger lengths. Slot 8 is kanone, and a 17th slot carries
-/// lgegshot.
+/// L5's per-slot trigger lengths.
+///
+/// Slot 8 is kanone, and a 17th slot carries lgegshot.
 const L5_SFX_LENGTHS: &[usize] = &[
     0x1920, 0x17e, 0x2bfc, 0x1a92, 0x3e74, 0x1840, 0x22ae, 0xc50, 0x1e96, 0x11e4, 0x1e68, 0x1912,
     0x6f4, 0x62c, 0x1482, 0x606, 0xa78,
@@ -344,8 +359,10 @@ pub enum Level {
     L7,
 }
 
-/// The five sprite-catalog BIN files. Like the SP backgrounds, the four shooter
-/// levels each have their own; the race levels (2/4/6) share Race1.
+/// The five sprite-catalog BIN files.
+///
+/// Like the SP backgrounds, the four shooter levels each have their own; the
+/// race levels (2/4/6) share Race1.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Bin {
     Out,
@@ -368,8 +385,10 @@ impl Bin {
     }
 }
 
-/// The per-level facts the loaders need. Cheap to copy; it grows new fields as
-/// more per-level data is reverse-engineered.
+/// The per-level facts the loaders need.
+///
+/// Cheap to copy; it grows new fields as more per-level data is
+/// reverse-engineered.
 #[derive(Clone, Copy)]
 pub struct LevelData {
     /// The level's WAD/executable on the disc, e.g. `"LEVEL_2.WAD"`.
@@ -436,9 +455,10 @@ pub struct LevelData {
     pub spawn_positions: Option<SpawnPositionsData>,
 }
 
-/// Where a WAD keeps its spawn-position table: the file offset, the row
-/// count (the level's highest `spawn_row` + 1), and which AI set drives its
-/// mode-0 rows.
+/// Where a WAD keeps its spawn-position table.
+///
+/// The file offset, the row count (the level's highest `spawn_row` + 1), and
+/// which AI set drives its mode-0 rows.
 #[derive(Clone, Copy)]
 pub struct SpawnPositionsData {
     pub table: usize,
@@ -448,8 +468,9 @@ pub struct SpawnPositionsData {
     pub ai: Option<SpawnAi>,
 }
 
-/// A level's transcribed enemy AI-function set (the per-level pointer-table
-/// functions mode-0 spawn rows select by `arg`).
+/// A level's transcribed enemy AI-function set.
+///
+/// The per-level pointer-table functions mode-0 spawn rows select by `arg`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SpawnAi {
     /// LEVEL_1's 24 functions (`re/l1-ai-functions.md`).
@@ -466,8 +487,10 @@ pub enum SpawnAi {
 }
 
 impl Level {
-    /// The level after this one in play order, `None` past the last
-    /// (START.EXE's chain loop branches into the ending instead).
+    /// The level after this one in play order.
+    ///
+    /// `None` past the last (START.EXE's chain loop branches into the ending
+    /// instead).
     pub fn next(self) -> Option<Level> {
         match self {
             Level::L1 => Some(Level::L2),
@@ -494,8 +517,9 @@ impl Level {
         }
     }
 
-    /// This level's data. Exhaustive, so a new [`Level`] variant must supply its
-    /// own entry.
+    /// This level's data.
+    ///
+    /// Exhaustive, so a new [`Level`] variant must supply its own entry.
     pub fn data(self) -> LevelData {
         match self {
             Level::L1 => LevelData {

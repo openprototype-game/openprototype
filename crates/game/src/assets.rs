@@ -41,10 +41,12 @@ pub struct StillImage {
     pub palette: Palette,
 }
 
-/// Everything the intro sequence needs. The stills are decoded up front; the
-/// FLIs are kept as raw bytes and decoded when their beat starts (each is large,
-/// and the intro plays once). Their headers are validated here so gross
-/// corruption surfaces at load, not mid-intro.
+/// Everything the intro sequence needs.
+///
+/// The stills are decoded up front; the FLIs are kept as raw bytes and decoded
+/// when their beat starts (each is large, and the intro plays once). Their
+/// headers are validated here so gross corruption surfaces at load, not
+/// mid-intro.
 pub struct IntroAssets {
     pub neo: StillImage,
     pub surplogo: StillImage,
@@ -55,10 +57,11 @@ pub struct IntroAssets {
     pub font: Font,
 }
 
-/// What the high-score screen needs: the `HIGHSCOR.FLI` backdrop (kept as bytes,
-/// decoded when the scene starts) and the second font the original draws the
-/// entries with. The table itself comes from the [`HighscoreStore`], loaded when
-/// the scene is built.
+/// What the high-score screen needs.
+///
+/// The `HIGHSCOR.FLI` backdrop (kept as bytes, decoded when the scene starts)
+/// and the second font the original draws the entries with. The table itself
+/// comes from the [`HighscoreStore`], loaded when the scene is built.
 ///
 /// [`HighscoreStore`]: crate::highscores::HighscoreStore
 pub struct HighscoreAssets {
@@ -66,11 +69,12 @@ pub struct HighscoreAssets {
     pub font: Font,
 }
 
-/// `COVER3.BDY` decodes to a 320x478 image (taller than the screen); the intro
-/// shows the top 320x200, where the PROTOTYPE title and ship sit.
+/// `COVER3.BDY` decodes to a 320x478 image (taller than the screen).
+///
+/// The intro shows the top 320x200, where the PROTOTYPE title and ship sit.
 const COVER_HEIGHT: u32 = 478;
 
-/// Load and decode the menu assets from the disc image.
+/// Loads and decodes the menu assets from the disc image.
 pub fn load_menu_assets(disc: &DiscImage) -> Result<MenuAssets> {
     let background_bytes = disc.read("BACK3.RAW").context("reading BACK3.RAW")?;
     let background = raw::decode(
@@ -123,9 +127,10 @@ pub struct HudAssets {
     pub weapon_pods: IndexedImage,
 }
 
-/// Everything the in-game level scene needs to render: the level's scrolling
-/// canyon background (decoded to one still here), the HUD, and the weapon-top
-/// overlay sprites.
+/// Everything the in-game level scene needs to render.
+///
+/// The level's scrolling canyon background (decoded to one still here), the HUD,
+/// and the weapon-top overlay sprites.
 pub struct LevelAssets {
     /// The level's parallax background: the SP image (de-interleaved from the
     /// four `.SPn` planes to one 640x160 still) plus its strip layout. The image
@@ -208,15 +213,18 @@ pub struct LevelAssets {
     pub ship_explosion: Vec<OverlaySprite>,
 }
 
-/// A masked sprite: `None` is transparent. Used for the weapon overlay, which
-/// the original draws over the playfield/panel without a color key.
+/// A masked sprite: `None` is transparent.
+///
+/// Used for the weapon overlay, which the original draws over the
+/// playfield/panel without a color key.
 pub struct OverlaySprite {
     pub size: Dimensions,
     pub pixels: Vec<Option<u8>>,
 }
 
-/// The player-fire sprites, assembled from the WAD's directory records over
-/// the clip-header catalog (see [`crate::shots`]).
+/// The player-fire sprites, assembled from the WAD's directory records.
+///
+/// Over the clip-header catalog (see [`crate::shots`]).
 pub struct FireSprites {
     pub chaingun: OverlaySprite,
     /// Per charge level 1..=4.
@@ -234,8 +242,9 @@ pub struct FireSprites {
     pub plasma_orbs: [[OverlaySprite; 4]; 4],
 }
 
-/// Frames in a weapon's pod/overlay open-and-settle animation (`0` hidden ..=
-/// `5` settled).
+/// Frames in a weapon's pod/overlay open-and-settle animation.
+///
+/// `0` hidden ..= `5` settled.
 pub const OVERLAY_FRAMES: usize = 6;
 
 /// Width of one Mode X catalog cell, in pixels.
@@ -246,9 +255,10 @@ const OVERLAY_BLOCK_FRAMES: usize = 8;
 /// Frame index of the settled position, which the slide deltas are relative to.
 const OVERLAY_SETTLED_FRAME: usize = 5;
 
-/// One Mode X plane: 160 bytes per row (every fourth column of a 640-wide row),
-/// 160 rows. The four `.SPn` files together make a 640x160 image: a canyon wider
-/// than the screen, scrolled horizontally, the playfield's 160 rows tall.
+/// One Mode X plane: 160 bytes per row (every fourth column of a 640-wide row).
+///
+/// 160 rows. The four `.SPn` files together make a 640x160 image: a canyon
+/// wider than the screen, scrolled horizontally, the playfield's 160 rows tall.
 const BACKGROUND_SIZE: Dimensions = Dimensions {
     width: 640,
     height: 160,
@@ -285,8 +295,9 @@ const WEAPON_PODS_SIZE: Dimensions = Dimensions {
     height: 192,
 };
 
-/// Load and decode the in-game HUD assets from the disc image. The HUD palette
-/// is the playing level's, read from `palette_wad`.
+/// Loads and decodes the in-game HUD assets from the disc image.
+///
+/// The HUD palette is the playing level's, read from `palette_wad`.
 pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets> {
     let wad_bytes = disc
         .read(palette_wad)
@@ -313,16 +324,19 @@ pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets>
     })
 }
 
-/// The death sequence steps the explosion descriptor offset by 8 until it
-/// reaches `0xb8` (`cs:0x8f5f` in the tick at file `0xb354`): 23 frames.
+/// The death sequence's explosion frame count.
+///
+/// It steps the explosion descriptor offset by 8 until it reaches `0xb8`
+/// (`cs:0x8f5f` in the tick at file `0xb354`): 23 frames.
 const SHIP_EXPLOSION_FRAMES: usize = 23;
 
-/// Build the playfield-dimming remap (the level init's table builder at file
-/// `0xe4be`): for each palette index, the target is its color divided by the
-/// level's brightness divisor (6-bit channels, integer division), and the
-/// entry is the palette index nearest that target by L1 distance, earliest
-/// index winning ties. The GET READY freeze (file `0xe60f`) remaps every
-/// playfield pixel through the table.
+/// Builds the playfield-dimming remap (the level init's table builder at `0xe4be`).
+///
+/// For each palette index, the target is its color divided by the level's
+/// brightness divisor (6-bit channels, integer division), and the entry is the
+/// palette index nearest that target by L1 distance, earliest index winning
+/// ties. The GET READY freeze (file `0xe60f`) remaps every playfield pixel
+/// through the table.
 fn darken_table(palette: &Palette, divisor: i32) -> [u8; 256] {
     // The palette stores bit-replicated 8-bit channels; `>> 2` recovers the
     // 6-bit DAC values the original works in.
@@ -358,8 +372,10 @@ fn darken_table(palette: &Palette, divisor: i32) -> [u8; 256] {
     })
 }
 
-/// Load and decode the level scene's assets: the parallax background, the HUD,
-/// and the weapon overlays with their per-weapon slide tables.
+/// Loads and decodes the level scene's assets.
+///
+/// The parallax background, the HUD, and the weapon overlays with their
+/// per-weapon slide tables.
 pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> {
     let data = level.data();
 
@@ -450,7 +466,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     })
 }
 
-/// Read the smart-bomb ring's 32 `(vx, vy)` 12.4 velocity pairs.
+/// Reads the smart-bomb ring's 32 `(vx, vy)` 12.4 velocity pairs.
 fn read_bomb_wave(wad: &[u8], table: usize) -> Result<Vec<(i32, i32)>> {
     let end = table + 32 * 4;
 
@@ -469,11 +485,12 @@ fn read_bomb_wave(wad: &[u8], table: usize) -> Result<Vec<(i32, i32)>> {
         .collect())
 }
 
-/// A level's music: which CD-DA track it plays and the track's TOC length in
-/// logic ticks. The original starts its track once at level begin and loops
-/// it by timer: the length counts down in the 60 Hz timer ISR and an
-/// underflow restarts the track (the driver recomputes the same length from
-/// the TOC each time).
+/// A level's music: its CD-DA track and the track's loop period.
+///
+/// The track's TOC length in logic ticks. The original starts its track once at
+/// level begin and loops it by timer: the length counts down in the 60 Hz timer
+/// ISR and an underflow restarts the track (the driver recomputes the same
+/// length from the TOC each time).
 pub struct LevelMusic {
     pub track: u8,
     pub length_ticks: u32,
@@ -485,10 +502,11 @@ const CD_FRAMES_PER_SECOND: u32 = 75;
 /// Logic ticks per second (the level's timer ISR rate).
 const TICKS_PER_SECOND: u32 = 60;
 
-/// Look up the level's music track and compute its loop period the way the
-/// original's driver does: the TOC track length in frames, floored to whole
-/// seconds, times 60. The TOC length runs to the NEXT track's start (so it
-/// includes the next track's 2-second pregap); the last track runs to the
+/// Looks up the level's music track and computes its loop period.
+///
+/// The way the original's driver does: the TOC track length in frames, floored
+/// to whole seconds, times 60. The TOC length runs to the NEXT track's start (so
+/// it includes the next track's 2-second pregap); the last track runs to the
 /// disc's end.
 fn load_music(disc: &DiscImage, track: u8) -> Result<LevelMusic> {
     let tracks = disc.audio_tracks();
@@ -515,13 +533,14 @@ const SFX_NAME_STRIDE: usize = 16;
 /// The mixer's DMA block size; channel ends snap up to it.
 const SFX_DMA_BLOCK: usize = 250;
 
-/// Load the level's sound-effect samples: read the WAD's NUL-padded filename
-/// table and pull each `.SMP` off the disc, cut to its trigger's authored
-/// length rounded up to the next 250-byte DMA block (the original frees a
-/// channel only at block boundaries -- the position check at L1 0x7b63
-/// compares after each consumed block -- so every trigger plays up to ~249
-/// bytes of real file data past the authored cut, about 22 ms). The files
-/// are raw signed 8-bit mono at 11111 Hz and are kept that way; the
+/// Loads the level's sound-effect samples.
+///
+/// Reads the WAD's NUL-padded filename table and pulls each `.SMP` off the disc,
+/// cut to its trigger's authored length rounded up to the next 250-byte DMA
+/// block (the original frees a channel only at block boundaries -- the position
+/// check at L1 0x7b63 compares after each consumed block -- so every trigger
+/// plays up to ~249 bytes of real file data past the authored cut, about 22 ms).
+/// The files are raw signed 8-bit mono at 11111 Hz and are kept that way; the
 /// platform's mixer does the format conversion.
 fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
     let table_end = data.name_table + data.sample_lengths.len() * SFX_NAME_STRIDE;
@@ -564,7 +583,8 @@ fn load_sfx(disc: &DiscImage, wad: &[u8], data: SfxData) -> Result<SfxBank> {
     Ok(SfxBank { samples })
 }
 
-/// Assemble one sprite from a directory record at `record` in the WAD:
+/// Assembles one sprite from a directory record at `record` in the WAD.
+///
 /// `{ncells, width, height, cell}` (all `u16`), `cell` indexing the level's
 /// clip-header catalog.
 pub(crate) fn directory_sprite(
@@ -594,12 +614,12 @@ pub(crate) fn directory_sprite(
     Ok(assemble_overlay(catalog, cell, ncells))
 }
 
-/// What [`load_fire`] produces: the fire sprites, the per-roll-frame barrel
-/// pairs, and the orbs' bob wave.
+/// What [`load_fire`] produces.
+///
+/// The fire sprites, the per-roll-frame barrel pairs, and the orbs' bob wave.
 type FireAssets = (FireSprites, Vec<(i32, i32)>, Vec<i32>);
 
-/// Load the player-fire sprites, the barrel-offset table, and the orbs' bob
-/// wave.
+/// Loads the fire sprites, the barrel-offset table, and the orbs' bob wave.
 fn load_fire(
     wad: &[u8],
     catalog: &SpriteSheet,
@@ -692,12 +712,15 @@ fn load_fire(
     ))
 }
 
-/// Words read from the orbs' bob wave: enough to cover the largest phase
-/// stagger (10 bytes) plus the 28-byte phase range.
+/// Words read from the orbs' bob wave.
+///
+/// Enough to cover the largest phase stagger (10 bytes) plus the 28-byte phase
+/// range.
 const BOB_WAVE_WORDS: usize = 20;
 
-/// Frames in the ship's barrel-roll cycle (the barrel table has one pair per
-/// frame).
+/// Frames in the ship's barrel-roll cycle.
+///
+/// The barrel table has one pair per frame.
 const ROLL_FRAMES: usize = 27;
 
 /// Assemble the shield's animation frames from the WAD's sprite directory.
@@ -739,7 +762,7 @@ fn load_shield_frames(
         .collect()
 }
 
-/// Assemble each weapon's overlay from the decoded catalog.
+/// Assembles each weapon's overlay from the decoded catalog.
 fn load_overlays(
     catalog: &SpriteSheet,
     overlays: PerWeapon<Overlay>,
@@ -788,10 +811,11 @@ fn decode_scenery(wad: &[u8], scenery: SceneryData) -> Scenery {
     Scenery::new(layers, scenery.front_layers)
 }
 
-/// Expand one scenery tilemap into a per-column `Some(catalog cell)` / `None`
-/// strip, exactly one loop long. The stream is bytes: `0` is an empty column,
-/// `0xFF` is a jump to the 16-bit cs-offset that follows, and any other byte `n`
-/// is catalog cell `n + cell_base` (the per-level offset the render routine bakes
+/// Expands one scenery tilemap into a per-column `Some(cell)`/`None` strip.
+///
+/// Exactly one loop long. The stream is bytes: `0` is an empty column, `0xFF`
+/// is a jump to the 16-bit cs-offset that follows, and any other byte `n` is
+/// catalog cell `n + cell_base` (the per-level offset the render routine bakes
 /// in; L1 `-1`, the shooter levels `273`, the race levels `968`/`978`/`1106`).
 ///
 /// Each layer's stream ends in a jump back to its own start, so the strip is a
@@ -835,8 +859,9 @@ fn decode_scenery_tilemap(
     tiles
 }
 
-/// Read each weapon's overlay slide from the WAD's position table at `table`
-/// (per-level, [`LevelData::overlay_positions`]), as `(dx, dy)` per frame
+/// Reads each weapon's overlay slide from the WAD's position table at `table`.
+///
+/// Per-level ([`LevelData::overlay_positions`]), as `(dx, dy)` per frame
 /// relative to the settled frame. Each weapon's profile differs, so this is
 /// read rather than assumed. Per weapon: a block of [`OVERLAY_BLOCK_FRAMES`]
 /// `(x, y)` `u16` positions; the animation only uses the first
@@ -878,9 +903,11 @@ fn read_overlay_slide(wad: &[u8], table: usize) -> Result<PerWeapon<[(i32, i32);
     })
 }
 
-/// Stitch a multi-cell overlay into one masked sprite. Cell `k` occupies screen
-/// columns `[k*32, k*32+32)`; within it, the decoded sprite sits at its trimmed
-/// `origin`, so each cell's pixels land at `(k*32 + origin.x, origin.y)`.
+/// Stitches a multi-cell overlay into one masked sprite.
+///
+/// Cell `k` occupies screen columns `[k*32, k*32+32)`; within it, the decoded
+/// sprite sits at its trimmed `origin`, so each cell's pixels land at `(k*32 +
+/// origin.x, origin.y)`.
 fn assemble_overlay(sheet: &SpriteSheet, first: usize, cells: usize) -> OverlaySprite {
     let mut width = 0usize;
     let mut height = 0usize;
@@ -916,7 +943,7 @@ fn assemble_overlay(sheet: &SpriteSheet, first: usize, cells: usize) -> OverlayS
     }
 }
 
-/// De-interleave an SP background's four `.SPn` planes into one 640x160 still.
+/// De-interleaves an SP background's four `.SPn` planes into one 640x160 still.
 ///
 /// Each `.SPn` file is one Mode X plane holding every fourth column, so pixel
 /// `(x, y)` lives in plane `x % 4` at byte `y * 160 + x / 4`.
@@ -949,13 +976,13 @@ fn load_background(disc: &DiscImage, sp: Sp) -> Result<IndexedImage> {
     Ok(IndexedImage::new(BACKGROUND_SIZE, pixels).expect("canyon still matches its dimensions"))
 }
 
-/// Read and decode a linear `.RAW` graphic of known dimensions from the disc.
+/// Reads and decodes a linear `.RAW` graphic of known dimensions from the disc.
 fn decode_raw(disc: &DiscImage, name: &str, size: Dimensions) -> Result<IndexedImage> {
     let bytes = disc.read(name).with_context(|| format!("reading {name}"))?;
     raw::decode(&bytes, size).with_context(|| format!("decoding {name}"))
 }
 
-/// Load and decode the intro assets from the disc image.
+/// Loads and decodes the intro assets from the disc image.
 pub fn load_intro_assets(disc: &DiscImage) -> Result<IntroAssets> {
     let neo = load_still(disc, "NEO.BDY", "NEO.PAL")?;
     let surplogo = load_still(disc, "SURPLOGO.BDY", "SURPLOGO.PAL")?;
@@ -979,7 +1006,7 @@ pub fn load_intro_assets(disc: &DiscImage) -> Result<IntroAssets> {
     })
 }
 
-/// Decode a full-screen `.BDY` still and its `.PAL` palette.
+/// Decodes a full-screen `.BDY` still and its `.PAL` palette.
 fn load_still(disc: &DiscImage, body: &str, palette: &str) -> Result<StillImage> {
     let body_bytes = disc.read(body).with_context(|| format!("reading {body}"))?;
     let image = bdy::decode(&body_bytes, Dimensions::new(SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -993,15 +1020,17 @@ fn load_still(disc: &DiscImage, body: &str, palette: &str) -> Result<StillImage>
     Ok(StillImage { image, palette })
 }
 
-/// Rows of the cover the original puts on screen: it copies 0x7d00 bytes per
-/// plane into an unchained 400-line tweak of mode 13h, the top 400 rows of the
-/// 478-row BDY.
+/// Rows of the cover the original puts on screen.
+///
+/// It copies 0x7d00 bytes per plane into an unchained 400-line tweak of mode
+/// 13h, the top 400 rows of the 478-row BDY.
 const COVER_VISIBLE_HEIGHT: u32 = 400;
 
-/// Decode the PROTOTYPE cover at the original's display size. `COVER3.BDY` is
-/// a 320x478 image shown as 320x400 (the renderer's 4:3 fit squashes it to the
-/// same shape the CRT did); the intro swaps its framebuffer to this size for
-/// the cover beats.
+/// Decodes the PROTOTYPE cover at the original's display size.
+///
+/// `COVER3.BDY` is a 320x478 image shown as 320x400 (the renderer's 4:3 fit
+/// squashes it to the same shape the CRT did); the intro swaps its framebuffer
+/// to this size for the cover beats.
 fn load_cover(disc: &DiscImage) -> Result<StillImage> {
     let body_bytes = disc.read("COVER3.BDY").context("reading COVER3.BDY")?;
     let full = bdy::decode(&body_bytes, Dimensions::new(SCREEN_WIDTH, COVER_HEIGHT))
@@ -1020,8 +1049,9 @@ fn load_cover(disc: &DiscImage) -> Result<StillImage> {
     Ok(StillImage { image, palette })
 }
 
-/// Read a FLI's bytes and validate its header, so a corrupt file fails at load
-/// rather than when its beat plays.
+/// Reads a FLI's bytes and validates its header.
+///
+/// A corrupt file then fails at load rather than when its beat plays.
 pub fn load_fli_bytes(disc: &DiscImage, name: &str) -> Result<Vec<u8>> {
     let bytes = disc.read(name).with_context(|| format!("reading {name}"))?;
     Flic::new(&bytes).with_context(|| format!("validating {name} header"))?;
@@ -1034,7 +1064,7 @@ pub struct GameOverAssets {
     pub fli: Vec<u8>,
 }
 
-/// Load the game-over sequence's assets from the disc image.
+/// Loads the game-over sequence's assets from the disc image.
 pub fn load_gameover_assets(disc: &DiscImage) -> Result<GameOverAssets> {
     Ok(GameOverAssets {
         fli: load_fli_bytes(disc, "FLI/GO2.FLI")?,
@@ -1052,7 +1082,7 @@ pub struct EndingAssets {
     pub font: Font,
 }
 
-/// Load and decode the ending sequence's assets from the disc image.
+/// Loads and decodes the ending sequence's assets from the disc image.
 pub fn load_ending_assets(disc: &DiscImage) -> Result<EndingAssets> {
     let backdrop_bytes = disc.read("PVESSEL.RAW").context("reading PVESSEL.RAW")?;
     let backdrop = raw::decode(
@@ -1077,7 +1107,7 @@ pub fn load_ending_assets(disc: &DiscImage) -> Result<EndingAssets> {
     })
 }
 
-/// Load and decode the high-score screen's assets from the disc image.
+/// Loads and decodes the high-score screen's assets from the disc image.
 pub fn load_highscore_assets(disc: &DiscImage) -> Result<HighscoreAssets> {
     let fli = load_fli_bytes(disc, "FLI/HIGHSCOR.FLI")?;
 
@@ -1087,8 +1117,9 @@ pub fn load_highscore_assets(disc: &DiscImage) -> Result<HighscoreAssets> {
     Ok(HighscoreAssets { fli, font })
 }
 
-/// Synthetic, all-zero menu assets for tests that exercise scene logic without
-/// the disc. Visually blank, but the right shapes.
+/// Synthetic, all-zero menu assets for headless scene-logic tests.
+///
+/// Visually blank, but the right shapes.
 #[cfg(test)]
 pub(crate) fn test_menu_assets() -> MenuAssets {
     let background = IndexedImage::new(
@@ -1108,9 +1139,10 @@ pub(crate) fn test_menu_assets() -> MenuAssets {
     }
 }
 
-/// Synthetic intro assets for tests that exercise the intro's beat logic
-/// without the disc. The stills are blank and the FLIs are empty: tests drive
-/// the early stills/fades or skip the whole intro, and never reach a FLI beat.
+/// Synthetic intro assets for headless intro-beat tests.
+///
+/// The stills are blank and the FLIs are empty: tests drive the early
+/// stills/fades or skip the whole intro, and never reach a FLI beat.
 #[cfg(test)]
 pub(crate) fn test_intro_assets() -> IntroAssets {
     let still = || {
@@ -1151,8 +1183,9 @@ fn blank_image(size: Dimensions) -> IndexedImage {
     IndexedImage::new(size, vec![0u8; size.pixel_count()]).expect("blank image matches its size")
 }
 
-/// Synthetic, all-zero HUD assets for tests that exercise HUD/scene logic
-/// without the disc. Blank, but the right shapes.
+/// Synthetic, all-zero HUD assets for headless HUD/scene-logic tests.
+///
+/// Blank, but the right shapes.
 #[cfg(test)]
 pub(crate) fn test_hud_assets() -> HudAssets {
     HudAssets {

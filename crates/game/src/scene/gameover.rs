@@ -30,6 +30,7 @@ const GAME_OVER_TRACK: u8 = 8;
 /// The menu music, restarted when the sequence ends.
 const MENU_TRACK: u8 = 2;
 
+/// The game-over scene: the GO2 animation, then a key to continue.
 pub struct GameOverScene {
     /// `None` once the FLI has finished (or was skipped); the scene then
     /// waits for a key.
@@ -42,6 +43,7 @@ pub struct GameOverScene {
 }
 
 impl GameOverScene {
+    /// Builds the scene, decoding `GO2.FLI` and rendering its first frame.
     pub fn new(assets: Rc<GameOverAssets>, next: SceneId) -> Self {
         let mut scene = Self {
             player: FlicPlayer::decode_at(&assets.fli, FLI_FRAME_DELAY).ok(),

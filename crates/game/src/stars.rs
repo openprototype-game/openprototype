@@ -38,15 +38,17 @@ struct StarPlane {
     stars: Vec<(i32, i32)>,
 }
 
-/// A level's star field: every plane's positions, advanced and drawn back to
-/// front between the background and the scenery.
+/// A level's star field: every plane's positions.
+///
+/// Advanced and drawn back to front between the background and the scenery.
 pub struct StarField {
     planes: Vec<StarPlane>,
 }
 
 impl StarField {
-    /// Scatter the seeded planes through `rng` in the original's order: per
-    /// star index, one x and one y roll for each seeded plane in turn.
+    /// Scatters the seeded planes through `rng` in the original's order.
+    ///
+    /// Per star index, one x and one y roll for each seeded plane in turn.
     pub fn new(planes: &'static [StarPlaneData], rng: &mut EngineRng) -> Self {
         let mut planes: Vec<StarPlane> = planes
             .iter()
@@ -67,9 +69,10 @@ impl StarField {
         Self { planes }
     }
 
-    /// Sweep every star left by `ticks` of its plane's speed, respawning to
-    /// the right past the wrap edge. The wrap check runs once per tick, as the
-    /// original checks once per frame.
+    /// Sweeps every star left by `ticks` of its plane's speed.
+    ///
+    /// Respawns to the right past the wrap edge. The wrap check runs once per
+    /// tick, as the original checks once per frame.
     pub fn advance(&mut self, ticks: u32) {
         for plane in &mut self.planes {
             let speed = plane.data.speed as i32;
@@ -86,10 +89,11 @@ impl StarField {
         }
     }
 
-    /// Plot every plane's stars into the playfield rows of `frame`, back to
-    /// front. `camera_y` pans the field with the rest of the playfield;
-    /// `playfield_rows` clips to the rows above the panel. A plane marked
-    /// `only_on_black` skips pixels the background already colored.
+    /// Plots every plane's stars into the playfield rows of `frame`, back to front.
+    ///
+    /// `camera_y` pans the field with the rest of the playfield; `playfield_rows`
+    /// clips to the rows above the panel. A plane marked `only_on_black` skips
+    /// pixels the background already colored.
     pub fn render(&self, frame: &mut Framebuffer, camera_y: i32, playfield_rows: i32) {
         let width = frame.image.size.width as i32;
 

@@ -28,12 +28,14 @@ use openprototype_core::audio::AudioCommand;
 use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::input::KeyEvent;
 
-/// The CD-DA track the intro starts (the title theme), kept playing into the
-/// menu by the platform.
+/// The CD-DA track the intro starts (the title theme).
+///
+/// Kept playing into the menu by the platform.
 const TITLE_TRACK: u8 = 2;
 
-/// One tick is 1/70 s, the original's VGA retrace rate and the unit of every
-/// hold in its intro script.
+/// One tick is 1/70 s, the original's VGA retrace rate.
+///
+/// The unit of every hold in the intro script.
 const fn ticks(count: u64) -> Duration {
     Duration::from_micros(count * 1_000_000 / 70)
 }
@@ -54,8 +56,9 @@ enum Fli {
 }
 
 impl Fli {
-    /// Per-frame delay the original forces (`cs:[0x3022]` before each play),
-    /// ignoring the FLI's own header speed.
+    /// Per-frame delay the original forces (`cs:[0x3022]` before each play).
+    ///
+    /// Ignores the FLI's own header speed.
     fn frame_delay(self) -> Duration {
         match self {
             Fli::Intro => ticks(3),
@@ -67,9 +70,10 @@ impl Fli {
 /// Per-frame delay for `credz.fli` in the credits (`cs:[0x3022]=8`).
 const CREDITS_FLI_DELAY: Duration = ticks(8);
 
-/// One step of the intro script. `Show` and `ShowLit` are instant (they swap in
-/// a still, behind black or at full palette respectively); the rest run over
-/// time.
+/// One step of the intro script.
+///
+/// `Show` and `ShowLit` are instant (they swap in a still, behind black or at
+/// full palette respectively); the rest run over time.
 enum Beat {
     Show(Still),
     ShowLit(Still),
@@ -97,6 +101,7 @@ enum Active {
     Done,
 }
 
+/// The intro scene: a timed script of stills, fades, FLIs, and credits.
 pub struct Intro {
     assets: Rc<IntroAssets>,
     menu_assets: Rc<MenuAssets>,
@@ -114,6 +119,7 @@ pub struct Intro {
 }
 
 impl Intro {
+    /// Builds the intro on its first beat.
     pub fn new(assets: Rc<IntroAssets>, menu_assets: Rc<MenuAssets>) -> Self {
         // Durations are the original's, in 70 Hz ticks (START.EXE 0x47db..).
         // The fade primitive runs `steps * cs:[0x3022]` ticks, so the fades
@@ -160,8 +166,10 @@ impl Intro {
         intro
     }
 
-    /// Start (or skip past) the beat at `from`, resolving instant `Show` beats
-    /// until a timed primitive or the end is reached.
+    /// Starts (or skips past) the beat at `from`.
+    ///
+    /// Resolves instant `Show` beats until a timed primitive or the end is
+    /// reached.
     fn start_from(&mut self, from: usize) {
         let mut index = from;
 
@@ -276,10 +284,11 @@ impl Intro {
         }
     }
 
-    /// Advance the running primitive; move to the next beat when it finishes.
+    /// Advances the running primitive, moving to the next beat when it finishes.
+    ///
     /// Time left past a primitive's end rolls into the next one, so beat
-    /// boundaries never lose time and the script's total length stays exact
-    /// (the original's tick counter runs continuously across beats).
+    /// boundaries never lose time and the script's total length stays exact (the
+    /// original's tick counter runs continuously across beats).
     fn advance(&mut self, mut dt: Duration) {
         loop {
             match &mut self.active {
@@ -332,11 +341,12 @@ impl Intro {
         matches!(self.active, Active::Done)
     }
 
-    /// Skip the rest of the intro the way the original does: any key during a
-    /// wait longjmps to the menu setup (the skip exit at `0x3044` jumps to
-    /// `0x4a54`, restoring the stack pointer saved at `0x4772`), which still
-    /// runs the 40-tick menu fade-in. Keys during that final fade do nothing
-    /// (the longjmp target clears the skip gate before it).
+    /// Skips the rest of the intro the way the original does.
+    ///
+    /// Any key during a wait longjmps to the menu setup (the skip exit at
+    /// `0x3044` jumps to `0x4a54`, restoring the stack pointer saved at
+    /// `0x4772`), which still runs the 40-tick menu fade-in. Keys during that
+    /// final fade do nothing (the longjmp target clears the skip gate before it).
     fn skip_to_menu_fade(&mut self) {
         let menu_fade = self.script.len() - 1;
 
@@ -357,10 +367,11 @@ impl Intro {
     }
 }
 
-/// Show a full frame, recreating the framebuffer when the source size changes:
-/// the cover beats run at the original's 320x400 (its unchained 400-line
-/// mode), everything else at 320x200. The platform rebuilds its textures to
-/// match, and its 4:3 fit gives both shapes the original's screen aspect.
+/// Shows a full frame, recreating the framebuffer when the source size changes.
+///
+/// The cover beats run at the original's 320x400 (its unchained 400-line mode),
+/// everything else at 320x200. The platform rebuilds its textures to match, and
+/// its 4:3 fit gives both shapes the original's screen aspect.
 fn present(framebuffer: &mut Framebuffer, image: &IndexedImage, palette: &Palette) {
     if framebuffer.image.size != image.size {
         *framebuffer = Framebuffer::new(image.size, palette.clone());
@@ -404,6 +415,7 @@ impl Scene for Intro {
 }
 
 /// The credits: `credz.fli` loops throughout, one full play per "page".
+///
 /// Mirrors `START.EXE`'s credits routine (`0x460b`): it plays the FLI once with
 /// no text (the lead-in), then plays it again under each text page in turn. The
 /// fifth authored page is 12 blank rows; rendering it equals a text-free play,
@@ -425,9 +437,11 @@ impl Credits {
         }
     }
 
-    /// Advance the looping playback. Time past the end of a rotation carries
-    /// into the next one; once the last rotation ends, the rest is returned for
-    /// the intro to roll into the following beat.
+    /// Advances the looping playback.
+    ///
+    /// Time past the end of a rotation carries into the next one; once the last
+    /// rotation ends, the rest is returned for the intro to roll into the
+    /// following beat.
     fn advance(&mut self, mut dt: Duration) -> Duration {
         loop {
             dt = self.player.advance(dt);
@@ -462,8 +476,9 @@ impl Credits {
     }
 }
 
-/// The dev-team credit pages, transcribed byte-exact from `START.EXE`. Each
-/// page is the 20-character payload of 12 consecutive 22-byte records
+/// The dev-team credit pages, transcribed byte-exact from `START.EXE`.
+///
+/// Each page is the 20-character payload of 12 consecutive 22-byte records
 /// (`'X'` marker + 20 chars + `'$'`); the page pointers are cs:`0x6e5`,
 /// `0x7ed`, `0x8f5`, `0x9fd`. The layout is authored into the padding: headers
 /// sit one cell in, names are right-aligned to column 19. The fifth page
@@ -531,14 +546,16 @@ const CREDIT_PAGES: [[&str; 12]; 4] = [
 /// One glyph cell of the menu font.
 const GLYPH: i32 = 16;
 
-/// Where a credits page starts on screen: the original's page drawer
-/// (`0x45f5`) begins at screen offset `0x500` (x 0, y 4) and steps `0x1400`
-/// (16 scanlines) per row.
+/// Where a credits page starts on screen.
+///
+/// The original's page drawer (`0x45f5`) begins at screen offset `0x500` (x 0,
+/// y 4) and steps `0x1400` (16 scanlines) per row.
 const CREDITS_PAGE_Y: i32 = 4;
 
-/// Draw one credits page: 12 rows of 20 characters from the screen's left
-/// edge, one row every 16 scanlines. Spaces blit the (empty) first glyph, so
-/// the authored padding positions the text exactly as the original.
+/// Draws one credits page: 12 rows of 20 characters from the left edge.
+///
+/// One row every 16 scanlines. Spaces blit the (empty) first glyph, so the
+/// authored padding positions the text exactly as the original.
 fn draw_page(framebuffer: &mut Framebuffer, font: &Font, lines: &[&str; 12]) {
     for (row, line) in lines.iter().enumerate() {
         let y = CREDITS_PAGE_Y + row as i32 * GLYPH;
@@ -552,8 +569,9 @@ fn black() -> Palette {
     }
 }
 
-/// The all-white palette of the cover flash (the original writes 0x3f to every
-/// DAC channel, full intensity).
+/// The all-white palette of the cover flash.
+///
+/// The original writes 0x3f to every DAC channel, full intensity.
 fn white() -> Palette {
     Palette {
         colors: [Rgb {

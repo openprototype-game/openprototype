@@ -21,7 +21,7 @@ pub(crate) const BACKGROUND_SIZE: Dimensions = Dimensions {
 /// Bytes in a single plane file (`(640 / 4) * 160`).
 const PLANE_LEN: usize = (640 / 4) * 160;
 
-/// Combine the four Mode X plane files (SP1..SP4, in order) into one image.
+/// Combines the four Mode X plane files (SP1..SP4, in order) into one image.
 pub fn decode(planes: [&[u8]; 4]) -> Result<IndexedImage> {
     for plane in planes {
         if plane.len() != PLANE_LEN {

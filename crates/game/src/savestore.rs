@@ -17,13 +17,15 @@ use crate::savegame::SaveGame;
 /// The slot count; the menus label them GAME 1..5.
 pub const SLOTS: usize = 5;
 
+/// Reads and writes the five savegame slots in the OS data directory.
 pub struct SaveStore {
     dir: PathBuf,
 }
 
 impl SaveStore {
-    /// Resolve the data-directory path. No I/O happens until a slot is read
-    /// or written.
+    /// Resolves the data-directory path.
+    ///
+    /// No I/O happens until a slot is read or written.
     pub fn open() -> Result<Self> {
         let dirs = ProjectDirs::from("de", "dasprids", "OpenPrototype")
             .context("resolving the data directory")?;
@@ -38,13 +40,14 @@ impl SaveStore {
         self.dir.join(format!("protosg{}.psg", slot + 1))
     }
 
-    /// Which slots hold a save: the original's occupied flags, here file
-    /// existence.
+    /// Which slots hold a save.
+    ///
+    /// The original's occupied flags, here file existence.
     pub fn occupied(&self) -> [bool; SLOTS] {
         std::array::from_fn(|slot| self.slot_path(slot).exists())
     }
 
-    /// Read and decode the save in `slot`.
+    /// Reads and decodes the save in `slot`.
     pub fn load(&self, slot: usize) -> Result<SaveGame> {
         let path = self.slot_path(slot);
         let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
@@ -52,7 +55,7 @@ impl SaveStore {
         SaveGame::decode(&bytes).with_context(|| format!("decoding {}", path.display()))
     }
 
-    /// Encode `save` into `slot`, creating the data directory if needed.
+    /// Encodes `save` into `slot`, creating the data directory if needed.
     pub fn save(&self, slot: usize, save: &SaveGame) -> Result<()> {
         fs::create_dir_all(&self.dir)
             .with_context(|| format!("creating {}", self.dir.display()))?;
@@ -62,8 +65,10 @@ impl SaveStore {
     }
 }
 
-/// Open the store, degrading to `None` (every slot reads empty, saves are
-/// dropped) with a warning when the data directory cannot be resolved.
+/// Opens the store, degrading to `None` with a warning on failure.
+///
+/// When the data directory cannot be resolved, every slot reads empty and
+/// saves are dropped.
 pub fn open_or_warn() -> Option<SaveStore> {
     SaveStore::open()
         .map_err(|error| tracing::warn!("opening the save store: {error:#}"))

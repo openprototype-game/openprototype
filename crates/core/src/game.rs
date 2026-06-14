@@ -17,8 +17,10 @@ use crate::audio::AudioCommand;
 use crate::framebuffer::Framebuffer;
 use crate::input::KeyEvent;
 
-/// The side effects a single [`Game::step`] produced. The framebuffer is read
-/// separately via [`Game::framebuffer`] so a step never has to clone 64 KB.
+/// The side effects a single [`Game::step`] produced.
+///
+/// The framebuffer is read separately via [`Game::framebuffer`] so a step
+/// never has to clone 64 KB.
 #[derive(Debug, Default)]
 pub struct StepOutput {
     /// Music changes to apply this frame, in order.
@@ -29,25 +31,29 @@ pub struct StepOutput {
 
 /// A driveable scene: advance one frame, then expose the result.
 pub trait Game {
-    /// Advance one frame given the elapsed time and the key events since the
+    /// Advances one frame.
+    ///
+    /// Takes the elapsed time `dt` and the key events that arrived since the
     /// last call.
     fn step(&mut self, dt: Duration, input: &[KeyEvent]) -> StepOutput;
 
     /// The frame produced by the most recent [`step`](Game::step).
     fn framebuffer(&self) -> &Framebuffer;
 
-    /// Whether the game needs to keep advancing on a timer (animating) rather
-    /// than waiting for input. The platform polls this after each step.
+    /// Whether the game must keep advancing on a timer rather than wait for input.
+    ///
+    /// The platform polls this after each step.
     fn is_animating(&self) -> bool {
         false
     }
 
-    /// The wall-clock period between logic frames while animating. The original
-    /// is vsync-locked, so this is the active screen's VGA refresh: the front-end
-    /// (mode 13h, 320x200) runs ~70Hz, the level (the 480-line Mode X) ~60Hz. The
-    /// platform drives one [`step`](Game::step) per period with this exact `dt`
-    /// (a fixed timestep), so logic advances at the same rate on every host
-    /// regardless of the monitor's refresh rate.
+    /// The wall-clock period between logic frames while animating.
+    ///
+    /// The original is vsync-locked, so this is the active screen's VGA refresh:
+    /// the front-end (mode 13h, 320x200) runs ~70Hz, the level (the 480-line Mode
+    /// X) ~60Hz. The platform drives one [`step`](Game::step) per period with
+    /// this exact `dt` (a fixed timestep), so logic advances at the same rate on
+    /// every host regardless of the monitor's refresh rate.
     fn frame_interval(&self) -> Duration {
         Duration::from_micros(14_286)
     }

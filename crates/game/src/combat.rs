@@ -147,8 +147,9 @@ enum ShotOutcome {
     Pierced(i32),
 }
 
-/// One shot AABB (pixel position and size) against the entity list, spending
-/// `damage` on the first overlap (the original's `0xbf47`/`0xc0a4`).
+/// One shot AABB (pixel position and size) against the entity list.
+///
+/// Spends `damage` on the first overlap (the original's `0xbf47`/`0xc0a4`).
 fn apply_shot(
     entities: &mut [Entity],
     x: i32,
@@ -205,8 +206,10 @@ fn boxes_overlap(entity: &Entity, x: i32, y: i32, size_x: i32, size_y: i32) -> b
     })
 }
 
-/// Processes entities whose health reached zero: the death handler (file
-/// `0xbda9`) plus the update loop's weapon-upgrade-drop conversion.
+/// Processes entities whose health reached zero.
+///
+/// The death handler (file `0xbda9`) plus the update loop's weapon-upgrade-drop
+/// conversion.
 pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut CombatEvents) {
     let mut index = 0;
 
@@ -286,8 +289,9 @@ pub fn reap(spawns: &mut Spawns, wad: &[u8], cs_base: usize, events: &mut Combat
     }
 }
 
-/// Bursts a death-debris template (a count byte, then 13-byte rows of
-/// effect fields with position offsets) at the death's pixel position.
+/// Bursts a death-debris template at the death's pixel position.
+///
+/// A count byte, then 13-byte rows of effect fields with position offsets.
 fn spawn_debris(spawns: &mut Spawns, wad: &[u8], cs_base: usize, template: u16, x: i32, y: i32) {
     let at = usize::from(template) + cs_base;
 
@@ -329,8 +333,9 @@ fn score_value(wad: &[u8], cs_base: usize, kind: u16) -> u32 {
     u32::from_le_bytes([wad[at], wad[at + 1], wad[at + 2], wad[at + 3]])
 }
 
-/// The type's center offset (descriptor +0x1a/+0x1c), where the dropped weapon-upgrade
-/// appears.
+/// The type's center offset (descriptor +0x1a/+0x1c).
+///
+/// Where the dropped weapon-upgrade appears.
 fn center_offset(wad: &[u8], cs_base: usize, kind: u16) -> (i32, i32) {
     let at = usize::from(kind) + cs_base + 0x1a;
 
@@ -535,8 +540,9 @@ mod tests {
 /// One ship hit rect in screen pixels: `[x_min, y_min, x_max, y_max]`.
 pub type ShipRects = [[i32; 4]; 3];
 
-/// Builds the ship's three hit rects for the current roll frame (file
-/// `0xda25`): the per-band block of byte offsets, anchored at the ship.
+/// Builds the ship's three hit rects for the current roll frame (file `0xda25`).
+///
+/// The per-band block of byte offsets, anchored at the ship.
 ///
 /// The original indexes the pointer table byte-granularly with `roll / 9`;
 /// the roll counts in 0x12 steps, so that is `frame * 2` over a table that
@@ -574,11 +580,11 @@ pub fn ship_rects(
     })
 }
 
-/// Runs the enemy-shot pass against the ship (file `0xc3f1`): each shot's
-/// AABB against the three rects. Hits cull the shot regardless of
-/// invincibility (the original sparks and culls before the consequence);
-/// the returned count is how many hits the caller applies as
-/// [`Severity::Bullet`].
+/// Runs the enemy-shot pass against the ship (file `0xc3f1`).
+///
+/// Each shot's AABB against the three rects. Hits cull the shot regardless of
+/// invincibility (the original sparks and culls before the consequence); the
+/// returned count is how many hits the caller applies as [`Severity::Bullet`].
 pub fn enemy_shots_vs_ship(
     spawns: &mut Spawns,
     wad: &[u8],
@@ -625,8 +631,9 @@ pub fn enemy_shots_vs_ship(
     hits
 }
 
-/// An enemy shot's collision extent: the first two hitbox bytes of its
-/// sprite descriptor (what the original's `spawn_shot` copies into the
+/// An enemy shot's collision extent: the first two hitbox bytes.
+///
+/// From its sprite descriptor (what the original's `spawn_shot` copies into the
 /// record).
 fn shot_size(wad: &[u8], cs_base: usize, sprite: u16) -> (i32, i32) {
     let at = usize::from(sprite) + cs_base + 8;
@@ -638,8 +645,10 @@ fn shot_size(wad: &[u8], cs_base: usize, sprite: u16) -> (i32, i32) {
     (i32::from(wad[at]), i32::from(wad[at + 1]))
 }
 
-/// Runs the body-contact pass (file `0xdae1`): every live entity's three
-/// boxes against the three ship rects; the first overlap resolves.
+/// Runs the body-contact pass (file `0xdae1`).
+///
+/// Every live entity's three boxes against the three ship rects; the first
+/// overlap resolves.
 ///
 /// Pickups grant immediately (the original routes them through a sentinel
 /// health value and grants on the next update; the one-frame delay and its
@@ -737,9 +746,10 @@ pub fn body_contact(
     }
 }
 
-/// Tests an entity's three boxes against the three ship rects (9 overlap
-/// tests; the original has no 0xff disable check here, the unsigned byte
-/// offsets push disabled boxes out of reach instead).
+/// Tests an entity's three boxes against the three ship rects (9 overlap tests).
+///
+/// The original has no 0xff disable check here; the unsigned byte offsets push
+/// disabled boxes out of reach instead.
 fn touches_ship(entity: &Entity, rects: &ShipRects) -> bool {
     let ex = entity.x >> 4;
     let ey = entity.y >> 4;

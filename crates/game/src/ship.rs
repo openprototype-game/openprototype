@@ -1,5 +1,4 @@
-//! The player ship: movement, the barrel-roll animation, the camera coupling,
-//! and the spawn shield.
+//! The player ship: movement, barrel-roll, camera coupling, and spawn shield.
 //!
 //! Reverse-engineered from `LEVEL_1.WAD`'s per-tick handler (entry file
 //! `0xb410`, the ship block at `0xb479`);
@@ -44,13 +43,15 @@ use crate::playfield;
 
 /// Frames in the barrel-roll cycle (`0x1e6` catalog bytes / `0x12` per frame).
 const ROLL_FRAMES: i32 = 27;
-/// The roll returns to idle by the shorter way around the cycle: backward when
-/// idle is at most this many frames behind, forward otherwise. This single
-/// rule reproduces every level's branch structure (L1's `0xea` midpoint around
-/// idle 0, L3/L5's `0x7e`/`0x18c` split around idle 21).
+/// The roll returns to idle by the shorter way around the cycle.
+///
+/// Backward when idle is at most this many frames behind, forward otherwise.
+/// This single rule reproduces every level's branch structure (L1's `0xea`
+/// midpoint around idle 0, L3/L5's `0x7e`/`0x18c` split around idle 21).
 const ROLL_RETURN_MIDPOINT: i32 = 13;
-/// The idle exhaust flicker: a free-running 5-phase counter shows the
-/// alternate frame on phases 3 and 4.
+/// The idle exhaust flicker: a free-running 5-phase counter.
+///
+/// Shows the alternate frame on phases 3 and 4.
 const IDLE_PHASES: u8 = 5;
 const IDLE_FLICKER_FROM: u8 = 3;
 
@@ -67,26 +68,30 @@ const SPAWN_Y: i32 = 45;
 const SPAWN_RAMP: i32 = -80;
 const RAMP_DONE: i32 = 10;
 
-/// The level-end flyout re-pins the ramp to this every tick (`cs:[0x2642]` =
-/// `0xfed4`), so the auto-drift branch keeps running and the ship leaves the
-/// right edge under locked controls.
+/// The level-end flyout re-pins the ramp to this every tick.
+///
+/// `cs:[0x2642]` = `0xfed4`, so the auto-drift branch keeps running and the ship
+/// leaves the right edge under locked controls.
 const FLYOUT_RAMP: i32 = -300;
 
-/// Horizontal bounds (`cmp` guards before each 2-pixel step), the same in
-/// every level; the vertical bounds are per-level ([`ShipData::y_min`]).
+/// Horizontal bounds (`cmp` guards before each 2-pixel step), same every level.
+///
+/// The vertical bounds are per-level ([`ShipData::y_min`]).
 const X_MIN: i32 = -12;
 const X_MAX: i32 = 230;
 
-/// Camera coupling: flying up pans the camera up while the ship is at or above
-/// this row.
+/// Camera coupling: flying up pans the camera up in the top band.
+///
+/// Pans while the ship is at or above this row.
 const PAN_UP_BELOW: i32 = 50;
 /// Flying down pans the camera down while the ship is at or below this row.
 const PAN_DOWN_ABOVE: i32 = 60;
 /// The camera's lower stop (the upper stop is the level's `camera_min`).
 const CAMERA_MAX: i32 = 32;
 
-/// Which flight keys are currently held, the port's stand-in for the
-/// original ISR's key-state flags.
+/// Which flight keys are currently held.
+///
+/// The port's stand-in for the original ISR's key-state flags.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct HeldKeys {
     pub up: bool,
@@ -95,8 +100,10 @@ pub struct HeldKeys {
     pub right: bool,
 }
 
-/// The player ship's state machine. Advance it with [`update`](Ship::update)
-/// once per logic tick and composite it with [`render`](Ship::render).
+/// The player ship's state machine.
+///
+/// Advance it with [`update`](Ship::update) once per logic tick and composite it
+/// with [`render`](Ship::render).
 pub struct Ship {
     /// The level-flight frame the roll returns to (per-level: 0 top-down, 21
     /// side view; [`ShipData::idle_frame`]).
@@ -127,8 +134,9 @@ pub struct Ship {
 }
 
 impl Ship {
-    /// A freshly spawned ship for a level with the given frame selection. The
-    /// roll always starts at frame 0, so a side-view level rolls into its
+    /// A freshly spawned ship for a level with the given frame selection.
+    ///
+    /// The roll always starts at frame 0, so a side-view level rolls into its
     /// idle pose during the fly-in.
     pub fn new(ship: ShipData) -> Self {
         Self {
@@ -156,8 +164,9 @@ impl Ship {
         (self.x, self.y)
     }
 
-    /// The current barrel-roll frame, which the fire system uses to index the
-    /// barrel-offset table.
+    /// The current barrel-roll frame.
+    ///
+    /// The fire system uses it to index the barrel-offset table.
     pub fn roll_frame(&self) -> usize {
         self.roll as usize
     }
@@ -167,15 +176,18 @@ impl Ship {
         self.ramp
     }
 
-    /// Arms the shield visual for `ticks` (the invincibility pickup relights
-    /// it; the original drives both off the same `cs:0x266a` counter).
+    /// Arms the shield visual for `ticks`.
+    ///
+    /// The invincibility pickup relights it; the original drives both off the
+    /// same `cs:0x266a` counter.
     pub fn arm_shield(&mut self, ticks: i32) {
         self.shield_ticks = ticks;
     }
 
-    /// Place the ship from a savegame snapshot: position, the fly-in ramp
-    /// counter, and the roll frame. The roll divider and idle phase are
-    /// engine scratch the snapshot does not model.
+    /// Places the ship from a savegame snapshot.
+    ///
+    /// Restores position, the fly-in ramp counter, and the roll frame. The roll
+    /// divider and idle phase are engine scratch the snapshot does not model.
     pub fn restore(&mut self, x: i32, y: i32, ramp: i32, roll: i32) {
         self.x = x;
         self.y = y;
@@ -183,17 +195,19 @@ impl Ship {
         self.roll = roll.clamp(0, ROLL_FRAMES - 1);
     }
 
-    /// One tick of the level-end flyout: pins the ramp below the unlock
-    /// threshold so [`Self::update`] drifts the ship right with input
-    /// ignored. The original's flyout loop (file `0xf866`) re-forces
-    /// `cs:[0x2642]` every frame for the last 300 of its 460, which is why
-    /// this must be called per tick rather than once.
+    /// One tick of the level-end flyout: pins the ramp below the unlock threshold.
+    ///
+    /// [`Self::update`] then drifts the ship right with input ignored. The
+    /// original's flyout loop (file `0xf866`) re-forces `cs:[0x2642]` every frame
+    /// for the last 300 of its 460, which is why this must be called per tick
+    /// rather than once.
     pub fn fly_out(&mut self) {
         self.ramp = FLYOUT_RAMP;
     }
 
-    /// Reset for a respawn: position, fly-in ramp and roll restart, but the
-    /// free-running animation phases carry over -- the original's respawn
+    /// Resets for a respawn: position, fly-in ramp, and roll restart.
+    ///
+    /// The free-running animation phases carry over -- the original's respawn
     /// never resets the idle-flicker phase, the roll divider, or the shield
     /// animation frame/hold (L1 0xb601-area state untouched by the respawn
     /// handler), and they keep stepping through the death sequence.
@@ -210,16 +224,18 @@ impl Ship {
         self.shield_hold = shield_hold;
     }
 
-    /// One dying-sequence tick: the explosion replaces the ship on screen,
-    /// but the original keeps stepping the flicker phase, the shield
-    /// timer/animation, and the roll (input gated off, so it levels out).
+    /// One dying-sequence tick.
+    ///
+    /// The explosion replaces the ship on screen, but the original keeps stepping
+    /// the flicker phase, the shield timer/animation, and the roll (input gated
+    /// off, so it levels out).
     pub fn tick_animations(&mut self) {
         self.idle_phase = (self.idle_phase + 1) % IDLE_PHASES;
         self.advance_shield();
         self.advance_roll(HeldKeys::default());
     }
 
-    /// Advance one logic tick: animations, movement, and the camera coupling.
+    /// Advances one logic tick: animations, movement, and the camera coupling.
     pub fn update(&mut self, held: HeldKeys, camera: &mut i32, camera_min: i32) {
         self.idle_phase = (self.idle_phase + 1) % IDLE_PHASES;
         self.advance_shield();
@@ -264,8 +280,9 @@ impl Ship {
         }
     }
 
-    /// Count down the shield and advance its looping animation. The animation
-    /// runs whether or not the shield shows, like the original's.
+    /// Counts the shield down and advances its looping animation.
+    ///
+    /// The animation runs whether or not the shield shows, like the original's.
     fn advance_shield(&mut self) {
         if self.shield_ticks > 0 {
             self.shield_ticks -= 1;
@@ -279,9 +296,10 @@ impl Ship {
         }
     }
 
-    /// Advance the barrel roll every 2nd tick: roll with the held vertical
-    /// direction (right also rolls forward), otherwise return to level the
-    /// short way around the cycle.
+    /// Advances the barrel roll every 2nd tick.
+    ///
+    /// Rolls with the held vertical direction (right also rolls forward),
+    /// otherwise returns to level the short way around the cycle.
     fn advance_roll(&mut self, held: HeldKeys) {
         self.roll_divider += 1;
 
@@ -319,7 +337,7 @@ impl Ship {
         }
     }
 
-    /// Composite the ship (and its shield while one is up) into the playfield.
+    /// Composites the ship (and its shield while one is up) into the playfield.
     ///
     /// Both compose in buffer space like the original (the scene's window mask
     /// crops whatever bleeds past the playfield): screen x is window-relative
@@ -356,9 +374,10 @@ impl Ship {
     }
 }
 
-/// The wear-off fade's palette blocks (6-bit DAC values, 16 entries each;
-/// LEVEL_1.WAD file `0x12220`/`0x12250`, byte-identical in all seven WADs):
-/// the bubble's normal colors and the dark ramp they fade toward.
+/// The wear-off fade's palette blocks (6-bit DAC values, 16 entries each).
+///
+/// LEVEL_1.WAD file `0x12220`/`0x12250`, byte-identical in all seven WADs: the
+/// bubble's normal colors and the dark ramp they fade toward.
 const SHIELD_FADE_BASE: [[u8; 3]; 16] = [
     [0x3f, 0x3f, 0x34],
     [0x3f, 0x39, 0x34],
@@ -396,14 +415,16 @@ const SHIELD_FADE_TARGET: [[u8; 3]; 16] = [
     [0x03, 0x04, 0x01],
 ];
 
-/// The first palette entry the fade rewrites (the bubble's color band runs
-/// `0xe0..0xf0`).
+/// The first palette entry the fade rewrites.
+///
+/// The bubble's color band runs `0xe0..0xf0`.
 const SHIELD_FADE_FIRST_ENTRY: usize = 0xe0;
 
-/// Cross-fade the bubble's palette band toward the dark wear-off ramp while
-/// the invincibility timer runs (the ISR block at LEVEL_1.WAD file `0x9498`;
-/// structurally congruent in every WAD with two per-WAD immediates, and the
-/// 96 ramp table bytes byte-identical in all seven):
+/// Cross-fades the bubble's palette band toward the dark wear-off ramp.
+///
+/// Runs while the invincibility timer does (the ISR block at LEVEL_1.WAD file
+/// `0x9498`; structurally congruent in every WAD with two per-WAD immediates,
+/// and the 96 ramp table bytes byte-identical in all seven):
 /// `out = base + (target - base) * t / 64` with
 /// `t = max(0, (0x80 - ticks) >> 1)`, so the bubble keeps its normal colors
 /// until 126 ticks remain and darkens linearly from there.

@@ -10,9 +10,10 @@
 
 use std::sync::Arc;
 
-/// The sound-effect mixer's channel count. The original's DMA feed adds
-/// exactly three sample streams (explosions, player weapons, events) into
-/// the playback buffer.
+/// The sound-effect mixer's channel count.
+///
+/// The original's DMA feed adds exactly three sample streams (explosions,
+/// player weapons, events) into the playback buffer.
 pub const SFX_CHANNELS: usize = 3;
 
 /// A request to change what is playing.

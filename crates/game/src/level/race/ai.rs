@@ -1,5 +1,6 @@
-//! The race levels' 6 mode-0 AI functions, transcribed from LEVEL_2.WAD
-//! (`re/race-mode.md`; table file `0xa476`, identical relinked code in
+//! The race levels' 6 mode-0 AI functions, transcribed from LEVEL_2.WAD.
+//!
+//! See `re/race-mode.md` (table file `0xa476`, identical relinked code in
 //! LEVEL_4/LEVEL_6).
 //!
 //! Everything drifts left at a constant 5 px per sub-step. Args 0..3 are the
@@ -11,15 +12,18 @@
 
 use crate::spawns::Entity;
 
-/// Per-step context: the race AI touches nothing but the entity and the
-/// level-end flag.
+/// Per-step context for the race AI.
+///
+/// The AI touches nothing but the entity (passed separately) and the level-end
+/// flag carried here.
 pub(crate) struct AiContext<'a> {
     /// The level-end flag (`cs:0xcc3`), raised by the finish entity.
     pub level_end: &'a mut bool,
 }
 
-/// The pickup frame runs' last-frame offsets from the rest descriptor, per
-/// arg (verified identical in all three race WADs).
+/// The pickup frame runs' last-frame offsets from the rest descriptor, per arg.
+///
+/// Verified identical in all three race WADs.
 const PICKUP_LAST_OFFSET: [u16; 4] = [0x5e, 0x5e, 0x6e, 0x46];
 
 /// Runs AI function `arg` for one sub-step.

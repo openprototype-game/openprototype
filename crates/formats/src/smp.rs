@@ -16,7 +16,7 @@ pub enum Encoding {
     Signed,
 }
 
-/// Normalise raw SMP bytes to unsigned 8-bit PCM, ready for an 8-bit WAV.
+/// Normalises raw SMP bytes to unsigned 8-bit PCM, ready for an 8-bit WAV.
 pub fn decode(bytes: &[u8], encoding: Encoding) -> Vec<u8> {
     match encoding {
         Encoding::Unsigned => bytes.to_vec(),

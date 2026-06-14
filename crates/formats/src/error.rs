@@ -5,6 +5,7 @@ use thiserror::Error;
 /// Convenience alias: every decoder returns this.
 pub type Result<T> = std::result::Result<T, DecodeError>;
 
+/// What went wrong while decoding a game file.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DecodeError {
     /// Input length did not match what the format requires.

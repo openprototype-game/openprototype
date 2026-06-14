@@ -8,12 +8,12 @@
 //!
 //! Scroll positions are sub-pixel fixed point so the slow far strips can move
 //! at fractional rates while keeping exact ratios: 1/16 pixel for most levels,
-//! 1/256 for the lava background (see [`Sp::subpixel_shift`]). Positions
+//! 1/256 for the lava background (see `Sp::subpixel_shift`). Positions
 //! accumulate one tick per VGA vertical refresh (~60Hz), wrapping at the image
 //! width so the two-screen-wide image loops seamlessly.
 //!
 //! The strip layout is a property of the SP image, not the level (see
-//! [`Sp::strips`]), so the race levels share one definition. Each WAD holds a
+//! `Sp::strips`), so the race levels share one definition. Each WAD holds a
 //! strip table ({count, heights, first accumulator pointer}; accumulators are
 //! consecutive, their rates in the vsync ISR's rate table). Strips need not
 //! cover the playfield: the forest (120 rows) and alien (135 rows) backgrounds
@@ -26,15 +26,19 @@ use prototype_formats::IndexedImage;
 /// SP backgrounds are two screens wide; the scroll wraps at this width.
 const BACKGROUND_WIDTH: u32 = 640;
 
-/// One horizontal strip: its height in rows and scroll rate, in the
-/// background's sub-pixel units per tick (see [`Sp::subpixel_shift`]).
+/// One horizontal strip: its height in rows and its scroll rate.
+///
+/// The rate is in the background's sub-pixel units per tick (see
+/// [`Sp::subpixel_shift`]).
 struct Strip {
     height: i32,
     rate: u32,
 }
 
-/// The five SP background image sets. The four shooter levels each have their
-/// own; the three race levels (2/4/6) share Raceb2.
+/// The five SP background image sets.
+///
+/// The four shooter levels each have their own; the three race levels (2/4/6)
+/// share Raceb2.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Sp {
     Canyon,
@@ -68,9 +72,10 @@ impl Sp {
     }
 
     /// The palette index the renderer fills rows below the strips with.
-    /// L5's strip pass paints its 23 sub-strip rows solid dark brown every
-    /// frame (`0x5f`, the fill loop at file `0xa330`); the others leave the
-    /// cleared buffer (black).
+    ///
+    /// L5's strip pass paints its 23 sub-strip rows solid dark brown every frame
+    /// (`0x5f`, the fill loop at file `0xa330`); the others leave the cleared
+    /// buffer (black).
     fn below_strips_fill(self) -> u8 {
         match self {
             Sp::Alienbg => 0x5F,
@@ -78,10 +83,11 @@ impl Sp {
         }
     }
 
-    /// The fixed-point shift of this background's scroll positions. Most
-    /// compositors keep 1/16-pixel positions (`shr eax, 4`, wrap `0x2800`);
-    /// L7's lava keeps 1/256 (`shr eax, 8`, wrap `0x28000`) so its 65 wave
-    /// strips can creep at fractions the coarser scale can't hold.
+    /// The fixed-point shift of this background's scroll positions.
+    ///
+    /// Most compositors keep 1/16-pixel positions (`shr eax, 4`, wrap `0x2800`);
+    /// L7's lava keeps 1/256 (`shr eax, 8`, wrap `0x28000`) so its 65 wave strips
+    /// can creep at fractions the coarser scale can't hold.
     fn subpixel_shift(self) -> u32 {
         match self {
             Sp::Lavah => 8,
@@ -89,8 +95,9 @@ impl Sp {
         }
     }
 
-    /// Every strip accumulator's initial value, straight from the WAD's data
-    /// image (no code ever writes them before the ISR starts adding). This is
+    /// Every strip accumulator's initial value, straight from the WAD's data image.
+    ///
+    /// No code ever writes them before the ISR starts adding. This is
     /// load-bearing for the alien background: its bottom strip never moves, so
     /// the initial 164 px is what centers the sun over the playfield.
     fn initial_offset(self) -> u32 {
@@ -134,16 +141,19 @@ const RACEB2_STRIPS: [Strip; 1] = [Strip {
     rate: 32,
 }];
 
-/// L3's forest: one 120-row strip; the rows below it stay undrawn (black) above
-/// the panel. From `LEVEL_3.WAD` heights `cs:0x4e3c`, accum `cs:0x38d8`.
+/// L3's forest: one 120-row strip; the rows below stay undrawn.
+///
+/// They stay black above the panel. From `LEVEL_3.WAD` heights `cs:0x4e3c`,
+/// accum `cs:0x38d8`.
 const WALD_STRIPS: [Strip; 1] = [Strip {
     height: 120,
     rate: 4,
 }];
 
-/// L5's alien background: four strips covering 135 rows, fastest at the top and
-/// a static floor at the bottom; the rest stays undrawn. From `LEVEL_5.WAD`
-/// heights `cs:0x33ac`, accums `cs:0x2603`.
+/// L5's alien background: four strips covering 135 rows.
+///
+/// Fastest at the top and a static floor at the bottom; the rest stays undrawn.
+/// From `LEVEL_5.WAD` heights `cs:0x33ac`, accums `cs:0x2603`.
 const ALIENBG_STRIPS: [Strip; 4] = [
     Strip {
         height: 20,
@@ -163,11 +173,12 @@ const ALIENBG_STRIPS: [Strip; 4] = [
     },
 ];
 
-/// L7's lava background: a 65-strip perspective gradient. 32 two-row lines
-/// rush at the top (rates 256 down to 32), a 32-row horizon crawls in the
-/// middle, and the mirror rushes back out at the bottom. From `LEVEL_7.WAD`
-/// heights `cs:0x3e67`, accums `cs:0x2c64`; the rate table base `cs:0x2d68`
-/// holds 3 scenery slots first, the strip rates from `cs:0x2d74`.
+/// L7's lava background: a 65-strip perspective gradient.
+///
+/// 32 two-row lines rush at the top (rates 256 down to 32), a 32-row horizon
+/// crawls in the middle, and the mirror rushes back out at the bottom. From
+/// `LEVEL_7.WAD` heights `cs:0x3e67`, accums `cs:0x2c64`; the rate table base
+/// `cs:0x2d68` holds 3 scenery slots first, the strip rates from `cs:0x2d74`.
 const LAVAH_STRIPS: [Strip; 65] = [
     Strip {
         height: 2,
@@ -432,6 +443,7 @@ const LAVAH_STRIPS: [Strip; 65] = [
 ];
 
 /// A level's parallax background: the decoded SP image and its strip layout.
+///
 /// Immutable; the scroll state lives in [`BackgroundScroll`].
 pub struct Background {
     image: IndexedImage,
@@ -445,6 +457,7 @@ pub struct Background {
 }
 
 impl Background {
+    /// Builds the background from its decoded image and SP set.
     pub fn new(image: IndexedImage, sp: Sp) -> Self {
         Self {
             image,
@@ -455,8 +468,9 @@ impl Background {
         }
     }
 
-    /// A fresh scroll state for this background, every strip at its WAD-baked
-    /// starting position.
+    /// A fresh scroll state for this background.
+    ///
+    /// Every strip starts at its WAD-baked position.
     pub fn scroll(&self) -> BackgroundScroll {
         BackgroundScroll {
             offsets: vec![self.initial_offset; self.strips.len()],
@@ -464,8 +478,9 @@ impl Background {
         }
     }
 
-    /// Advance every strip by `ticks` of its own rate, wrapping at the image
-    /// width. One tick is one ~60Hz vertical refresh.
+    /// Advances every strip by `ticks` of its own rate, wrapping at the image width.
+    ///
+    /// One tick is one ~60Hz vertical refresh.
     pub fn advance(&self, scroll: &mut BackgroundScroll, ticks: u32) {
         let wrap = u64::from(BACKGROUND_WIDTH << self.subpixel_shift);
 
@@ -475,8 +490,9 @@ impl Background {
         }
     }
 
-    /// Draw the background into the top `height` rows of `frame` (the playfield
-    /// window, above the panel).
+    /// Draws the background into the top `height` rows of `frame`.
+    ///
+    /// This is the playfield window, above the panel.
     ///
     /// `camera_y` is the uniform vertical scroll: the image row shown at the top
     /// of the playfield, the 160-tall image panning over the window. Each
@@ -534,8 +550,10 @@ pub struct BackgroundScroll {
 }
 
 impl BackgroundScroll {
-    /// Place one strip's raw scroll position (a savegame's accumulator,
-    /// already in this background's fixed point), wrapped to the image.
+    /// Places one strip's raw scroll position, wrapped to the image.
+    ///
+    /// The position is a savegame's accumulator, already in this background's
+    /// fixed point.
     pub fn restore_offset(&mut self, strip: usize, offset: u32) {
         if let Some(slot) = self.offsets.get_mut(strip) {
             *slot = offset % (BACKGROUND_WIDTH << self.subpixel_shift);
@@ -553,7 +571,8 @@ impl BackgroundScroll {
     }
 }
 
-/// Which strip the image row `y` belongs to, by cumulative strip heights, or
+/// Which strip the image row `y` belongs to, by cumulative strip heights.
+///
 /// `None` past the last strip (the original draws nothing there).
 fn strip_at(strips: &[Strip], y: i32) -> Option<usize> {
     let mut bottom = 0;

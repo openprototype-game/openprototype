@@ -22,17 +22,23 @@
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::Dimensions;
 
-/// The display aspect every frame is fitted into: VGA on a 4:3 CRT, regardless
-/// of the source's own pixel aspect (320x200 is stretched, 320x240 is already
-/// 4:3). A future square-pixel toggle would derive this from the source size.
+/// The display aspect every frame is fitted into: a 4:3 CRT.
+///
+/// Applied regardless of the source's own pixel aspect (320x200 is stretched,
+/// 320x240 is already 4:3). A future square-pixel toggle would derive this from
+/// the source size.
 const TARGET_ASPECT: f32 = 4.0 / 3.0;
 
-/// The offscreen (expand-pass output) format. Linear unorm so the 8-bit palette
-/// colors blend and present unchanged, the way the VGA DAC drove them.
+/// The offscreen (expand-pass output) format.
+///
+/// Linear unorm so the 8-bit palette colors blend and present unchanged, the
+/// way the VGA DAC drove them.
 const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-/// The `Fit` uniform, matching the `blit.wgsl` layout. Padded to 32 bytes so the
-/// `vec2` members land at the same offsets the WGSL uniform layout expects.
+/// The `Fit` uniform, matching the `blit.wgsl` layout.
+///
+/// Padded to 32 bytes so the `vec2` members land at the same offsets the WGSL
+/// uniform layout expects.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct FitUniform {
@@ -42,14 +48,17 @@ struct FitUniform {
     _padding: [f32; 2],
 }
 
-/// The source-size-dependent resources: the uploaded index frame and the
-/// offscreen RGBA target the expand pass writes and the scale pass samples.
+/// The source-size-dependent resources.
+///
+/// The uploaded index frame and the offscreen RGBA target the expand pass
+/// writes and the scale pass samples.
 struct Source {
     size: Dimensions,
     index_texture: wgpu::Texture,
     offscreen_view: wgpu::TextureView,
 }
 
+/// The two-pass palette-expand and scale compositor.
 pub struct Compositor {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -69,9 +78,10 @@ pub struct Compositor {
 }
 
 impl Compositor {
-    /// Build the pipelines for an initial `source_size` frame. `target_format`
-    /// is the format of the views [`render_to`](Self::render_to) will draw into
-    /// (the swapchain format, or an offscreen format in a test).
+    /// Builds the pipelines for an initial `source_size` frame.
+    ///
+    /// `target_format` is the format of the views [`render_to`](Self::render_to)
+    /// will draw into (the swapchain format, or an offscreen format in a test).
     pub fn new(
         device: wgpu::Device,
         queue: wgpu::Queue,
@@ -188,13 +198,16 @@ impl Compositor {
         }
     }
 
+    /// The wgpu device the pipelines were built on.
     pub fn device(&self) -> &wgpu::Device {
         &self.device
     }
 
-    /// Upload `frame` and render it into `target`, a view `target_width` by
-    /// `target_height` pixels. Expands indices to the offscreen texture, then
-    /// scales into a centered 4:3 rect with the rest cleared black.
+    /// Uploads `frame` and renders it into `target`.
+    ///
+    /// `target` is a view `target_width` by `target_height` pixels. Expands
+    /// indices to the offscreen texture, then scales into a centered 4:3 rect
+    /// with the rest cleared black.
     pub fn render_to(
         &mut self,
         frame: &Framebuffer,
@@ -220,7 +233,7 @@ impl Compositor {
         self.queue.submit([encoder.finish()]);
     }
 
-    /// Push the frame's indices, palette and fit transform to the GPU.
+    /// Pushes the frame's indices, palette and fit transform to the GPU.
     fn upload(&self, frame: &Framebuffer, target_width: u32, target_height: u32) {
         let size = self.source.size;
         self.queue.write_texture(
@@ -328,8 +341,10 @@ impl Compositor {
     }
 }
 
-/// The largest 4:3 rectangle that fits in the target, centered, as the quad's
-/// clip-space half-extent plus the sizes the sharp-bilinear shader needs.
+/// The largest centered 4:3 rectangle that fits in the target.
+///
+/// Returned as the quad's clip-space half-extent plus the sizes the
+/// sharp-bilinear shader needs.
 fn compute_fit(target_width: u32, target_height: u32, source: Dimensions) -> FitUniform {
     let target_width = target_width as f32;
     let target_height = target_height as f32;

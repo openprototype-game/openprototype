@@ -1,5 +1,4 @@
-//! Player fire: the cooldown state machine, per-weapon spawn patterns, the
-//! shot pool, and the chaingun muzzle flash.
+//! Player fire: cooldown machine, spawn patterns, shot pool, and muzzle flash.
 //!
 //! Reverse-engineered from `LEVEL_1.WAD` (state machine file `0xb68a`,
 //! dispatch `0x9a1d`, spawners `0x96f2..`, update loop `0xc35e`); the spawner
@@ -46,30 +45,38 @@ use crate::spawns::{Effect, Entity};
 const MAX_SHOTS: usize = 95;
 
 /// Despawn bounds in 1/16-pixel window coordinates (update loop `0xc35e`).
+///
 /// The x maximum is per level ([`CombatData::shot_x_max`]).
 const X_MIN: i32 = -0x200;
 const Y_MAX: i32 = 0xa00;
 const Y_MIN: i32 = -0xa0;
 
-/// Muzzle-flash animation: the offset steps 8 per tick to `0x30` (6 frames),
-/// restarted on every shot.
+/// Muzzle-flash animation: the offset steps 8 per tick to `0x30` (6 frames).
+///
+/// Restarted on every shot.
 const FLASH_END: i32 = 0x30;
 
-/// Per-orb plasma bolt collision widths (the dispatch pre-writes them into
-/// the staging record before each orb's spawner call; all heights are 15).
+/// Per-orb plasma bolt collision widths.
+///
+/// The dispatch pre-writes them into the staging record before each orb's
+/// spawner call; all heights are 15.
 const BOLT_WIDTHS: [i32; 4] = [21, 22, 28, 28];
 
-/// The burning beam's extra spawn rows per charge level, on top of the
-/// shared `y + 16` (the rate selector at file `0x983b`, all 7 WADs).
+/// The burning beam's extra spawn rows per charge level.
+///
+/// On top of the shared `y + 16` (the rate selector at file `0x983b`, all 7
+/// WADs).
 const BEAM_CHARGE_DY: [i32; 4] = [3, 3, 2, 0];
 
-/// The orbs' bob phase (`cs:[0xcdf]`) steps 2 bytes per tick, wrapping at the
-/// wave's 14 words.
+/// The orbs' bob phase (`cs:[0xcdf]`) steps 2 bytes per tick.
+///
+/// Wraps at the wave's 14 words.
 const BOB_WRAP: i32 = 0x1c;
-/// Per orb: trail delay in ticks, x/y offsets from the trail position, the
-/// bob-wave phase stagger in bytes, and the bob's right-shift (amplitude
-/// grows down the trail). From the draw pass at file `0xb952` and the
-/// weapon-3 dispatch.
+/// Per orb: trail delay, offsets, bob-wave stagger, and bob shift.
+///
+/// The trail delay in ticks, x/y offsets from the trail position, the bob-wave
+/// phase stagger in bytes, and the bob's right-shift (amplitude grows down the
+/// trail). From the draw pass at file `0xb952` and the weapon-3 dispatch.
 const ORBS: [OrbData; 4] = [
     OrbData {
         delay: 0,
@@ -167,8 +174,9 @@ pub struct Shot {
 }
 
 impl Shot {
-    /// The shot's collision extent in pixels (record bytes +0xa/+0xb), from
-    /// the spawner literals.
+    /// The shot's collision extent in pixels (record bytes +0xa/+0xb).
+    ///
+    /// From the spawner literals.
     pub fn collision_size(&self) -> (i32, i32) {
         match self.kind {
             ShotKind::Chaingun | ShotKind::Missile => (13, 4),
@@ -183,8 +191,9 @@ impl Shot {
         }
     }
 
-    /// Whether the damage path skips the hit spark (the original's `0x32c0`
-    /// plasma type check at file 0xc0df).
+    /// Whether the damage path skips the hit spark.
+    ///
+    /// The original's `0x32c0` plasma type check at file 0xc0df.
     pub fn is_plasma(&self) -> bool {
         matches!(self.kind, ShotKind::PlasmaBolt(_) | ShotKind::PlasmaBall)
     }
@@ -199,16 +208,20 @@ impl Shot {
         matches!(self.kind, ShotKind::Missile)
     }
 
-    /// Whether this is a multishot round (sprite below the burning
-    /// threshold, sharing the chaingun's spark family).
+    /// Whether this is a multishot round.
+    ///
+    /// Its sprite is below the burning threshold, sharing the chaingun's spark
+    /// family.
     pub fn is_multishot(&self) -> bool {
         matches!(self.kind, ShotKind::Multishot(_))
     }
 }
 
-/// The missile's per-octant draw offsets in pixels (the shot draw at file
-/// `0xbc2d` adds these, 12.4-scaled, before the blit). The record position
-/// is the hit-test/trail anchor; these seat the rotated sprite on it.
+/// The missile's per-octant draw offsets in pixels.
+///
+/// The shot draw at file `0xbc2d` adds these, 12.4-scaled, before the blit. The
+/// record position is the hit-test/trail anchor; these seat the rotated sprite
+/// on it.
 const MISSILE_DRAW_OFFSETS: [(i32, i32); 8] = [
     (2, 4),
     (3, 6),
@@ -253,8 +266,9 @@ fn steer(shot: &mut Shot, enemy: &Entity, wad: &[u8], cs_base: usize) {
     shot.octant = octant(shot.dx, shot.dy);
 }
 
-/// Classify a velocity into a facing octant, `0` = right counting clockwise
-/// (file `0xc1bd..`). The diagonal band is `major/4 < |minor| <= major`.
+/// Classifies a velocity into a facing octant, `0` = right clockwise.
+///
+/// File `0xc1bd..`. The diagonal band is `major/4 < |minor| <= major`.
 fn octant(dx: i32, dy: i32) -> usize {
     match (dx >= 0, dy >= 0) {
         (true, true) => {
@@ -317,8 +331,9 @@ fn initial_damage(kind: ShotKind) -> i32 {
     }
 }
 
-/// The player's fire state: the cooldown machine, the live shots, and the
-/// muzzle flash.
+/// The player's fire state.
+///
+/// The cooldown machine, the live shots, and the muzzle flash.
 pub struct Weapons {
     /// Cooldown counter (`cs:[0xcc7]`), counting up to `rate`.
     cooldown: u8,
@@ -372,9 +387,10 @@ pub struct Weapons {
 }
 
 impl Weapons {
-    /// `firing` is the initial firing weapon, normally the resolve of the
-    /// starting [`GameState`] (so the first tick's re-resolve is a no-op
-    /// rather than a spurious switch).
+    /// Builds the fire state with an initial firing weapon.
+    ///
+    /// `firing` is normally the resolve of the starting [`GameState`], so the
+    /// first tick's re-resolve is a no-op rather than a spurious switch.
     pub fn new(
         bob_wave: Vec<i32>,
         firing: ActiveWeapon,
@@ -405,8 +421,10 @@ impl Weapons {
         }
     }
 
-    /// Each orb's window position: its trail entry plus its fixed offset and
-    /// its staggered, amplitude-shifted sample of the bob wave.
+    /// Each orb's window position.
+    ///
+    /// Its trail entry plus its fixed offset and its staggered, amplitude-shifted
+    /// sample of the bob wave.
     fn orb_positions(&self) -> [(i32, i32); 4] {
         std::array::from_fn(|orb| {
             let data = &ORBS[orb];
@@ -418,13 +436,15 @@ impl Weapons {
         })
     }
 
-    /// Advance one logic tick: re-resolve the firing weapon (unless frozen by
-    /// held fire), run the cooldown, spawn due shots from the ship at `(x, y)`
-    /// with roll frame `roll` (for the barrel offsets), move the live shots,
-    /// and advance the flash. Returns what fired, for the sound triggers.
+    /// Advances one logic tick, returning what fired for the sound triggers.
     ///
-    /// `enemy_count` is the live entity count, for the missile lock's
-    /// round-robin counter.
+    /// Re-resolves the firing weapon (unless frozen by held fire), runs the
+    /// cooldown, spawns due shots from the ship at `(x, y)` with roll frame
+    /// `roll` (for the barrel offsets), moves the live shots, and advances the
+    /// flash.
+    ///
+    /// `enemy_count` is the live entity count, for the missile lock's round-robin
+    /// counter.
     pub fn update(
         &mut self,
         fire_held: bool,
@@ -501,13 +521,14 @@ impl Weapons {
         }
     }
 
-    /// The orb deploy/retract machine: while fire is held, the dispatch
-    /// re-sets every orb flag from the charge bar (L1 file `0x9b48`), so all
-    /// charged orbs are out from the first tick and a drained charge pulls
-    /// them back in step; the stage machine (file `0xafe2`) only paces the
-    /// retract, one orb every 2nd tick after release, launching the last as
-    /// a forward orb projectile. Returns whether the ball launched this
-    /// tick.
+    /// The orb deploy/retract machine.
+    ///
+    /// While fire is held, the dispatch re-sets every orb flag from the charge
+    /// bar (L1 file `0x9b48`), so all charged orbs are out from the first tick
+    /// and a drained charge pulls them back in step; the stage machine (file
+    /// `0xafe2`) only paces the retract, one orb every 2nd tick after release,
+    /// launching the last as a forward orb projectile. Returns whether the ball
+    /// launched this tick.
     fn step_orbs(&mut self, plasma_held: bool, state: &GameState, (x, y): (i32, i32)) -> bool {
         let mut launched = false;
 
@@ -541,8 +562,9 @@ impl Weapons {
         launched
     }
 
-    /// Spawn the firing weapon's shots from ship position `(x, y)` (window
-    /// pixels) and set its auto-repeat rate. Restarts the muzzle flash.
+    /// Spawns the firing weapon's shots from ship position `(x, y)` (window pixels).
+    ///
+    /// Sets its auto-repeat rate and restarts the muzzle flash.
     fn fire(
         &mut self,
         state: &GameState,
@@ -625,24 +647,27 @@ impl Weapons {
     }
 
     /// The resolved firing weapon (`cs:0xcb5`), frozen while fire is held.
-    /// The panel's pod and overlay track this, not the instantaneous
-    /// selection: an orb picked up mid-burst doesn't switch the display
-    /// until fire is released (the resolve at file 0xae59).
+    ///
+    /// The panel's pod and overlay track this, not the instantaneous selection:
+    /// an orb picked up mid-burst doesn't switch the display until fire is
+    /// released (the resolve at file 0xae59).
     pub fn firing(&self) -> ActiveWeapon {
         self.firing
     }
 
-    /// The firing weapon's bar hit zero mid-hold: revert to the chaingun
-    /// with the original's cooldown (the hit consequence at file 0xc52c).
+    /// The firing weapon's bar hit zero mid-hold: revert to the chaingun.
+    ///
+    /// Reverts with the original's cooldown (the hit consequence at file 0xc52c).
     pub fn weapon_lost(&mut self) {
         self.firing = ActiveWeapon::Chaingun;
         self.rate = 6;
     }
 
-    /// Spawn the smart bomb's expanding ring (file `0x99b7`): 32 inert wave
-    /// records from `(ship + 25, ship + 20)` px, one per velocity in the
-    /// level's ellipse table. They fly out as ordinary shots and despawn at
-    /// the bounds; the bomb's field damage lands separately, 14 ticks later.
+    /// Spawns the smart bomb's expanding ring (file `0x99b7`).
+    ///
+    /// 32 inert wave records from `(ship + 25, ship + 20)` px, one per velocity
+    /// in the level's ellipse table. They fly out as ordinary shots and despawn
+    /// at the bounds; the bomb's field damage lands separately, 14 ticks later.
     pub fn smart_bomb(&mut self, (x, y): (i32, i32), wave: &[(i32, i32)]) {
         for &(dx, dy) in wave {
             self.spawn(ShotKind::BombWave, x + 25, y + 20, dx, dy);
@@ -651,16 +676,18 @@ impl Weapons {
         self.bomb_fired = true;
     }
 
-    /// The bomb key landed while the ring is still in flight: the original's
-    /// dispatch falls through into the volley path (L1 `0xb730`), so the
-    /// next update fires the firing weapon's volley past every gate.
+    /// The bomb key landed while the ring is still in flight.
+    ///
+    /// The original's dispatch falls through into the volley path (L1 `0xb730`),
+    /// so the next update fires the firing weapon's volley past every gate.
     pub fn force_volley(&mut self) {
         self.bypass_volley = true;
     }
 
-    /// One steering step for every live missile (file `0xc114`, run per
-    /// movement sub-step in the original's shot pass, between the hit test
-    /// and the velocity add).
+    /// One steering step for every live missile (file `0xc114`).
+    ///
+    /// Run per movement sub-step in the original's shot pass, between the hit test
+    /// and the velocity add.
     ///
     /// A locked missile accelerates toward its target's center (descriptor
     /// `+0x1a`/`+0x1c` offsets) weighted by inverse squared distance, then
@@ -719,9 +746,10 @@ impl Weapons {
         });
     }
 
-    /// Composite the live shots and the plasma orbs (window coordinates, like
-    /// the ship; the orbs only show while plasma is the firing weapon, drawn
-    /// furthest-back first like the original's `0xb952` pass).
+    /// Composites the live shots and the plasma orbs.
+    ///
+    /// Window coordinates, like the ship; the orbs only show while plasma is the
+    /// firing weapon, drawn furthest-back first like the original's `0xb952` pass.
     ///
     /// `show_orbs` is off while the ship is dying: the original's draw block
     /// skips the orbs together with the ship (the `0x46b2` gate at `0xb952`),
@@ -773,8 +801,9 @@ impl Weapons {
         }
     }
 
-    /// Composite the muzzle flash over the ship while the chaingun fires:
-    /// twice, at the two barrel positions of the current roll frame.
+    /// Composites the muzzle flash over the ship while the chaingun fires.
+    ///
+    /// Twice, at the two barrel positions of the current roll frame.
     pub fn render_flash(
         &self,
         sprites: &FireSprites,
@@ -800,8 +829,9 @@ impl Weapons {
 }
 
 /// A weapon's charge level as a 0-based index into the per-level tables.
-/// Callers only fire a secondary while it holds charge, so level 0 never
-/// reaches here; it clamps defensively.
+///
+/// Callers only fire a secondary while it holds charge, so level 0 never reaches
+/// here; it clamps defensively.
 fn charge_index(state: &GameState, weapon: Weapon) -> usize {
     (state.level(weapon).get().max(1) - 1) as usize
 }

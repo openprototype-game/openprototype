@@ -34,12 +34,12 @@ pub enum SpawnSource {
 impl SpawnSource {
     /// Resolves the source into the level's spawn-record buffer.
     ///
-    /// `wad` is the level's WAD image (read by [`StaticTable`]
-    /// (SpawnSource::StaticTable)); `rng` is the level's single engine
-    /// stream (seeded once per entry from
-    /// [`clock_seed`](super::prng::clock_seed)): the layout draws advance
-    /// it, and the star scatter and play draws continue from there, like
-    /// the original's one-generator model.
+    /// `wad` is the level's WAD image (read by the
+    /// [`StaticTable`](SpawnSource::StaticTable) arm); `rng` is the level's
+    /// single engine stream (seeded once per entry from
+    /// [`clock_seed`](super::prng::clock_seed)): the layout draws advance it, and
+    /// the star scatter and play draws continue from there, like the original's
+    /// one-generator model.
     pub fn records(self, wad: &[u8], rng: &mut EngineRng) -> Vec<Record> {
         match self {
             SpawnSource::Generated { script, post_pass } => {

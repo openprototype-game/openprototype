@@ -24,8 +24,9 @@ const HEADER_SIZE: usize = 0x200;
 const MENU_PALETTE_OFFSET: usize = 0x5130;
 const PALETTE_LEN: usize = 768;
 
-/// Image offset of the menu string table. Its first entry is `NEW GAME`, used
-/// here only as a version guard.
+/// Image offset of the menu string table.
+///
+/// Its first entry is `NEW GAME`, used here only as a version guard.
 const MENU_ANCHOR_OFFSET: usize = 0x30f;
 const MENU_ANCHOR: &[u8] = b"NEW GAME";
 
@@ -35,7 +36,7 @@ pub struct StartExe<'a> {
 }
 
 impl<'a> StartExe<'a> {
-    /// Validate `bytes` (the raw `START.EXE` file) and borrow its image.
+    /// Validates `bytes` (the raw `START.EXE` file) and borrows its image.
     ///
     /// Checks the `MZ` magic and that the menu string table sits at its known
     /// offset, so a wrong file or a different build is rejected rather than
@@ -67,8 +68,10 @@ impl<'a> StartExe<'a> {
         Ok(Self { image })
     }
 
-    /// Decode the menu palette: 256 colors uploaded to the DAC before the
-    /// menu loop. Index 0 is black, index 1 white, then a gray-to-rust ramp.
+    /// Decodes the menu palette.
+    ///
+    /// The 256 colors are uploaded to the DAC before the menu loop: index 0 is
+    /// black, index 1 white, then a gray-to-rust ramp.
     pub fn menu_palette(&self) -> Result<Palette> {
         let bytes = self
             .image

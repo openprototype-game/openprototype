@@ -1,5 +1,6 @@
-//! LEVEL_7's 50 mode-0 enemy AI functions, transcribed from the disassembly
-//! (`re/l7-ai-functions.md`; pointer table at file `0x10f8b`).
+//! LEVEL_7's 50 mode-0 enemy AI functions, transcribed from the disassembly.
+//!
+//! See `re/l7-ai-functions.md` (pointer table at file `0x10f8b`).
 //!
 //! Same engine as L1 with a different AI set. No enemy aims (the aimed-fire
 //! helper is dead code); the boss is a five-entity composite lava serpent at
@@ -41,9 +42,10 @@ pub(crate) struct AiContext<'a> {
     pub sounds: &'a mut AiSounds,
 }
 
-/// The composite boss's shared globals (`cs:0xcc3..0xcdd`), owned by the
-/// controller (arg 4) and read by the body parts. File-image inits in the
-/// `Default`.
+/// The composite boss's shared globals (`cs:0xcc3..0xcdd`).
+///
+/// Owned by the controller (arg 4) and read by the body parts. File-image
+/// inits in the `Default`.
 pub(crate) struct BossState {
     /// The shared anchor (`cs:0xcc3`/`0xcc5`, 12.4; starts at 288, 20 px).
     anchor_x: i32,
@@ -98,20 +100,21 @@ fn refresh_hitboxes(entity: &mut Entity, wad: &[u8]) {
     entity.hitboxes = descriptor_hitboxes(wad, CS_BASE, entity.sprite);
 }
 
-/// The boss/snake x wobble (file `0x102e3`): 0x78 words, byte-indexed,
-/// wrap 0xf0.
+/// The boss/snake x wobble (file `0x102e3`): 0x78 words, byte-indexed, wrap 0xf0.
 const WOBBLE_A: usize = 0x102e3;
 
 /// The boss/snake y wobble (file `0x103d3`): 0x64 words, wrap 0xc8.
 const WOBBLE_B: usize = 0x103d3;
 
-/// The dragonflies' morph frame and x-adjust tables (files `0x10d31`,
-/// `0x10d49`).
+/// The dragonflies' morph frame and x-adjust tables.
+///
+/// Files `0x10d31` and `0x10d49`.
 const MORPH_FRAMES: usize = 0x10d31;
 const MORPH_XADJ: usize = 0x10d49;
 
-/// The radial velocity table (file `0x80cb`): 32 `{vx, vy}` pairs, the same
-/// data as L1's smart-bomb ellipse. The boss fires it at half speed.
+/// The radial velocity table (file `0x80cb`): 32 `{vx, vy}` pairs.
+///
+/// The same data as L1's smart-bomb ellipse. The boss fires it at half speed.
 const RADIAL: usize = 0x80cb;
 
 /// The leftward path segments (funcs 14..23 and 34..43, in arg order).
@@ -184,9 +187,10 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// The boss controller and head (func 4): owns the master tick, the pattern
-/// clock with the ring/spiral volleys, the anchor and its wobble, and the
-/// smoke bursts. The head never animates.
+/// The boss controller and head (func 4).
+///
+/// Owns the master tick, the pattern clock with the ring/spiral volleys, the
+/// anchor and its wobble, and the smoke bursts. The head never animates.
 fn boss_controller(entity: &mut Entity, ctx: &mut AiContext) {
     ctx.boss.master_tick += 1;
     ctx.boss.pattern_clock += 1;
@@ -222,8 +226,10 @@ fn boss_controller(entity: &mut Entity, ctx: &mut AiContext) {
     boss_smoke(entity, ctx);
 }
 
-/// The shared per-part tail: position from the anchor plus wobble, then the
-/// health min-share across the five parts.
+/// The shared per-part tail.
+///
+/// Position from the anchor plus wobble, then the health min-share across the
+/// five parts.
 fn boss_tail(entity: &mut Entity, ctx: &mut AiContext) {
     entity.x = ctx.boss.anchor_x + ctx.boss.wobble_x;
     entity.y = ctx.boss.anchor_y + ctx.boss.wobble_y;
@@ -274,9 +280,10 @@ const PART_5: PartData = PartData {
     row_offset: 0,
 };
 
-/// The four body parts (funcs 5..8): hold, grow one frame per anim-gate
-/// pass, then bite when the player's row lines up (parts 2..4; the tail
-/// just freezes grown).
+/// The four body parts (funcs 5..8): hold, grow, then bite.
+///
+/// Hold, grow one frame per anim-gate pass, then bite when the player's row
+/// lines up (parts 2..4; the tail just freezes grown).
 fn boss_part(entity: &mut Entity, ctx: &mut AiContext, part: PartData) {
     if ctx.boss.master_tick <= part.hold {
         if ctx.boss.master_tick == 0xc8 {
@@ -315,8 +322,9 @@ fn advance_bite(entity: &mut Entity, cap: u16, last: u16) {
     };
 }
 
-/// The boss's smoke bursts below 5000 shared health (file `0x1049b`; the
-/// controller only).
+/// The boss's smoke bursts below 5000 shared health (file `0x1049b`).
+///
+/// The controller only.
 fn boss_smoke(entity: &mut Entity, ctx: &mut AiContext) {
     if entity.health > 0x1388 {
         return;
@@ -346,8 +354,9 @@ fn boss_smoke(entity: &mut Entity, ctx: &mut AiContext) {
     });
 }
 
-/// The 16-shot ring from the boss mouth (file `0x105c1`), at pattern clock
-/// 0x258 exactly.
+/// The 16-shot ring from the boss mouth (file `0x105c1`).
+///
+/// Fires at pattern clock 0x258 exactly.
 fn ring_volley(ctx: &mut AiContext) {
     for i in 0..0x10usize {
         let pair = RADIAL + i * 8;
@@ -361,9 +370,10 @@ fn ring_volley(ctx: &mut AiContext) {
     }
 }
 
-/// The 64-shot spiral (file `0x10552`): one shot every 3rd sub-step,
-/// stepping every other radial pair; the pattern clock restarts at 0x12c
-/// when the sweep completes.
+/// The 64-shot spiral (file `0x10552`).
+///
+/// One shot every 3rd sub-step, stepping every other radial pair; the pattern
+/// clock restarts at 0x12c when the sweep completes.
 fn boss_spiral(ctx: &mut AiContext) {
     ctx.boss.spiral_divider += 1;
 
@@ -389,8 +399,9 @@ fn boss_spiral(ctx: &mut AiContext) {
     }
 }
 
-/// The lava fountains (funcs 9/10): scroll-locked obstacles that bubble low
-/// for 100 ticks, then erupt and loop their tall frames.
+/// The lava fountains (funcs 9/10): scroll-locked obstacles.
+///
+/// Bubble low for 100 ticks, then erupt and loop their tall frames.
 fn fountain(
     entity: &mut Entity,
     ctx: &mut AiContext,
@@ -437,8 +448,9 @@ fn dart(entity: &mut Entity) {
     }
 }
 
-/// The small leftward enemy's 7-frame cycle (file `0x10a12`); also
-/// increments the tick the path followers index with.
+/// The small leftward enemy's 7-frame cycle (file `0x10a12`).
+///
+/// Also increments the tick the path followers index with.
 fn anim_small_left(entity: &mut Entity, wad: &[u8]) {
     entity.tick += 1;
     entity.anim += 1;
@@ -455,8 +467,9 @@ fn anim_small_left(entity: &mut Entity, wad: &[u8]) {
     refresh_hitboxes(entity, wad);
 }
 
-/// The small rightward enemy's cycle (file `0x10a37`, frames
-/// `0x4aa7..0x4b79`).
+/// The small rightward enemy's cycle (file `0x10a37`).
+///
+/// Frames `0x4aa7..0x4b79`.
 fn anim_small_right(entity: &mut Entity, wad: &[u8]) {
     entity.tick += 1;
     entity.anim += 1;
@@ -480,8 +493,9 @@ fn path_add(entity: &mut Entity, wad: &[u8], segment: usize) {
     entity.y += word(wad, at + 2) << 4;
 }
 
-/// Funcs 34..43: the three-pose directional flyer; the pose switches when
-/// two consecutive path entries agree on the dy sign.
+/// Funcs 34..43: the three-pose directional flyer.
+///
+/// The pose switches when two consecutive path entries agree on the dy sign.
 fn directional(entity: &mut Entity, wad: &[u8], segment: usize) {
     entity.tick += 1;
     let at = segment_base(segment) + usize::from(entity.tick) * 4;
@@ -517,10 +531,11 @@ enum Facing {
     Rightward,
 }
 
-/// Funcs 45..48: the turn-around dragonflies. Fly across, morph to the
-/// opposite-facing sprite over 20 sub-steps (with the x-adjust each step),
-/// then exit the way they came. The drift variants sink 1 px per sub-step
-/// during the morph.
+/// Funcs 45..48: the turn-around dragonflies.
+///
+/// Fly across, morph to the opposite-facing sprite over 20 sub-steps (with the
+/// x-adjust each step), then exit the way they came. The drift variants sink 1
+/// px per sub-step during the morph.
 fn dragonfly(entity: &mut Entity, wad: &[u8], facing: Facing, drift: bool) {
     entity.tick += 1;
     let (speed, frames_base) = match facing {
@@ -557,13 +572,15 @@ fn dragonfly(entity: &mut Entity, wad: &[u8], facing: Facing, drift: bool) {
     refresh_hitboxes(entity, wad);
 }
 
-/// Func 49: the snake turret. Approaches, anchors and raises the gate, then
-/// wobbles in place on the boss tables, firing 6 px/step shots from
-/// alternating muzzles in bursts with quiet periods.
+/// Func 49: the snake turret.
 ///
-/// Field mapping: `phase_a`/`phase_b` = the anchor x/y, `save_y`/`save_x` =
-/// the wobble phases, `counter` = the burst counter (the original's word at
-/// entity +0x2a).
+/// Approaches, anchors and raises the gate, then wobbles in place on the boss
+/// tables, firing 6 px/step shots from alternating muzzles in bursts with quiet
+/// periods.
+///
+/// Field mapping: `phase_a`/`phase_b` = the anchor x/y, `save_y`/`save_x` = the
+/// wobble phases, `counter` = the burst counter (the original's word at entity
+/// +0x2a).
 fn snake(entity: &mut Entity, ctx: &mut AiContext) {
     entity.tick += 1;
 
@@ -624,8 +641,9 @@ fn snake(entity: &mut Entity, ctx: &mut AiContext) {
     muzzle_fire(entity, ctx);
 }
 
-/// The snake's muzzle shots (file `0x10e1c`): the firing frames alternate
-/// the upper and lower muzzles.
+/// The snake's muzzle shots (file `0x10e1c`).
+///
+/// The firing frames alternate the upper and lower muzzles.
 fn muzzle_fire(entity: &mut Entity, ctx: &mut AiContext) {
     let muzzle = match entity.sprite {
         0x49cf | 0x49e7 | 0x49ff | 0x4a17 => Some(0x70),

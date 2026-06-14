@@ -3,7 +3,7 @@
 //! The original keeps `HIGH.TXT` next to itself and rewrites it in place. Our
 //! disc image is read-only, so the writable copy lives in the OS data directory
 //! instead, with the disc's shipped table as the fallback until the player has
-//! saved their own. Decoding lives in [`prototype_formats::high`]; this is just
+//! saved their own. Decoding lives in `prototype_formats::high`; this is just
 //! the I/O around it.
 
 use std::fs;
@@ -17,14 +17,16 @@ use prototype_formats::Highscores;
 /// The high-score file's name in the data directory.
 const FILE_NAME: &str = "high.txt";
 
+/// Reads and writes the high-score table in the OS data directory.
 pub struct HighscoreStore {
     path: PathBuf,
     disc_default: Highscores,
 }
 
 impl HighscoreStore {
-    /// Resolve the data-directory path and decode the disc's default table to
-    /// fall back on when there is no local copy.
+    /// Resolves the data-directory path and decodes the disc's default table.
+    ///
+    /// The default is the fallback when there is no local copy.
     pub fn open(disc: &DiscImage) -> Result<Self> {
         let dirs = ProjectDirs::from("de", "dasprids", "OpenPrototype")
             .context("resolving the data directory")?;
@@ -35,8 +37,9 @@ impl HighscoreStore {
         })
     }
 
-    /// The current table: the local file if it reads and parses, otherwise the
-    /// disc default. Infallible, the fallback is always in memory.
+    /// The current table: the local file if it parses, otherwise the disc default.
+    ///
+    /// Infallible: the fallback is always in memory.
     pub fn load(&self) -> Highscores {
         fs::read_to_string(&self.path)
             .ok()
@@ -44,7 +47,7 @@ impl HighscoreStore {
             .unwrap_or_else(|| self.disc_default.clone())
     }
 
-    /// Write the table to the local file, creating the data directory if needed.
+    /// Writes the table to the local file, creating the data directory if needed.
     pub fn save(&self, scores: &Highscores) -> Result<()> {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
@@ -55,7 +58,7 @@ impl HighscoreStore {
     }
 }
 
-/// Decode the disc's shipped `HIGH.TXT`, the seed for a fresh install.
+/// Decodes the disc's shipped `HIGH.TXT`, the seed for a fresh install.
 fn load_disc_default(disc: &DiscImage) -> Result<Highscores> {
     let bytes = disc
         .read("HIGH.TXT")
@@ -64,8 +67,9 @@ fn load_disc_default(disc: &DiscImage) -> Result<Highscores> {
     text.parse::<Highscores>().context("decoding HIGH.TXT")
 }
 
-/// A store with a synthetic default and a path that does not exist, for tests
-/// in other modules that need a store but never read its file.
+/// A store with a synthetic default and a path that does not exist.
+///
+/// For tests in other modules that need a store but never read its file.
 #[cfg(test)]
 pub(crate) fn test_store() -> HighscoreStore {
     let disc_default = (1..=8)

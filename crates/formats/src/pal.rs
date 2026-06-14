@@ -6,7 +6,7 @@
 use crate::Result;
 use crate::color::Palette;
 
-/// Decode a `.PAL` file into a display-ready palette.
+/// Decodes a `.PAL` file into a display-ready palette.
 pub fn decode(bytes: &[u8]) -> Result<Palette> {
     Palette::from_vga_6bit(bytes)
 }

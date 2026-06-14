@@ -24,12 +24,14 @@ use crate::playfield;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
 
-/// The off-screen y cull bounds in 12.4 fixed point, shared by every level
-/// (the x bounds are per-level, in [`CombatData`]).
+/// The off-screen y cull bounds in 12.4 fixed point, shared by every level.
+///
+/// The x bounds are per-level, in [`CombatData`].
 const CULL_Y: std::ops::RangeInclusive<i32> = -0x3c0..=0xa00;
 
-/// One row of a level's spawn-position table: where a spawn enters the
-/// playfield and how it moves.
+/// One row of a level's spawn-position table.
+///
+/// Where a spawn enters the playfield and how it moves.
 ///
 /// `mode` 0 runs the per-type AI function `arg`; a nonzero mode is the
 /// (relocated) segment of a `{dx, dy, danim}` path table that `arg` indexes
@@ -42,8 +44,9 @@ pub struct SpawnRow {
     pub arg: u16,
 }
 
-/// Decodes a WAD's spawn-position table: `rows` 8-byte rows at file offset
-/// `table`.
+/// Decodes a WAD's spawn-position table.
+///
+/// `rows` 8-byte rows at file offset `table`.
 pub fn decode_rows(wad: &[u8], table: usize, rows: usize) -> anyhow::Result<Vec<SpawnRow>> {
     let end = table + rows * 8;
 
@@ -65,8 +68,9 @@ pub fn decode_rows(wad: &[u8], table: usize, rows: usize) -> anyhow::Result<Vec<
         .collect())
 }
 
-/// One live enemy or pickup, the port's view of the original's 0x40-byte
-/// entity (field offsets per `re/l1-ai-functions.md`).
+/// One live enemy or pickup, the port's view of the original's 0x40-byte entity.
+///
+/// Field offsets per `re/l1-ai-functions.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     /// The current sprite descriptor cs-pointer (the animation frame).
@@ -111,8 +115,9 @@ pub struct Entity {
     pub counter: u16,
 }
 
-/// Reads an entity's three 4-byte collision boxes from its descriptor block
-/// (descriptor +0x8..0x13).
+/// Reads an entity's three 4-byte collision boxes from its descriptor block.
+///
+/// Descriptor +0x8..0x13.
 pub(crate) fn descriptor_hitboxes(wad: &[u8], cs_base: usize, sprite: u16) -> [[u8; 4]; 3] {
     let at = usize::from(sprite) + cs_base + 8;
 
@@ -123,8 +128,9 @@ pub(crate) fn descriptor_hitboxes(wad: &[u8], cs_base: usize, sprite: u16) -> [[
     std::array::from_fn(|box_index| std::array::from_fn(|byte| wad[at + box_index * 4 + byte]))
 }
 
-/// One visual effect (the original's 16-byte buffer-E record): an animated
-/// sprite at a fixed pixel position (`re/l1-effects.md`).
+/// One visual effect (the original's 16-byte buffer-E record).
+///
+/// An animated sprite at a fixed pixel position (`re/l1-effects.md`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Effect {
     /// The current sprite descriptor cs-pointer; advances by `step` as the
@@ -149,8 +155,10 @@ pub struct Effect {
 /// The effects cap, the original's buffer bound.
 const MAX_EFFECTS: usize = 0x18F;
 
-/// The enemy-shot pool's cap (the original raises fatal error 2 when 0x5f
-/// shots survive a frame, L1 0xc5d1).
+/// The enemy-shot pool's cap.
+///
+/// The original raises fatal error 2 when 0x5f shots survive a frame (L1
+/// 0xc5d1).
 const MAX_SHOTS: usize = 0x5F;
 
 /// Reads an entity's death-debris template pointer (descriptor +0x14).
@@ -164,22 +172,25 @@ pub(crate) fn descriptor_debris(wad: &[u8], cs_base: usize, sprite: u16) -> u16 
     u16::from_le_bytes([wad[at], wad[at + 1]])
 }
 
-/// Sample slots the AI triggered this step, played on the event channel
-/// (volleys, the boss phase change, the carrier-pod deploy: each level's
-/// AI knows its own slot numbers from its RE doc).
+/// Sample slots the AI triggered this step, played on the event channel.
+///
+/// Volleys, the boss phase change, the carrier-pod deploy: each level's AI knows
+/// its own slot numbers from its RE doc.
 pub type AiSounds = Vec<usize>;
 
-/// Which samples a boss explosion burst plays (the levels differ: L1 bursts
-/// the asteroid sample, adding the big explosion for form 2; L3 bursts the
-/// big explosion alone).
+/// Which samples a boss explosion burst plays.
+///
+/// The levels differ: L1 bursts the asteroid sample, adding the big explosion
+/// for form 2; L3 bursts the big explosion alone.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BossExplosionSound {
     AsteroidPair { form2: bool },
     Explosion,
 }
 
-/// One enemy shot (the original's 16-byte buffer-B record): position and
-/// velocity in 12.4 per sub-step.
+/// One enemy shot (the original's 16-byte buffer-B record).
+///
+/// Position and velocity in 12.4 per sub-step.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shot {
     pub sprite: u16,
@@ -189,14 +200,16 @@ pub struct Shot {
     pub vy: i32,
 }
 
-/// The enemy shots' cull bounds (the move loop's signed compares, both
-/// exclusive): x in (-0x200, the level's [`CombatData::shot_x_max`]),
+/// The enemy shots' cull bounds (signed compares, both exclusive).
+///
+/// From the move loop. x in (-0x200, the level's [`CombatData::shot_x_max`]),
 /// y in (0, 0xa00).
 const SHOT_X_MIN: i32 = -0x1ff;
 const SHOT_Y: std::ops::Range<i32> = 1..0xa00;
 
-/// The player state the AI functions read: position in pixels plus the
-/// input facts the bosses key on.
+/// The player state the AI functions read.
+///
+/// Position in pixels plus the input facts the bosses key on.
 #[derive(Clone, Copy, Default)]
 pub struct PlayerInput {
     pub x: i32,
@@ -265,8 +278,9 @@ pub struct Spawns {
 
 impl Spawns {
     /// Builds the schedule over a generated (or static) record buffer.
-    /// `combat` carries the level's engine bounds (entity cap, cull floor)
-    /// and the kind/sprite constants the combat passes key on.
+    ///
+    /// `combat` carries the level's engine bounds (entity cap, cull floor) and
+    /// the kind/sprite constants the combat passes key on.
     pub fn new(
         records: Vec<Record>,
         ai: Option<SpawnAi>,
@@ -301,7 +315,7 @@ impl Spawns {
         }
     }
 
-    /// Rebuild the spawn layer from a savegame snapshot.
+    /// Rebuilds the spawn layer from a savegame snapshot.
     ///
     /// The original decays the head record's delay in the table itself, so
     /// the saved `records[cursor].delay` IS the live countdown; everything
@@ -344,10 +358,11 @@ impl Spawns {
         spawns
     }
 
-    /// The schedule as a savegame stores it: the records with the head
-    /// record's delay decayed to the live countdown (the original's ISR
-    /// mutates the table in place, so that word IS the countdown in a
-    /// written file), plus the cursor.
+    /// The schedule as a savegame stores it.
+    ///
+    /// The records with the head record's delay decayed to the live countdown
+    /// (the original's ISR mutates the table in place, so that word IS the
+    /// countdown in a written file), plus the cursor.
     pub fn save_schedule(&self) -> (Vec<Record>, usize) {
         let mut records = self.records.clone();
 
@@ -363,14 +378,16 @@ impl Spawns {
         self.weapon_upgrade_drop_countdown
     }
 
-    /// Carry the countdown across a race course restart: the respawn
-    /// handler never resets it.
+    /// Carries the countdown across a race course restart.
+    ///
+    /// The respawn handler never resets it.
     pub fn set_weapon_upgrade_drop_countdown(&mut self, countdown: i32) {
         self.weapon_upgrade_drop_countdown = countdown;
     }
 
-    /// One PIT tick of the spawn clock: decrement the head delay and pull
-    /// every due record into a live entity.
+    /// One PIT tick of the spawn clock.
+    ///
+    /// Decrements the head delay and pulls every due record into a live entity.
     ///
     /// The original splits this between the ISR (the decrement) and the
     /// update-loop tail (the pull); the pull chains while consecutive records
@@ -615,24 +632,28 @@ impl Spawns {
         appended
     }
 
-    /// The level-end death's boss cascade: L7's death handler zeroes the
-    /// composite boss's shared health pool so the min-share kills the other
-    /// parts on their next step. A no-op for the single-boss levels.
+    /// The level-end death's boss cascade.
+    ///
+    /// L7's death handler zeroes the composite boss's shared health pool so the
+    /// min-share kills the other parts on their next step. A no-op for the
+    /// single-boss levels.
     pub fn boss_killed(&mut self) {
         self.boss_l7.shared_health = 0;
     }
 
     /// Whether the boss/orbiter gate is holding the scroll and spawn clock.
-    /// The level-end flag bypasses it where the level writes the ISR
-    /// override (L1; L3 leaves its gate stuck through the flyout).
+    ///
+    /// The level-end flag bypasses it where the level writes the ISR override
+    /// (L1; L3 leaves its gate stuck through the flyout).
     pub fn gate_holds(&self) -> bool {
         let bypassed = self.level_end && self.combat.level_end_clears_gate;
 
         self.gate > 0 && !bypassed
     }
 
-    /// The live debris patch for a kind's shared descriptor, if any AI has
-    /// written one this session.
+    /// The live debris patch for a kind's shared descriptor.
+    ///
+    /// `None` unless an AI has written one this session.
     pub fn debris_override(&self, kind: u16) -> Option<u16> {
         self.debris_overrides.get(&kind).copied()
     }
@@ -644,10 +665,10 @@ impl Spawns {
         }
     }
 
-    /// Decrements the weapon-upgrade-drop countdown (`cs:0x2666`); `true` means
-    /// this kill converts into the weapon-upgrade pickup, and the countdown
-    /// reseeds as
-    /// `rng(4) + 5`.
+    /// Decrements the weapon-upgrade-drop countdown (`cs:0x2666`).
+    ///
+    /// `true` means this kill converts into the weapon-upgrade pickup, and the
+    /// countdown reseeds as `rng(4) + 5`.
     pub fn weapon_upgrade_drop_due(&mut self) -> bool {
         self.weapon_upgrade_drop_countdown -= 1;
 
@@ -665,8 +686,7 @@ impl Spawns {
         (self.cursor, self.countdown)
     }
 
-    /// Draws every live entity in buffer order (the original has no depth
-    /// sort).
+    /// Draws every live entity in buffer order (the original has no depth sort).
     ///
     /// `wad`/`cs_base` resolve descriptor pointers (`file = ptr + cs_base`)
     /// and `catalog` supplies the cells; sprites are cached per descriptor.

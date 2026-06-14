@@ -16,6 +16,7 @@ use winit::window::Window;
 
 use crate::compositor::Compositor;
 
+/// A wgpu surface and swapchain wrapping a [`Compositor`].
 pub struct Renderer {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -24,7 +25,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// Build the renderer for `window`, sized for an initial `source_size` frame.
+    /// Builds the renderer for `window`, sized for an initial `source_size` frame.
     pub fn new(window: Arc<Window>, source_size: Dimensions) -> Result<Self> {
         let instance = wgpu::Instance::default();
         let surface = instance
@@ -92,12 +93,15 @@ impl Renderer {
         })
     }
 
+    /// The window this renderer presents into.
     pub fn window(&self) -> &Window {
         &self.window
     }
 
-    /// Reconfigure the surface to a new window size. A zero dimension (minimised)
-    /// is ignored; the next non-zero resize restores it.
+    /// Reconfigures the surface to a new window size.
+    ///
+    /// A zero dimension (minimised) is ignored; the next non-zero resize
+    /// restores it.
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -109,7 +113,7 @@ impl Renderer {
             .configure(self.compositor.device(), &self.config);
     }
 
-    /// Toggle borderless fullscreen on the current monitor.
+    /// Toggles borderless fullscreen on the current monitor.
     pub fn toggle_fullscreen(&self) {
         let fullscreen = match self.window.fullscreen() {
             Some(_) => None,
@@ -119,9 +123,11 @@ impl Renderer {
         self.window.set_fullscreen(fullscreen);
     }
 
-    /// Present `frame`. Surface-state errors (a resize or fullscreen toggle in
-    /// flight) reconfigure and skip the frame rather than retry-looping, which is
-    /// what wedged the old `pixels` backend on X11.
+    /// Presents `frame`.
+    ///
+    /// Surface-state errors (a resize or fullscreen toggle in flight) reconfigure
+    /// and skip the frame rather than retry-looping, which is what wedged the old
+    /// `pixels` backend on X11.
     pub fn render(&mut self, frame: &Framebuffer) -> Result<()> {
         let surface_texture = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture)

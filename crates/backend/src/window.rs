@@ -42,27 +42,34 @@ use openprototype_core::input::{Key as CoreKey, KeyEvent};
 
 const INITIAL_SCALE: u32 = 4;
 
-/// The most logic time one redraw may catch up. A redraw that arrives late
-/// (vsync capping the rate, a busy compositor) runs every period it covers, but
-/// in bursts of at most this much; the rest stays in the backlog for the next
-/// redraws, so a stall amortizes instead of freezing the app.
+/// The most logic time one redraw may catch up.
+///
+/// A redraw that arrives late (vsync capping the rate, a busy compositor) runs
+/// every period it covers, but in bursts of at most this much; the rest stays
+/// in the backlog for the next redraws, so a stall amortizes instead of freezing
+/// the app.
 const MAX_CATCHUP_PER_FRAME: Duration = Duration::from_millis(250);
 
-/// A backlog longer than this (a suspend, a debugger pause) is abandoned
-/// rather than fast-forwarded through; the scene resumes at its normal rate.
+/// A backlog longer than this is abandoned rather than fast-forwarded.
+///
+/// A suspend or a debugger pause causes one; the scene resumes at its normal
+/// rate.
 const BACKLOG_RESET: Duration = Duration::from_secs(1);
 
-/// How many whole `interval` periods a redraw arriving `behind` its deadline
-/// must run to keep logic time on wall clock, capped at
-/// [`MAX_CATCHUP_PER_FRAME`].
+/// How many whole `interval` periods a late redraw must run.
+///
+/// A redraw arriving `behind` its deadline runs enough periods to keep logic
+/// time on wall clock, capped at [`MAX_CATCHUP_PER_FRAME`].
 fn backlog_steps(behind: Duration, interval: Duration) -> u32 {
     let limit = (MAX_CATCHUP_PER_FRAME.as_nanos() / interval.as_nanos()).max(1) as u32;
     let due = (behind.as_nanos() / interval.as_nanos() + 1) as u32;
     due.min(limit)
 }
 
-/// Run the given scene until it quits or the window closes. `disc` is handed to
-/// the audio backend so it can stream the CD-DA tracks on demand.
+/// Runs the given scene until it quits or the window closes.
+///
+/// `disc` is handed to the audio backend so it can stream the CD-DA tracks on
+/// demand.
 pub fn run(game: Box<dyn Game>, disc: Arc<DiscImage>) -> Result<()> {
     let event_loop = EventLoop::new().context("creating the event loop")?;
     let mut app = App {
@@ -106,8 +113,10 @@ struct App {
 }
 
 impl App {
-    /// Advance the core by the pending logic periods (or re-render as is when
-    /// none are due) with the queued input, then present and exit on quit.
+    /// Advances the core by the pending logic periods, then presents.
+    ///
+    /// With no periods due, re-renders as-is. Drains the queued input into the
+    /// step, then presents and exits on quit.
     fn frame(&mut self, event_loop: &ActiveEventLoop) {
         // Fixed timestep: a timer frame advances every logic period it covers
         // (one, unless it arrived late); an input or resize frame just
@@ -145,8 +154,9 @@ impl App {
         }
     }
 
-    /// Step the core once, execute its audio commands, and report whether it
-    /// asked to quit.
+    /// Steps the core once and executes its audio commands.
+    ///
+    /// Reports whether it asked to quit.
     fn advance_game(&mut self, dt: Duration, input: &[KeyEvent]) -> bool {
         let output = self.game.step(dt, input);
 
@@ -177,7 +187,7 @@ impl App {
         }
     }
 
-    /// Record an error to return from [`run`] and stop the loop.
+    /// Records an error to return from [`run`] and stops the loop.
     fn fail(&mut self, event_loop: &ActiveEventLoop, error: anyhow::Error) {
         self.pending_error = Some(error);
         event_loop.exit();
@@ -291,8 +301,10 @@ impl ApplicationHandler for App {
     }
 }
 
-/// Create the window at a 4:3 shape (so it fills with no letterbox bars) and
-/// build the renderer for the initial `source` frame size.
+/// Creates the window at a 4:3 shape and builds its renderer.
+///
+/// The 4:3 shape means the content fills the window with no letterbox bars.
+/// Sized for the initial `source` frame.
 fn create_renderer(event_loop: &ActiveEventLoop, source: Dimensions) -> Result<Renderer> {
     let width = source.width * INITIAL_SCALE;
     let height = width * 3 / 4;

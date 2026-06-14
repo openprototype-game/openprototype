@@ -11,7 +11,7 @@
 //! settled screen (the FLI's last frame plus the rows already landed). Rows
 //! above mid-screen fly down from above, rows below fly up, and the middle
 //! rows shrink in place; the fast-then-slow look comes entirely from the
-//! hyperbolic scale ramp, not the pacing — every step is the same constant
+//! hyperbolic scale ramp, not the pacing: every step is the same constant
 //! work, with no retrace or timer wait. The absolute per-step pace is set
 //! from a recording (see `STEP_DURATION`).
 //!
@@ -38,17 +38,22 @@ use openprototype_core::input::KeyEvent;
 /// `HIGHSCOR.FLI` plays at 4 ticks per frame (`cs:[0x3022]=4` before `0x4077`).
 const FLI_FRAME_DELAY: Duration = Duration::from_micros(4 * 1_000_000 / 70);
 
-/// The full record fills the width at 16 px per glyph; rows step 16 scanlines
-/// (`di += 0x1400`) from a first row at y=65 (`di = 0x5140` before the entry loop
-/// at `0x408f`, and `0x5140 / 320 = 65`). Both proven from the disassembly.
+/// The full record fills the width at 16 px per glyph.
+///
+/// Rows step 16 scanlines (`di += 0x1400`) from a first row at y=65 (`di =
+/// 0x5140` before the entry loop at `0x408f`, and `0x5140 / 320 = 65`). Both
+/// proven from the disassembly.
 const ENTRY_X: i32 = 0;
 const FIRST_ROW_Y: i32 = 65;
 const ROW_HEIGHT: i32 = 16;
 
-/// Per-step duration. Steps advance at a uniform rate; a recording of the
-/// original runs the eight-entry fly-in over ~25s, so `8 * 25` steps ≈ 125ms each.
+/// Per-step duration.
+///
+/// Steps advance at a uniform rate; a recording of the original runs the
+/// eight-entry fly-in over ~25s, so `8 * 25` steps ≈ 125ms each.
 const STEP_DURATION: Duration = Duration::from_millis(125);
 
+/// Where the high-score screen is in its sequence.
 enum Phase {
     /// `HIGHSCOR.FLI` is playing.
     Playing(FlicPlayer),
@@ -58,9 +63,11 @@ enum Phase {
     Resting,
 }
 
-/// State of the entry fly-in: the backdrop (FLI frame plus already-landed
-/// entries), the in-flight entry's source page (the row at its final
-/// position, index 0 transparent), and which entry/step is in flight.
+/// State of the entry fly-in.
+///
+/// The backdrop (FLI frame plus already-landed entries), the in-flight entry's
+/// source page (the row at its final position, index 0 transparent), and which
+/// entry/step is in flight.
 struct FlyIn {
     backdrop: Framebuffer,
     src: IndexedImage,
@@ -69,6 +76,7 @@ struct FlyIn {
     elapsed: Duration,
 }
 
+/// The high-score display scene.
 pub struct HighscoreScreen {
     assets: Rc<HighscoreAssets>,
     scores: Highscores,
@@ -82,6 +90,7 @@ pub struct HighscoreScreen {
 }
 
 impl HighscoreScreen {
+    /// Builds the screen, starting the FLI (or the fly-in if it fails to decode).
     pub fn new(assets: Rc<HighscoreAssets>, scores: Highscores) -> Self {
         let mut screen = Self {
             assets,
@@ -102,8 +111,10 @@ impl HighscoreScreen {
         screen
     }
 
-    /// Begin the fly-in: the current framebuffer (the FLI's last frame, or
-    /// black) becomes the backdrop the entries fly onto.
+    /// Begins the fly-in.
+    ///
+    /// The current framebuffer (the FLI's last frame, or black) becomes the
+    /// backdrop the entries fly onto.
     fn start_fly_in(&mut self) {
         let backdrop = Framebuffer {
             image: self.framebuffer.image.clone(),
@@ -128,7 +139,7 @@ impl HighscoreScreen {
         }
     }
 
-    /// Composite the in-flight entry over the backdrop into the framebuffer.
+    /// Composites the in-flight entry over the backdrop into the framebuffer.
     fn render_fly_in(&mut self) {
         let Phase::FlyingIn(fly) = &self.phase else {
             return;
@@ -247,8 +258,9 @@ impl HighscoreScreen {
         }
     }
 
-    /// Settle the table: bake any entries still in flight into the backdrop
-    /// at full size and rest.
+    /// Settles the table.
+    ///
+    /// Bakes any entries still in flight into the backdrop at full size and rests.
     fn land_all_entries(&mut self) {
         let entries = self.scores.entries().len();
 
@@ -273,8 +285,10 @@ impl HighscoreScreen {
     }
 }
 
-/// Render an entry's source page: the row at its final position on a
-/// transparent (all-zero) page, like the original's zero-filled src buffer.
+/// Renders an entry's source page.
+///
+/// The row at its final position on a transparent (all-zero) page, like the
+/// original's zero-filled src buffer.
 fn entry_page(assets: &HighscoreAssets, scores: &Highscores, entry: usize) -> IndexedImage {
     let highscore = &scores.entries()[entry];
     let text = format!("{:.<13} {:06}", highscore.name, highscore.score);
@@ -295,8 +309,10 @@ fn entry_page(assets: &HighscoreAssets, scores: &Highscores, entry: usize) -> In
     page
 }
 
-/// Bake the landed page into the backdrop. The zoom's final step is an exact
-/// 1:1 composite, so landing is a plain transparent overlay.
+/// Bakes the landed page into the backdrop.
+///
+/// The zoom's final step is an exact 1:1 composite, so landing is a plain
+/// transparent overlay.
 fn land(backdrop: &mut IndexedImage, src: &IndexedImage) {
     for (target, &pixel) in backdrop.pixels.iter_mut().zip(&src.pixels) {
         if pixel != 0 {

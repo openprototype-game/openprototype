@@ -11,8 +11,10 @@ pub struct Rgb {
 }
 
 impl Rgb {
-    /// Build from 6-bit VGA DAC channels (0..=63), expanded to 8 bits by bit
-    /// replication, like [`Palette::from_vga_6bit`] does per entry.
+    /// Builds a color from 6-bit VGA DAC channels.
+    ///
+    /// Channels are `0..=63`, expanded to 8 bits by bit replication, like
+    /// [`Palette::from_vga_6bit`] does per entry.
     pub fn from_vga_6bit(r: u8, g: u8, b: u8) -> Self {
         Self {
             r: expand_6bit(r),
@@ -29,8 +31,10 @@ pub struct Palette {
 }
 
 impl Palette {
-    /// Build from a raw `.PAL` dump: 768 bytes of 6-bit VGA DAC values
-    /// (0..=63), expanded to 8 bits by bit replication.
+    /// Builds from a raw `.PAL` dump.
+    ///
+    /// The dump is 768 bytes of 6-bit VGA DAC values (0..=63), expanded to 8
+    /// bits by bit replication.
     pub fn from_vga_6bit(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != 768 {
             return Err(DecodeError::UnexpectedLength {
@@ -53,7 +57,7 @@ impl Palette {
     }
 }
 
-/// Map a 6-bit DAC value (0..=63) to the full 8-bit range.
+/// Maps a 6-bit DAC value (0..=63) to the full 8-bit range.
 pub(crate) fn expand_6bit(value: u8) -> u8 {
     let clamped = value & 0x3f;
     (clamped << 2) | (clamped >> 4)

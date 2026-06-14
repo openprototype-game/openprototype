@@ -1,5 +1,4 @@
-//! In-game player state: the data the level HUD reads, and the rules that drive
-//! it.
+//! In-game player state: what the level HUD reads, and the rules driving it.
 //!
 //! This is the gameplay-facing state (score, lives, smart bombs, the weapon
 //! loadout, the respawn shield), distinct from the [`Game`](crate::game::Game)
@@ -65,9 +64,11 @@ impl Weapon {
     }
 }
 
-/// The weapon currently firing: the always-available chaingun fallback, or the
-/// selected real weapon once it holds charge. The original derives this each
-/// frame (value `0` = chaingun) and freezes it while fire is held.
+/// The weapon currently firing.
+///
+/// Either the always-available chaingun fallback, or the selected real weapon
+/// once it holds charge. The original derives this each frame (value `0` =
+/// chaingun) and freezes it while fire is held.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActiveWeapon {
     /// The default gun (no charge), fired when the selected weapon is empty.
@@ -83,8 +84,9 @@ impl From<Weapon> for ActiveWeapon {
     }
 }
 
-/// One `T` per real [`Weapon`], addressed by weapon rather than a positional
-/// index. A total mapping: every weapon always holds a value.
+/// One `T` per real [`Weapon`], addressed by weapon, not a positional index.
+///
+/// A total mapping: every weapon always holds a value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PerWeapon<T> {
     pub multishot: T,
@@ -161,10 +163,11 @@ pub enum HitOutcome {
     GameOver,
 }
 
-/// The between-levels carry: the original's `f:message` payload (`{score,
-/// lives, bombs, weapon levels}`). START.EXE seeds it for a new game, every
-/// level writes it back at exit, and the next level reads it at entry
-/// through [`GameState::enter_level`].
+/// The between-levels carry: the original's `f:message` payload.
+///
+/// The payload is `{score, lives, bombs, weapon levels}`. START.EXE seeds it
+/// for a new game, every level writes it back at exit, and the next level
+/// reads it at entry through [`GameState::enter_level`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Handoff {
     pub score: u32,
@@ -176,8 +179,9 @@ pub struct Handoff {
 }
 
 impl Handoff {
-    /// START.EXE's new-game payload (its writer at file `0x3c9e`): score 0,
-    /// lives 4, one smart bomb, bare weapons.
+    /// START.EXE's new-game payload (its writer at file `0x3c9e`).
+    ///
+    /// Score 0, lives 4, one smart bomb, bare weapons.
     pub fn new_game() -> Handoff {
         Handoff {
             score: 0,
@@ -243,9 +247,10 @@ impl GameState {
         }
     }
 
-    /// The level-exit writeback: the carry for the next level, with the
-    /// lives counter raw (the original's writer at file `0xbb8e` stores it
-    /// as-is; the next entry applies its own decrement).
+    /// The level-exit writeback: the carry for the next level.
+    ///
+    /// The lives counter is stored raw (the original's writer at file `0xbb8e`
+    /// stores it as-is; the next entry applies its own decrement).
     pub fn handoff(&self) -> Handoff {
         Handoff {
             score: self.score,
@@ -260,11 +265,11 @@ impl GameState {
         *self.weapons.get(weapon)
     }
 
-    /// The weapon that actually fires: the selected weapon while it holds charge,
-    /// otherwise the always-available chaingun.
+    /// The weapon that actually fires.
     ///
-    /// The original derives this each frame (and freezes it while fire is held);
-    /// here it is a pure getter, leaving the freeze to the input layer.
+    /// The selected weapon while it holds charge, otherwise the always-available
+    /// chaingun. The original derives this each frame (and freezes it while fire
+    /// is held); here it is a pure getter, leaving the freeze to the input layer.
     pub fn active_weapon(&self) -> ActiveWeapon {
         if self.level(self.selected).get() >= 1 {
             self.selected.into()
@@ -273,16 +278,16 @@ impl GameState {
         }
     }
 
-    /// Adds `points`, granting AT MOST one extra life when a 10,000-point
-    /// boundary is crossed (lives cap at 9). Returns whether a life was
-    /// granted, for the scene's jingle trigger.
+    /// Adds `points`, granting an extra life per 10,000-point boundary.
     ///
-    /// The original's per-tick updater (`div 0x2710`, all seven WADs)
-    /// grants one life per check and snaps its milestone to the full
-    /// quotient, so crossing two boundaries in one tick -- a smart bomb
-    /// reaping a dense wave -- still pays one life and never pays the
-    /// skipped boundary later. The snap is implicit here: the milestone
-    /// derives from the score itself.
+    /// At most one life is granted per call (lives cap at 9). Returns whether a
+    /// life was granted, for the scene's jingle trigger.
+    ///
+    /// The original's per-tick updater (`div 0x2710`, all seven WADs) grants one
+    /// life per check and snaps its milestone to the full quotient, so crossing
+    /// two boundaries in one tick -- a smart bomb reaping a dense wave -- still
+    /// pays one life and never pays the skipped boundary later. The snap is
+    /// implicit here: the milestone derives from the score itself.
     pub fn add_score(&mut self, points: u32) -> bool {
         let milestones_before = self.score / EXTRA_LIFE_INTERVAL;
         self.score = self.score.saturating_add(points);
@@ -295,8 +300,9 @@ impl GameState {
         crossed
     }
 
-    /// Raises the selected weapon's charge by one (an orb pickup), capped at
-    /// [`WeaponLevel::MAX`].
+    /// Raises the selected weapon's charge by one (an orb pickup).
+    ///
+    /// Capped at [`WeaponLevel::MAX`].
     pub fn level_up(&mut self) {
         let level = self.weapons.get_mut(self.selected);
         *level = level.saturating_add(1);
@@ -328,22 +334,23 @@ impl GameState {
         self.invincible_ticks > 0
     }
 
-    /// Applies a hit. While invincible nothing happens; otherwise the
-    /// `firing` weapon absorbs it (zeroed by a
-    /// [`Collision`](Severity::Collision), drained one level by a
-    /// [`Bullet`](Severity::Bullet)) and the ship survives, while a hit on
-    /// the bare chaingun is fatal. See `reference/combat.md`.
+    /// Applies a hit.
     ///
-    /// `firing` is the resolved firing weapon (`cs:0xcb5`), owned by the
-    /// fire system because it freezes across a held burst: after a mid-burst
-    /// weapon cycle it differs from `selected`, and the original's hit
-    /// consequence (file `0xc4b7`) and ram zero-out (file `0xdcf1`) both
-    /// index off it, not the selector.
+    /// While invincible nothing happens; otherwise the `firing` weapon absorbs
+    /// it (zeroed by a [`Collision`](Severity::Collision), drained one level by a
+    /// [`Bullet`](Severity::Bullet)) and the ship survives, while a hit on the
+    /// bare chaingun is fatal. See `reference/combat.md`.
     ///
-    /// A fatal hit does not touch the lives counter: the caller plays the
-    /// death sequence and calls [`Self::lose_life`] when it ends, matching
-    /// the original (the dying flag is set at the hit, the decrement and the
-    /// game-over check live in the respawn handler).
+    /// `firing` is the resolved firing weapon (`cs:0xcb5`), owned by the fire
+    /// system because it freezes across a held burst: after a mid-burst weapon
+    /// cycle it differs from `selected`, and the original's hit consequence (file
+    /// `0xc4b7`) and ram zero-out (file `0xdcf1`) both index off it, not the
+    /// selector.
+    ///
+    /// A fatal hit does not touch the lives counter: the caller plays the death
+    /// sequence and calls [`Self::lose_life`] when it ends, matching the original
+    /// (the dying flag is set at the hit, the decrement and the game-over check
+    /// live in the respawn handler).
     pub fn take_hit(&mut self, severity: Severity, firing: ActiveWeapon) -> HitOutcome {
         if self.is_invincible() {
             return HitOutcome::Shielded;
@@ -362,9 +369,11 @@ impl GameState {
         HitOutcome::Absorbed
     }
 
-    /// Drops a life. Arms `respawn_invincibility` ticks if any lives remain,
-    /// otherwise reports game over. The duration is per level (L3's respawn
-    /// handler writes 180 ticks, the others 300).
+    /// Drops a life.
+    ///
+    /// Arms `respawn_invincibility` ticks if any lives remain, otherwise reports
+    /// game over. The duration is per level (L3's respawn handler writes 180
+    /// ticks, the others 300).
     pub fn lose_life(&mut self, respawn_invincibility: u16) -> HitOutcome {
         self.lives = self.lives.saturating_sub(1);
 

@@ -23,9 +23,10 @@ impl Framebuffer {
         Self { image, palette }
     }
 
-    /// Replace the whole frame with a full-screen background. The source must
-    /// match the framebuffer's size; a mismatch is a programming error in the
-    /// asset pipeline.
+    /// Replaces the whole frame with a full-screen background.
+    ///
+    /// The source must match the framebuffer's size; a mismatch is a
+    /// programming error in the asset pipeline.
     pub fn blit_screen(&mut self, background: &IndexedImage) {
         debug_assert_eq!(
             background.size, self.image.size,
@@ -34,13 +35,12 @@ impl Framebuffer {
         self.image.pixels.copy_from_slice(&background.pixels);
     }
 
-    /// Copy `source` onto the frame with its top-left at `(x, y)`, clipped to
-    /// the frame edges.
+    /// Copies `source` onto the frame at top-left `(x, y)`, clipped to the edges.
     ///
     /// Every index is copied as-is (opaque); rows and columns that fall outside
-    /// the frame are skipped, so partly- or fully-offscreen placements are
-    /// safe. This is the compositing primitive for the HUD panel and the cells
-    /// blitted onto it.
+    /// the frame are skipped, so partly- or fully-offscreen placements are safe.
+    /// This is the compositing primitive for the HUD panel and the cells blitted
+    /// onto it.
     pub fn blit(&mut self, source: &IndexedImage, x: i32, y: i32) {
         let frame_width = self.image.size.width as i32;
         let frame_height = self.image.size.height as i32;
@@ -69,8 +69,7 @@ impl Framebuffer {
         }
     }
 
-    /// Copy a masked sprite onto the frame with its top-left at `(x, y)`, clipped
-    /// to the frame edges.
+    /// Copies a masked sprite onto the frame at top-left `(x, y)`, clipped.
     ///
     /// `pixels` is `size.width * size.height` entries in row-major order; `None`
     /// is transparent and leaves the frame untouched, `Some(index)` overwrites.

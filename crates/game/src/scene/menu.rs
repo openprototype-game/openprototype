@@ -29,22 +29,27 @@ use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game_state::Handoff;
 use openprototype_core::input::{Key, KeyEvent};
 
-/// The main menu's positions: labels at x=90 (`di = 0x4b5a`, ... in the setup
-/// at `0x413e`), the `>` cursor at x=70 (`0x4b46`), first row at y=60.
+/// The main menu's positions.
+///
+/// Labels at x=90 (`di = 0x4b5a`, ... in the setup at `0x413e`), the `>`
+/// cursor at x=70 (`0x4b46`), first row at y=60.
 const LAYOUT: MenuLayout = MenuLayout {
     label_x: 90,
     cursor_x: 70,
     first_row_y: 60,
 };
 
-/// The slot picker's positions: labels at x=120 (`di = 0x4b78` in the picker
-/// at file `0x43c7`), the cursor at x=100 (`0x4b64`), the same first row.
+/// The slot picker's positions.
+///
+/// Labels at x=120 (`di = 0x4b78` in the picker at file `0x43c7`), the cursor
+/// at x=100 (`0x4b64`), the same first row.
 const SLOT_LAYOUT: MenuLayout = MenuLayout {
     label_x: 120,
     cursor_x: 100,
     first_row_y: 60,
 };
 
+/// The main menu's items.
 #[derive(Clone, Copy, PartialEq, Eq, EnumIter, Display)]
 enum MenuItem {
     #[strum(to_string = "NEW GAME")]
@@ -60,8 +65,9 @@ enum MenuItem {
 }
 
 impl MenuItem {
-    /// The transition Enter on this item triggers, or `None` while the item has
-    /// no scene yet.
+    /// The transition Enter on this item triggers.
+    ///
+    /// `None` while the item has no scene yet.
     fn activate(self) -> Option<Transition> {
         match self {
             MenuItem::NewGame => Some(Transition::To(SceneId::Level {
@@ -84,6 +90,7 @@ enum State {
     LoadSlots { occupied: [bool; SLOTS] },
 }
 
+/// The main menu scene.
 pub struct Menu {
     assets: Rc<MenuAssets>,
     list: ListMenu,
@@ -92,6 +99,7 @@ pub struct Menu {
 }
 
 impl Menu {
+    /// Builds the main menu scene.
     pub fn new(assets: Rc<MenuAssets>) -> Self {
         let labels = MenuItem::iter().map(|item| item.to_string()).collect();
 
@@ -103,8 +111,9 @@ impl Menu {
         }
     }
 
-    /// Swap in the slot picker, re-probing the slot files like the original
-    /// (file `0x433e` opens all five on every entry).
+    /// Swaps in the slot picker, re-probing the slot files.
+    ///
+    /// Like the original (file `0x433e` opens all five on every entry).
     fn open_load_slots(&mut self) {
         let occupied = self
             .save_store
@@ -120,16 +129,19 @@ impl Menu {
         self.state = State::LoadSlots { occupied };
     }
 
-    /// Back out of the picker to the items, cursor reset (the original
-    /// re-enters the menu through its full redraw).
+    /// Backs out of the picker to the items, cursor reset.
+    ///
+    /// The original re-enters the menu through its full redraw.
     fn close_load_slots(&mut self) {
         let labels = MenuItem::iter().map(|item| item.to_string()).collect();
         self.list = ListMenu::new(self.assets.clone(), labels, LAYOUT);
         self.state = State::Items;
     }
 
-    /// The menu frame with the cursor hidden, for the intro's fade-in. The menu
-    /// loop draws the cursor only once it starts, so the fade shows labels only.
+    /// The menu frame with the cursor hidden, for the intro's fade-in.
+    ///
+    /// The menu loop draws the cursor only once it starts, so the fade shows
+    /// labels only.
     pub fn frame_without_cursor(&mut self) -> &Framebuffer {
         self.list.render_without_cursor();
         self.list.framebuffer()

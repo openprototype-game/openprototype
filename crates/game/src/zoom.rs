@@ -28,14 +28,16 @@ use prototype_formats::IndexedImage;
 /// The zoom's step count (`cx = 0x19` at file `0x2888`).
 pub const STEPS: u32 = 25;
 
-/// The composite covers output rows `0..195` only (`cx = 0xc3` at file
-/// `0x28ed`); the bottom five rows keep whatever they held.
+/// The composite covers output rows `0..195` only (`cx = 0xc3` at file `0x28ed`).
+///
+/// The bottom five rows keep whatever they held.
 const ROWS: usize = 195;
 
 const WIDTH: usize = 320;
 
-/// A 16.16 fixed-point accumulator with the original's delayed carry: the
-/// fractional overflow of one add increments the integer part only at the
+/// A 16.16 fixed-point accumulator with the original's delayed carry.
+///
+/// The fractional overflow of one add increments the integer part only at the
 /// next add.
 struct DelayedCarry {
     int: u16,
@@ -66,8 +68,10 @@ impl DelayedCarry {
     }
 }
 
-/// Composite one zoom step (1-based, `1..=STEPS`) of `src` over `bg` into
-/// `target`. All three are 320x200 pages; `target` may alias neither input.
+/// Composites one zoom step of `src` over `bg` into `target`.
+///
+/// `step` is 1-based (`1..=STEPS`). All three are 320x200 pages; `target` may
+/// alias neither input.
 pub fn composite_step(src: &IndexedImage, bg: &IndexedImage, step: u32, target: &mut IndexedImage) {
     debug_assert!((1..=STEPS).contains(&step));
 

@@ -1,5 +1,6 @@
-//! LEVEL_1's 24 mode-0 enemy AI functions, transcribed from the disassembly
-//! (`re/l1-ai-functions.md`; pointer table at file `0xd6c3`).
+//! LEVEL_1's 24 mode-0 enemy AI functions, transcribed from the disassembly.
+//!
+//! See `re/l1-ai-functions.md` (pointer table at file `0xd6c3`).
 //!
 //! Each function runs once per movement sub-step with the entity's registers
 //! loaded; positions are 12.4 fixed point. The data tables (paths, waves,
@@ -40,8 +41,9 @@ pub(crate) struct AiContext<'a> {
     pub debris_overrides: &'a mut std::collections::HashMap<u16, u16>,
 }
 
-/// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`); one boss
-/// runs at a time, so the original keeps these outside the entity.
+/// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`).
+///
+/// One boss runs at a time, so the original keeps these outside the entity.
 pub(crate) struct BossState {
     anchor_x: i32,
     anchor_y: i32,
@@ -115,8 +117,9 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// Functions 0-2: drift left, cycle the 0x3308 asteroid frames (the `0xc5e5`
-/// cycler) every `threshold` sub-steps.
+/// Functions 0-2: drift left, cycle the 0x3308 asteroid frames.
+///
+/// The `0xc5e5` cycler, every `threshold` sub-steps.
 fn asteroid(entity: &mut Entity, speed: i32, threshold: u8) {
     entity.x += speed;
     entity.anim += 1;
@@ -201,8 +204,9 @@ fn cannon(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// Function 4: the kamikaze rocket (frames 0x38b0..0x3926): sine-bob in, open
-/// into a rocket, then dash left fast trailing exhaust.
+/// Function 4: the kamikaze rocket (frames 0x38b0..0x3926).
+///
+/// Sine-bob in, open into a rocket, then dash left fast trailing exhaust.
 fn kamikaze(entity: &mut Entity, ctx: &mut AiContext) {
     entity.x -= 0xc;
     entity.tick += 1;
@@ -258,8 +262,9 @@ fn kamikaze(entity: &mut Entity, ctx: &mut AiContext) {
     });
 }
 
-/// `random_aimed_shot` (file 0xc7d4): one `rng(0xe6)` draw per call, fires an
-/// aimed 3 px/step shot with p = 1/0xe6, leftward only.
+/// `random_aimed_shot` (file 0xc7d4): one `rng(0xe6)` draw per call.
+///
+/// Fires an aimed 3 px/step shot with p = 1/0xe6, leftward only.
 fn random_aimed_shot(entity: &Entity, ctx: &mut AiContext) {
     if ctx.rng.next(0xe6) != 1 {
         return;
@@ -282,8 +287,9 @@ fn random_aimed_shot(entity: &Entity, ctx: &mut AiContext) {
     }
 }
 
-/// `aim_at_player` (file 0xddc4): velocity toward the player at `speed`
-/// px/step, in 12.4. Both call sites pre-target `player + (0x1e, 0xa)`; the
+/// `aim_at_player` (file 0xddc4): velocity toward the player at `speed` px/step.
+///
+/// In 12.4 fixed point. Both call sites pre-target `player + (0x1e, 0xa)`; the
 /// helper adds another `0xa` to each axis, and the distance comes from the
 /// engine's integer square root.
 fn aim_at_player(ctx: &AiContext, sx: i32, sy: i32, speed: i32) -> Option<(i32, i32)> {
@@ -299,8 +305,9 @@ fn aim_at_player(ctx: &AiContext, sx: i32, sy: i32, speed: i32) -> Option<(i32, 
     Some(((dx << 4) / scale, (dy << 4) / scale))
 }
 
-/// `sniper_anim` (file 0xc842): random aimed fire, 7-tick ping-pong over
-/// 0x33f4/0x3412..0x343a, and a per-frame x wobble.
+/// `sniper_anim` (file 0xc842): random aimed fire plus animation.
+///
+/// 7-tick ping-pong over 0x33f4/0x3412..0x343a, and a per-frame x wobble.
 fn sniper_anim(entity: &mut Entity, ctx: &mut AiContext) {
     random_aimed_shot(entity, ctx);
 
@@ -420,8 +427,9 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, shape: OrbiterShape) {
     }
 }
 
-/// The orbiter frame patch (file 0xcc5e): the attack frames carry their own
-/// middle collision box, from the 12-entry table at file 0xc892.
+/// The orbiter frame patch (file 0xcc5e): attack frames carry their own box.
+///
+/// The middle collision box comes from the 12-entry table at file 0xc892.
 ///
 /// The per-frame claw word goes into the kind's SHARED rest descriptor
 /// (table at file 0xc8c2, target cs:0x3942 = descriptor +0x14); the death
@@ -451,8 +459,9 @@ fn orbiter_frame_patch(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// The small-popper animation (file 0xce51): every 2 sub-steps over
-/// 0x3a92/0x3ab0..0x3ae0.
+/// The small-popper animation (file 0xce51).
+///
+/// Every 2 sub-steps over 0x3a92/0x3ab0..0x3ae0.
 fn interceptor_anim(entity: &mut Entity) {
     entity.anim += 1;
 
@@ -549,8 +558,10 @@ fn strafer(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// The boss's two wave tables: y wave at file 0x2540 (wraps at byte 0xa0), xy
-/// wave at 0x25e0 (wraps at 0x104).
+/// The boss's two wave tables.
+///
+/// y wave at file 0x2540 (wraps at byte 0xa0), xy wave at 0x25e0 (wraps at
+/// 0x104).
 const BOSS_WAVE_Y: usize = 0x2540;
 const BOSS_WAVE_XY: usize = 0x25e0;
 
@@ -655,8 +666,9 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// The boss explosion spawner (file 0xd23b): a staggered burst at a random
-/// offset, retimed from the PRNG (draw order 0x14, 0x28, 0x1e).
+/// The boss explosion spawner (file 0xd23b): a staggered burst.
+///
+/// At a random offset, retimed from the PRNG (draw order 0x14, 0x28, 0x1e).
 fn boss_explosion(entity: &Entity, ctx: &mut AiContext) {
     *ctx.boss_explosion = Some(BossExplosionSound::AsteroidPair {
         form2: ctx.boss.form2,
@@ -684,8 +696,9 @@ fn boss_explosion(entity: &Entity, ctx: &mut AiContext) {
     });
 }
 
-/// Boss pattern 1 (`circle`): y from the 0x234-segment wave, x at 1/8 the
-/// amplitude.
+/// Boss pattern 1 (`circle`): y from the 0x234-segment wave.
+///
+/// x runs at 1/8 the amplitude.
 fn boss_circle(entity: &mut Entity, wad: &[u8], boss: &BossState) {
     entity.phase_a = (entity.phase_a + 2) % 0xa0;
     entity.y = boss.anchor_y + (word(wad, BOSS_WAVE_Y + usize::from(entity.phase_a)) << 4);
@@ -693,8 +706,9 @@ fn boss_circle(entity: &mut Entity, wad: &[u8], boss: &BossState) {
     entity.x = boss.anchor_x + (word(wad, BOSS_WAVE_Y + usize::from(entity.phase_b)) << 1);
 }
 
-/// Boss pattern 2 (`sweep`): the 0x23e-segment wave drives both axes and the
-/// frame index.
+/// Boss pattern 2 (`sweep`): the 0x23e-segment wave drives everything.
+///
+/// Both axes and the frame index.
 fn boss_sweep(entity: &mut Entity, wad: &[u8], boss: &BossState) {
     entity.phase_a = (entity.phase_a + 2) % 0x104;
     entity.y = boss.anchor_y - (word(wad, BOSS_WAVE_XY + usize::from(entity.phase_a)) << 4);
@@ -706,8 +720,10 @@ fn boss_sweep(entity: &mut Entity, wad: &[u8], boss: &BossState) {
     entity.sprite = 0x3ae8 + 0x22 * fb;
 }
 
-/// The boss's double aimed shot (file 0xd177): both muzzle points from the
-/// current descriptor's +0x1e..0x21 bytes, 4 px/step, unconditional.
+/// The boss's double aimed shot (file 0xd177).
+///
+/// Both muzzle points from the current descriptor's +0x1e..0x21 bytes, 4
+/// px/step, unconditional.
 fn boss_fire(entity: &Entity, ctx: &mut AiContext) {
     if entity.tick > 0x798 {
         return;

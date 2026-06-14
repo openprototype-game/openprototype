@@ -31,6 +31,7 @@ pub struct SectorReader {
 }
 
 impl SectorReader {
+    /// Opens the `.bin` image at `path`, recording its total sector count.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let file = File::open(path)?;
         let len = file.metadata()?.len();
@@ -45,8 +46,9 @@ impl SectorReader {
         self.sector_count
     }
 
-    /// Read `size` bytes of `MODE1/2352` user data starting at logical block
-    /// `lba`, assembling `ceil(size / 2048)` sectors and truncating to `size`.
+    /// Reads `size` bytes of `MODE1/2352` user data at logical block `lba`.
+    ///
+    /// Assembles `ceil(size / 2048)` sectors and truncates to `size`.
     pub fn read_file(&self, lba: u32, size: u32) -> Result<Vec<u8>> {
         let size = size as usize;
         let sectors = size.div_ceil(USER_DATA);
@@ -66,8 +68,10 @@ impl SectorReader {
         Ok(out)
     }
 
-    /// Read raw 2352-byte sectors over `[start_lba, end_lba)` verbatim, for
-    /// CD-DA tracks (the sector *is* the audio payload, no header to skip).
+    /// Reads raw 2352-byte sectors over `[start_lba, end_lba)` verbatim.
+    ///
+    /// For CD-DA tracks, the sector *is* the audio payload, with no header to
+    /// skip.
     pub fn read_raw_range(&self, start_lba: u32, end_lba: u32) -> Result<Vec<u8>> {
         if end_lba < start_lba {
             return Err(DiscError::Malformed("audio track end precedes start"));

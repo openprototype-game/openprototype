@@ -10,8 +10,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use prototype_disc::{AssetSource, DiscImage};
 
-/// Open the disc image at `cue` if one was given; otherwise stay in filesystem
-/// mode (`None`). A missing `--cue` never implicitly opens `PROTOTYPE.cue`.
+/// Opens the disc image at `cue`, or stays in filesystem mode if none is given.
+///
+/// Filesystem mode returns `None`. A missing `--cue` never implicitly opens
+/// `PROTOTYPE.cue`.
 pub fn open_source(cue: Option<&Path>) -> Result<Option<DiscImage>> {
     match cue {
         Some(path) => {
@@ -23,9 +25,10 @@ pub fn open_source(cue: Option<&Path>) -> Result<Option<DiscImage>> {
     }
 }
 
-/// Read an asset by name. With a disc `source`, `input` is treated as a
-/// canonical asset name (e.g. `FLI/INTRO.FLI`); otherwise it is a filesystem
-/// path.
+/// Reads an asset by name.
+///
+/// With a disc `source`, `input` is a canonical asset name (e.g.
+/// `FLI/INTRO.FLI`); otherwise it is a filesystem path.
 pub fn read_asset(source: Option<&DiscImage>, input: &Path) -> Result<Vec<u8>> {
     match source {
         Some(image) => {

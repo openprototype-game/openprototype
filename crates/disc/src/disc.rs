@@ -41,8 +41,10 @@ pub struct DiscImage {
 }
 
 impl DiscImage {
-    /// Parse the cue, open the bin it references (resolved relative to the cue),
-    /// read the ISO directory, and compute the audio-track ranges.
+    /// Opens the image at `cue_path`.
+    ///
+    /// Parses the cue, opens the bin it references (resolved relative to the
+    /// cue), reads the ISO directory, and computes the audio-track ranges.
     pub fn open(cue_path: impl AsRef<Path>) -> Result<Self> {
         let cue_path = cue_path.as_ref();
         let text = std::fs::read_to_string(cue_path)?;
@@ -75,7 +77,7 @@ impl DiscImage {
         })
     }
 
-    /// Open the image at `$PROTOTYPE_DISC`, or `./PROTOTYPE.cue` if unset.
+    /// Opens the image at `$PROTOTYPE_DISC`, or `./PROTOTYPE.cue` if unset.
     pub fn open_default() -> Result<Self> {
         let path = std::env::var_os(ENV_OVERRIDE)
             .map(PathBuf::from)
@@ -83,28 +85,31 @@ impl DiscImage {
         Self::open(path)
     }
 
+    /// The data-track files, in directory order.
     pub fn files(&self) -> &[FileEntry] {
         &self.files
     }
 
+    /// The CD-DA audio tracks, in track-number order.
     pub fn audio_tracks(&self) -> &[AudioTrack] {
         &self.audio
     }
 
-    /// Read a track's raw red-book PCM: 44100 Hz, 16-bit stereo, little-endian
-    /// interleaved (each 2352-byte sector is 588 frames).
+    /// Reads a track's raw red-book PCM.
+    ///
+    /// 44100 Hz, 16-bit stereo, little-endian interleaved (each 2352-byte sector
+    /// is 588 frames).
     pub fn read_track_pcm(&self, track: &AudioTrack) -> Result<Vec<u8>> {
         self.reader.read_raw_range(track.start_lba, track.end_lba)
     }
 }
 
-/// Resolve the bin file next to the cue. Cue sheets often record the filename in
-/// a different case than the file on disk (e.g. `PROTOTYPE.BIN` vs
-/// `PROTOTYPE.bin`), so fall back to a case-insensitive scan of the directory.
-/// The directory the cue's bin path is resolved against: the cue's parent, or
-/// the current directory when the cue is a bare filename. A bare relative path
-/// like `PROTOTYPE.cue` has `parent()` `Some("")`, an empty path that is not a
-/// usable directory (`read_dir` on it fails), so it falls back to `.`.
+/// The directory the cue's bin path is resolved against.
+///
+/// The cue's parent, or the current directory when the cue is a bare filename.
+/// A bare relative path like `PROTOTYPE.cue` has `parent()` `Some("")`, an empty
+/// path that is not a usable directory (`read_dir` on it fails), so it falls
+/// back to `.`.
 fn cue_dir(cue_path: &Path) -> &Path {
     match cue_path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -112,6 +117,11 @@ fn cue_dir(cue_path: &Path) -> &Path {
     }
 }
 
+/// Resolves the bin file next to the cue.
+///
+/// Cue sheets often record the filename in a different case than the file on
+/// disk (e.g. `PROTOTYPE.BIN` vs `PROTOTYPE.bin`), so it falls back to a
+/// case-insensitive scan of the directory.
 fn resolve_bin(dir: &Path, filename: &str) -> Result<PathBuf> {
     let direct = dir.join(filename);
     if direct.exists() {
@@ -134,9 +144,10 @@ fn resolve_bin(dir: &Path, filename: &str) -> Result<PathBuf> {
     )))
 }
 
-/// Build the audio-track table: each track runs from its `INDEX 01` to the next
-/// track's first index (dropping the pregap gap); the last track runs to the
-/// end of the disc.
+/// Builds the audio-track table.
+///
+/// Each track runs from its `INDEX 01` to the next track's first index
+/// (dropping the pregap gap); the last track runs to the end of the disc.
 fn audio_tracks(cue: &Cue, disc_end: u32) -> Result<Vec<AudioTrack>> {
     let mut tracks = Vec::new();
 
@@ -164,7 +175,7 @@ fn audio_tracks(cue: &Cue, disc_end: u32) -> Result<Vec<AudioTrack>> {
     Ok(tracks)
 }
 
-/// Normalise a lookup name to the index key: uppercase, `;1` suffix stripped.
+/// Normalises a lookup name to the index key: uppercase, `;1` suffix stripped.
 fn normalize(name: &str) -> String {
     let name = name.split(';').next().unwrap_or(name);
     name.to_ascii_uppercase()

@@ -1,4 +1,4 @@
-//! Read the original *Prototype* CD image (bin/cue) directly.
+//! Reads the original *Prototype* CD image (bin/cue) directly.
 //!
 //! The game shipped as a mixed-mode CD: a `MODE1/2352` ISO9660 data track with
 //! the game files, plus CD-DA tracks holding the soundtrack. Rather than bundle
@@ -28,8 +28,9 @@ pub use error::{DiscError, Result};
 /// contiguous buffer), which the `prototype-formats` decoders accept as
 /// `&[u8]`.
 pub trait AssetSource {
-    /// Read a file by canonical name. Errors with [`DiscError::FileNotFound`]
-    /// if absent.
+    /// Reads a file by canonical name.
+    ///
+    /// Errors with [`DiscError::FileNotFound`] if absent.
     fn read(&self, name: &str) -> Result<Vec<u8>>;
 
     /// Whether a file with the given name exists.

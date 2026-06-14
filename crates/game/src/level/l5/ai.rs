@@ -1,5 +1,6 @@
-//! LEVEL_5's 44 mode-0 enemy AI functions, transcribed from the disassembly
-//! (`re/l5-ai-functions.md`; pointer table at file `0xeb55`).
+//! LEVEL_5's 44 mode-0 enemy AI functions, transcribed from the disassembly.
+//!
+//! See `re/l5-ai-functions.md` (pointer table at file `0xeb55`).
 //!
 //! Same engine as L1 with a different AI set. All enemy fire is
 //! deterministic (no random-fire helper); the boss is a stationary fixture
@@ -80,8 +81,9 @@ fn copy_hitbox(entity: &mut Entity, wad: &[u8]) {
 /// The 15-entry y-bob table (file `0xdd81`), byte-indexed, wrap 0x1e.
 const BOB_TABLE: usize = 0xdd81;
 
-/// The swooper y-delta table (file `0xe1be`): 181 words, no wrap (overruns
-/// read code bytes and fling the entity past the cull, faithfully).
+/// The swooper y-delta table (file `0xe1be`): 181 words, no wrap.
+///
+/// Overruns read code bytes and fling the entity past the cull, faithfully.
 const SWOOP_TABLE: usize = 0xe1be;
 
 /// The left-moving path segments shared by funcs 8-16 and 17-25.
@@ -140,8 +142,9 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// Func 4: the dasher (the shooter sprite flying straight left fast, no
-/// fire).
+/// Func 4: the dasher.
+///
+/// The shooter sprite flying straight left fast, no fire.
 fn dasher(entity: &mut Entity) {
     entity.x -= 0x50;
     entity.tick += 1;
@@ -157,9 +160,10 @@ fn dasher(entity: &mut Entity) {
     }
 }
 
-/// Func 5: the rotating turret. Approaches with a y-bob, anchors, then
-/// cycles a five-direction firing sweep; a raised gate makes it engage
-/// earlier and hold position.
+/// Func 5: the rotating turret.
+///
+/// Approaches with a y-bob, anchors, then cycles a five-direction firing sweep;
+/// a raised gate makes it engage earlier and hold position.
 fn turret(entity: &mut Entity, ctx: &mut AiContext) {
     entity.phase_a += 2;
 
@@ -226,8 +230,7 @@ fn turret(entity: &mut Entity, ctx: &mut AiContext) {
     };
 }
 
-/// Cycler A (file `0xdfdd`): `0x3c4e -> 0x3c6c .. 0x3c7c -> 0x3c4e`,
-/// period 4.
+/// Cycler A (file `0xdfdd`): `0x3c4e -> 0x3c6c .. 0x3c7c -> 0x3c4e`, period 4.
 fn cycler_a(entity: &mut Entity) {
     entity.anim += 1;
 
@@ -241,8 +244,7 @@ fn cycler_a(entity: &mut Entity) {
     }
 }
 
-/// Cycler B (file `0xe002`): `0x3c84 -> 0x3ca2 .. 0x3cb2 -> 0x3c84`,
-/// period 4.
+/// Cycler B (file `0xe002`): `0x3c84 -> 0x3ca2 .. 0x3cb2 -> 0x3c84`, period 4.
 fn cycler_b(entity: &mut Entity) {
     entity.anim += 1;
 
@@ -256,8 +258,9 @@ fn cycler_b(entity: &mut Entity) {
     }
 }
 
-/// The shooter's two-phase ping-pong anim with one shot per long cycle
-/// (file `0xdeb7`).
+/// The shooter's two-phase ping-pong animation (file `0xdeb7`).
+///
+/// Fires one shot per long cycle.
 fn shooter_anim(entity: &mut Entity, ctx: &mut AiContext) {
     entity.anim += 1;
 
@@ -302,8 +305,9 @@ fn shooter_anim(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// One path-table step: increments the tick, then adds its `{dx, dy}` entry
-/// scaled to 12.4. No wrap, like all L5 paths.
+/// One path-table step: increments the tick, then adds its `{dx, dy}` entry.
+///
+/// Scaled to 12.4. No wrap, like all L5 paths.
 fn path_step(entity: &mut Entity, wad: &[u8], segment: usize) {
     entity.tick += 1;
     let at = segment_base(segment) + usize::from(entity.tick) * 4;
@@ -311,8 +315,10 @@ fn path_step(entity: &mut Entity, wad: &[u8], segment: usize) {
     entity.y += word(wad, at + 2) << 4;
 }
 
-/// Funcs 38/39: the swoopers. Straight left at 2 px with a table-driven y
-/// curve (negated for func 39) and a tilt animation every 6 sub-steps.
+/// Funcs 38/39: the swoopers.
+///
+/// Straight left at 2 px with a table-driven y curve (negated for func 39) and
+/// a tilt animation every 6 sub-steps.
 fn swooper(entity: &mut Entity, wad: &[u8], mirrored: bool) {
     entity.x -= 0x20;
     entity.tick += 1;
@@ -327,8 +333,10 @@ fn swooper(entity: &mut Entity, wad: &[u8], mirrored: bool) {
     tilt_anim(entity, dy);
 }
 
-/// The swooper's tilt (file `0xe328`): every 6 sub-steps the sprite tilts
-/// toward the motion direction, easing back to the rest pose when level.
+/// The swooper's tilt (file `0xe328`).
+///
+/// Every 6 sub-steps the sprite tilts toward the motion direction, easing back
+/// to the rest pose when level.
 fn tilt_anim(entity: &mut Entity, dy: i32) {
     entity.anim += 1;
 
@@ -369,9 +377,10 @@ fn tilt_anim(entity: &mut Entity, dy: i32) {
     }
 }
 
-/// Func 40: the fixture turret. Drifts left alternating two 0x1e frames and
-/// lobs a slow falling bomb every 40 sub-steps; its debris stays the
-/// one-row fixture pop.
+/// Func 40: the fixture turret.
+///
+/// Drifts left alternating two 0x1e frames and lobs a slow falling bomb every
+/// 40 sub-steps; its debris stays the one-row fixture pop.
 fn fixture(entity: &mut Entity, ctx: &mut AiContext) {
     entity.x -= 0x1c;
     entity.tick += 1;
@@ -403,9 +412,11 @@ fn fixture(entity: &mut Entity, ctx: &mut AiContext) {
     ctx.debris_overrides.insert(entity.kind, 0x2f83);
 }
 
-/// Func 41: the walker. Decelerating entry with a y-bob, then a 0x1e-stride
-/// walk cycle with frame-keyed fire; when the gate is down it morphs back to
-/// the fixture pose and retreats along path 0x18b.
+/// Func 41: the walker.
+///
+/// Decelerating entry with a y-bob, then a 0x1e-stride walk cycle with
+/// frame-keyed fire; when the gate is down it morphs back to the fixture pose
+/// and retreats along path 0x18b.
 ///
 /// Field mapping: the path index is `phase_a` (entity +0x22), the form flag
 /// is `phase_b` (the original's byte at +0x24), and the bob phase rides in
@@ -451,8 +462,9 @@ fn walker(entity: &mut Entity, ctx: &mut AiContext) {
     copy_hitbox(entity, ctx.wad);
 }
 
-/// The walker's walk loop: frames every 4 sub-steps, firing on specific
-/// frames; the cycle ends back at 0x4052, retreating once the gate is down.
+/// The walker's walk loop: frames every 4 sub-steps, firing on specific frames.
+///
+/// The cycle ends back at 0x4052, retreating once the gate is down.
 fn walk_cycle(entity: &mut Entity, ctx: &mut AiContext) {
     entity.anim += 1;
 
@@ -491,8 +503,9 @@ fn walk_cycle(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// The walker's retreat: morph back down to the fixture frame, then follow
-/// path segment 0x18b off screen (one entry per call).
+/// The walker's retreat: morph back to the fixture frame, then path out.
+///
+/// Follows path segment 0x18b off screen (one entry per call).
 fn retreat(entity: &mut Entity, wad: &[u8]) {
     if entity.sprite != DESTROYER {
         entity.anim += 1;
@@ -509,10 +522,11 @@ fn retreat(entity: &mut Entity, wad: &[u8]) {
     }
 }
 
-/// Func 42: the sweeper mini-boss. Raises the gate on its first tick,
-/// approaches to x 120, then sweeps between x -20 and 150 firing an up-left
-/// fan once per 16-frame cycle. The fields: `phase_a` = engaged flag,
-/// `phase_b` = direction (1 = moving left).
+/// Func 42: the sweeper mini-boss.
+///
+/// Raises the gate on its first tick, approaches to x 120, then sweeps between
+/// x -20 and 150 firing an up-left fan once per 16-frame cycle. The fields:
+/// `phase_a` = engaged flag, `phase_b` = direction (1 = moving left).
 fn sweeper(entity: &mut Entity, ctx: &mut AiContext) {
     entity.tick += 1;
 
@@ -596,10 +610,11 @@ fn sweeper(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// Func 43: the level boss, a stationary fixture. After the fly-in it holds
-/// the gate up every call and runs a facing state machine keyed on the
-/// player's x position and steering keys, with aimed volleys (four times
-/// faster while the player fires the plasma).
+/// Func 43: the level boss, a stationary fixture.
+///
+/// After the fly-in it holds the gate up every call and runs a facing state
+/// machine keyed on the player's x position and steering keys, with aimed
+/// volleys (four times faster while the player fires the plasma).
 fn boss(entity: &mut Entity, ctx: &mut AiContext) {
     ctx.boss.tick += 1;
     ctx.boss.fire_ticks += 1;
@@ -701,8 +716,9 @@ fn boss_tail(entity: &mut Entity, ctx: &mut AiContext) {
     copy_hitbox(entity, ctx.wad);
 }
 
-/// Whether the volley timer expired (`0x50` fire-ticks, `0x14` against the
-/// firing plasma); firing resets it.
+/// Whether the volley timer expired (`0x50` fire-ticks, `0x14` vs the plasma).
+///
+/// Firing resets it.
 fn fire_due(ctx: &mut AiContext) -> bool {
     let due = ctx.boss.fire_ticks >= 0x50 || (ctx.firing_plasma && ctx.boss.fire_ticks >= 0x14);
 
@@ -713,8 +729,9 @@ fn fire_due(ctx: &mut AiContext) -> bool {
     due
 }
 
-/// The aimed-shot helper (file `0xf286`): velocity toward the player's
-/// center at 3 px per step.
+/// The aimed-shot helper (file `0xf286`): velocity toward the player.
+///
+/// Aims at the player's center at 3 px per step.
 ///
 /// `None` at point-blank range: the original's idiv is unguarded and a
 /// zero scale crashes it with a divide fault (reachable while shielded
@@ -734,8 +751,9 @@ fn aim_at_player(ctx: &AiContext, shooter_x: i32, shooter_y: i32) -> Option<(i32
     Some(((diff_x << 4) / scale, (diff_y << 4) / scale))
 }
 
-/// Volley A (file `0xe806`, facing left): one aimed shot, an up-left fan,
-/// and a rear up-right shot.
+/// Volley A (file `0xe806`, facing left).
+///
+/// One aimed shot, an up-left fan, and a rear up-right shot.
 fn volley_a(entity: &mut Entity, ctx: &mut AiContext) {
     if let Some((vx, vy)) = aim_at_player(ctx, (entity.x + 0x2b0) >> 4, (entity.y + 0x420) >> 4) {
         ctx.shots.push(Shot {
@@ -773,9 +791,10 @@ fn volley_a(entity: &mut Entity, ctx: &mut AiContext) {
     ctx.sounds.push(SLOT_VOLLEY);
 }
 
-/// Volley B (file `0xe974`, facing right): the aimed shot plus a fan whose
-/// even shots fire from 167 px left of the boss — verbatim from the
-/// original (a likely sign slip, kept faithful).
+/// Volley B (file `0xe974`, facing right).
+///
+/// The aimed shot plus a fan whose even shots fire from 167 px left of the
+/// boss, verbatim from the original (a likely sign slip, kept faithful).
 fn volley_b(entity: &mut Entity, ctx: &mut AiContext) {
     if let Some((vx, vy)) = aim_at_player(ctx, (entity.x + 0x7c0) >> 4, (entity.y + 0x430) >> 4) {
         ctx.shots.push(Shot {

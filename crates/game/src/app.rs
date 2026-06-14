@@ -22,13 +22,15 @@ use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game::{Game, StepOutput};
 use openprototype_core::input::KeyEvent;
 
-/// Loads one level's assets on demand, when the chain reaches it (the
-/// original loads each level as its own executable).
+/// Loads one level's assets on demand, when the chain reaches it.
+///
+/// The original loads each level as its own executable.
 pub type LevelLoader = Box<dyn Fn(Level) -> anyhow::Result<LevelAssets>>;
 
 /// Loads one FLI's bytes by disc path, for the between-levels movies.
 pub type FliLoader = Box<dyn Fn(&str) -> anyhow::Result<Vec<u8>>>;
 
+/// The scene state machine: the current scene plus the shared assets.
 pub struct App {
     current: Box<dyn Scene>,
     menu_assets: Rc<MenuAssets>,
@@ -54,7 +56,7 @@ pub struct FrontEndAssets {
 }
 
 impl App {
-    /// Build the app on the intro.
+    /// Builds the app on the intro.
     pub fn new(
         assets: FrontEndAssets,
         level_loader: LevelLoader,
@@ -78,18 +80,19 @@ impl App {
         }
     }
 
-    /// Set the level scene's dev fast-forward (`--skip`), in logic ticks.
+    /// Sets the level scene's dev fast-forward (`--skip`), in logic ticks.
     pub fn set_level_skip(&mut self, ticks: u32) {
         self.level_skip_ticks = ticks;
     }
 
-    /// Replace the current scene, to boot straight into one (the `--scene` flag).
+    /// Replaces the current scene, to boot straight into one (the `--scene` flag).
     pub fn start_on(&mut self, id: SceneId) {
         self.current = self.build(id);
     }
 
-    /// Boot straight into a loaded savegame (the `--load` dev flag and the
-    /// load menus).
+    /// Boots straight into a loaded savegame.
+    ///
+    /// For the `--load` dev flag and the load menus.
     pub fn start_on_save(&mut self, save: crate::savegame::SaveGame) {
         self.current = self.save_scene(save);
     }
@@ -103,10 +106,11 @@ impl App {
         Box::new(LevelScene::from_save(Rc::new(assets), save))
     }
 
-    /// The end-of-run high-score routing, shared by the game-over and ending
-    /// flows: the original's qualify test is strict (`0x4bde`), so the score
-    /// must beat the table's lowest entry to reach the name entry; anything
-    /// else returns to the menu.
+    /// The end-of-run high-score routing, shared by the game-over and ending flows.
+    ///
+    /// The original's qualify test is strict (`0x4bde`), so the score must beat
+    /// the table's lowest entry to reach the name entry; anything else returns to
+    /// the menu.
     fn after_run(&self, score: u32) -> SceneId {
         let scores = self.highscore_store.load();
         let lowest = scores.entries().last().map_or(0, |entry| entry.score);

@@ -49,8 +49,9 @@ const SLOT_DRAIN: usize = 13;
 const SLOT_BURNING2: usize = 14;
 const SLOT_MULTISHO: usize = 15;
 
-/// The level's loaded samples, indexed by slot, each already cut to its
-/// trigger's authored length.
+/// The level's loaded samples, indexed by slot.
+///
+/// Each is already cut to its trigger's authored length.
 pub struct SfxBank {
     pub samples: Vec<Arc<[i8]>>,
 }
@@ -64,13 +65,15 @@ pub struct Sfx {
 }
 
 impl Sfx {
+    /// A fresh trigger state.
     pub fn new() -> Self {
         Self { hum_looping: false }
     }
 
-    /// The firing weapon spawned shots this tick. Every weapon restarts its
-    /// sample on the weapon channel per shot; the plasma weapon instead keeps
-    /// its hum looping.
+    /// The firing weapon spawned shots this tick.
+    ///
+    /// Every weapon restarts its sample on the weapon channel per shot; the
+    /// plasma weapon instead keeps its hum looping.
     pub fn weapon_fired(
         &mut self,
         weapon: ActiveWeapon,
@@ -97,8 +100,10 @@ impl Sfx {
         }
     }
 
-    /// The plasma ball launched: the hum's loop flag clears and its current
-    /// pass plays out. The launch spawns no sound of its own.
+    /// The plasma ball launched.
+    ///
+    /// The hum's loop flag clears and its current pass plays out. The launch
+    /// spawns no sound of its own.
     pub fn plasma_launched(&mut self, audio: &mut Vec<AudioCommand>) {
         self.hum_looping = false;
         audio.push(AudioCommand::EndSfxLoop {
@@ -106,16 +111,19 @@ impl Sfx {
         });
     }
 
-    /// The firing weapon resolved to a different one (the original's per-tick
-    /// resolve, file `0xae59`, plays the switch sound on that change rather
-    /// than on the switch key itself).
+    /// The firing weapon resolved to a different one.
+    ///
+    /// The original's per-tick resolve (file `0xae59`) plays the switch sound on
+    /// that change rather than on the switch key itself.
     pub fn weapon_switched(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, SLOT_CHANGEWE, EVENT_CHANNEL, false, audio);
     }
 
-    /// An enemy died: the big explosion, except the asteroid and carrier-pod
-    /// types whose dedicated samples land on the same channel (the original
-    /// plays both back to back; the second write wins the channel).
+    /// An enemy died: the big explosion, with two type exceptions.
+    ///
+    /// The asteroid and carrier-pod types have dedicated samples that land on
+    /// the same channel (the original plays both back to back; the second write
+    /// wins the channel).
     pub fn enemy_died(&self, kind: u16, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         let slot = match kind {
             0x3308 => SLOT_ASTEROID_DEATH,
@@ -141,8 +149,10 @@ impl Sfx {
         play(bank, SLOT_PEBBLE, EVENT_CHANNEL, false, audio);
     }
 
-    /// The 10,000-point extra life: the score updater plays the pickup
-    /// sample as the jingle (`0xacc3` at L1 file `0xb18e`).
+    /// The 10,000-point extra life jingle.
+    ///
+    /// The score updater plays the pickup sample as the jingle (`0xacc3` at L1
+    /// file `0xb18e`).
     pub fn extra_life(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, SLOT_PICKUP, EVENT_CHANNEL, false, audio);
     }
@@ -157,8 +167,10 @@ impl Sfx {
         play(bank, SLOT_CHANGEWE, EVENT_CHANNEL, false, audio);
     }
 
-    /// An AI-triggered sample by slot (the per-level enemy voices, volleys
-    /// and phase changes; the AI modules name their level's slots).
+    /// An AI-triggered sample by slot.
+    ///
+    /// The per-level enemy voices, volleys and phase changes; the AI modules
+    /// name their level's slots.
     pub fn ai_sound(&self, slot: usize, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         play(bank, slot, EVENT_CHANNEL, false, audio);
     }
@@ -168,8 +180,10 @@ impl Sfx {
         play(bank, SLOT_ENEMY_SHOT, EVENT_CHANNEL, false, audio);
     }
 
-    /// A boss explosion burst, with its level's samples (L1 `0xad43` plus
-    /// the big `0xad23` in form 2; L3's bursts are the big explosion alone).
+    /// A boss explosion burst, with its level's samples.
+    ///
+    /// L1 `0xad43` plus the big `0xad23` in form 2; L3's bursts are the big
+    /// explosion alone.
     pub fn boss_explosion(
         &self,
         sound: BossExplosionSound,
@@ -190,9 +204,10 @@ impl Sfx {
         }
     }
 
-    /// A chaingun round hit an enemy (`0xad83`): the don't-interrupt guard
-    /// drops it while the impact channel is still playing, so explosions are
-    /// never cut short by the round stream.
+    /// A chaingun round hit an enemy (`0xad83`).
+    ///
+    /// The don't-interrupt guard drops it while the impact channel is still
+    /// playing, so explosions are never cut short by the round stream.
     pub fn chaingun_impact(&self, bank: &SfxBank, audio: &mut Vec<AudioCommand>) {
         audio.push(AudioCommand::PlaySfx(PlaySfx {
             channel: IMPACT_CHANNEL,

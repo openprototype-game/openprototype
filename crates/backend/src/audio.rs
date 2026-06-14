@@ -15,19 +15,21 @@ use tracing::warn;
 
 /// Plays the game's CD-DA music.
 pub trait MusicPlayer {
-    /// Start (or restart) the given track, playing it once.
+    /// Starts (or restarts) the given track, playing it once.
     fn play_track(&mut self, track: u8);
 
-    /// Set the playback volume in the original's SB mixer steps, `0..=15`.
+    /// Sets the playback volume in the original's SB mixer steps, `0..=15`.
     fn set_volume(&mut self, volume: u8);
 
-    /// Stop whatever is playing.
+    /// Stops whatever is playing.
     fn stop(&mut self);
 }
 
-/// A silent player used when the `audio` feature is off or no audio device
-/// could be opened. It announces once that music is disabled, then ignores
-/// every command, so the app runs without sound and without log noise.
+/// A silent music player for when audio is unavailable.
+///
+/// Used when the `audio` feature is off or no audio device could be opened. It
+/// announces once that music is disabled, then ignores every command, so the
+/// app runs without sound and without log noise.
 pub struct NullMusicPlayer;
 
 // `new` logs a one-time notice, so a derived `Default` would hide that side
@@ -48,9 +50,11 @@ impl MusicPlayer for NullMusicPlayer {
     fn stop(&mut self) {}
 }
 
-/// Build the best available music player for `disc`. With the `audio` feature
-/// this is a [`RodioMusicPlayer`]; if the audio device cannot be opened (or the
-/// feature is off) it falls back to [`NullMusicPlayer`] so the app still runs.
+/// Builds the best available music player for `disc`.
+///
+/// With the `audio` feature this is a [`RodioMusicPlayer`]; if the audio device
+/// cannot be opened (or the feature is off) it falls back to [`NullMusicPlayer`]
+/// so the app still runs.
 #[cfg(feature = "audio")]
 pub fn make_music_player(disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
     match RodioMusicPlayer::new(disc) {
@@ -67,26 +71,31 @@ pub fn make_music_player(_disc: Arc<DiscImage>) -> Box<dyn MusicPlayer> {
     Box::new(NullMusicPlayer::new())
 }
 
-/// Plays the game's sound effects: a three-channel sample mixer (see
+/// Plays the game's sound effects.
+///
+/// A three-channel sample mixer (see
 /// [`SFX_CHANNELS`](openprototype_core::audio::SFX_CHANNELS)), matching the
 /// original's DMA feed. A play replaces whatever its channel holds.
 pub trait SfxPlayer {
-    /// Play a sample (signed 8-bit mono, 11111 Hz) on `channel`, replacing
-    /// the channel's current sound (unless `skip_if_busy` and the channel is
-    /// still playing). A looped sample restarts at its end until
-    /// [`end_loop`](SfxPlayer::end_loop) or a replacing play.
+    /// Plays a sample on `channel`, replacing its current sound.
+    ///
+    /// The sample is signed 8-bit mono at 11111 Hz. Skipped if `skip_if_busy`
+    /// and the channel is still playing. A looped sample restarts at its end
+    /// until [`end_loop`](SfxPlayer::end_loop) or a replacing play.
     fn play(&mut self, channel: usize, sample: Arc<[i8]>, looped: bool, skip_if_busy: bool);
 
-    /// Set the mixer volume in the original's SB mixer steps, `0..=15`.
+    /// Sets the mixer volume in the original's SB mixer steps, `0..=15`.
     fn set_volume(&mut self, volume: u8);
 
-    /// End a channel's loop: the current pass plays to its end and the
-    /// channel then frees.
+    /// Ends a channel's loop.
+    ///
+    /// The current pass plays to its end and the channel then frees.
     fn end_loop(&mut self, channel: usize);
 }
 
-/// A silent sound-effect player used when the `audio` feature is off or no
-/// audio device could be opened.
+/// A silent sound-effect player for when audio is unavailable.
+///
+/// Used when the `audio` feature is off or no audio device could be opened.
 pub struct NullSfxPlayer;
 
 // `new` logs a one-time notice, so a derived `Default` would hide that side
@@ -107,9 +116,11 @@ impl SfxPlayer for NullSfxPlayer {
     fn end_loop(&mut self, _channel: usize) {}
 }
 
-/// Build the best available sound-effect player. With the `audio` feature this
-/// is a [`RodioSfxPlayer`]; if the audio device cannot be opened (or the
-/// feature is off) it falls back to [`NullSfxPlayer`] so the app still runs.
+/// Builds the best available sound-effect player.
+///
+/// With the `audio` feature this is a [`RodioSfxPlayer`]; if the audio device
+/// cannot be opened (or the feature is off) it falls back to [`NullSfxPlayer`]
+/// so the app still runs.
 #[cfg(feature = "audio")]
 pub fn make_sfx_player() -> Box<dyn SfxPlayer> {
     match RodioSfxPlayer::new() {
@@ -147,14 +158,18 @@ mod rodio_backend {
     const SAMPLE_RATE: u32 = 44100;
     const CHANNELS: u16 = 2;
 
-    /// Sectors decoded per refill (~150 KB, ~0.85 s of audio). Small enough that
-    /// a refill is a couple of milliseconds even in a debug build, so the read
-    /// never stalls the audio pull noticeably; large enough to keep syscalls rare.
+    /// Sectors decoded per refill (~150 KB, ~0.85 s of audio).
+    ///
+    /// Small enough that a refill is a couple of milliseconds even in a debug
+    /// build, so the read never stalls the audio pull noticeably; large enough
+    /// to keep syscalls rare.
     const CHUNK_SECTORS: u32 = 64;
 
-    /// Plays the disc's CD-DA tracks through the default audio device, each
-    /// once (the original game does not loop). The [`MixerDeviceSink`] must stay
-    /// alive for playback; dropping it (or the current [`Player`]) stops the sound.
+    /// Plays the disc's CD-DA tracks through the default audio device.
+    ///
+    /// Each plays once (the original game does not loop). The [`MixerDeviceSink`]
+    /// must stay alive for playback; dropping it (or the current [`Player`])
+    /// stops the sound.
     pub struct RodioMusicPlayer {
         disc: Arc<DiscImage>,
         sink: MixerDeviceSink,
@@ -164,6 +179,7 @@ mod rodio_backend {
     }
 
     impl RodioMusicPlayer {
+        /// Opens the default audio device for CD-DA playback.
         pub fn new(disc: Arc<DiscImage>) -> Result<Self> {
             let mut sink =
                 DeviceSinkBuilder::open_default_sink().context("opening audio output")?;
@@ -209,8 +225,9 @@ mod rodio_backend {
         }
     }
 
-    /// A rodio [`Source`] that streams one CD-DA track straight off the disc,
-    /// decoding a chunk at a time as rodio pulls samples and ending at the track
+    /// A rodio [`Source`] that streams one CD-DA track straight off the disc.
+    ///
+    /// It decodes a chunk at a time as rodio pulls samples and ends at the track
     /// end. No upfront read or whole-track buffer: it holds ~one chunk.
     ///
     /// The track plays once and stops, matching the original (MSCDEX plays the
@@ -248,9 +265,10 @@ mod rodio_backend {
             })
         }
 
-        /// Read and decode the next chunk into `buffer`. Sets `ended` once the
-        /// track's last sector has been read (the track plays once, no loop) or
-        /// on a read error.
+        /// Reads and decodes the next chunk into `buffer`.
+        ///
+        /// Sets `ended` once the track's last sector has been read (the track
+        /// plays once, no loop) or on a read error.
         fn refill(&mut self) {
             if self.next_lba >= self.end_lba {
                 self.ended = true;
@@ -322,14 +340,17 @@ mod rodio_backend {
         }
     }
 
-    /// The original's sample rate: the level engine requests 11000 Hz and the
-    /// Sound Blaster time constant quantizes it (`256 - 1000000/11000` = 166,
-    /// so the DSP plays `1000000 / 90` ~= 11111 Hz; mixer init at LEVEL_1 file
-    /// `0x7a06`).
+    /// The original's sound-effect sample rate.
+    ///
+    /// The level engine requests 11000 Hz and the Sound Blaster time constant
+    /// quantizes it (`256 - 1000000/11000` = 166, so the DSP plays
+    /// `1000000 / 90` ~= 11111 Hz; mixer init at LEVEL_1 file `0x7a06`).
     const SFX_SAMPLE_RATE: u32 = 11111;
 
-    /// Samples mixed per buffer refill. 250 is the original's DMA chunk, so
-    /// trigger latency and end-of-sample granularity (~22 ms) match it.
+    /// Samples mixed per buffer refill.
+    ///
+    /// 250 is the original's DMA chunk, so trigger latency and end-of-sample
+    /// granularity (~22 ms) match it.
     const MIX_BLOCK: usize = 250;
 
     /// One mixer channel: the playing sample and the read position.
@@ -341,8 +362,9 @@ mod rodio_backend {
     }
 
     impl SfxChannel {
-        /// The channel's next sample value, advancing it: wraps while looped,
-        /// frees itself at the end otherwise.
+        /// The channel's next sample value, advancing it.
+        ///
+        /// Wraps while looped, frees itself at the end otherwise.
         fn next(&mut self) -> i32 {
             let Some(sample) = &self.sample else {
                 return 0;
@@ -365,10 +387,11 @@ mod rodio_backend {
 
     type SharedChannels = Arc<Mutex<[SfxChannel; SFX_CHANNELS]>>;
 
-    /// Plays sound effects through the default audio device: a three-channel
-    /// additive mixer, like the original's DMA feed (which adds the channels'
-    /// signed bytes; this saturates instead of wrapping on overflow). The
-    /// [`MixerDeviceSink`] must stay alive for playback.
+    /// Plays sound effects through the default audio device.
+    ///
+    /// A three-channel additive mixer, like the original's DMA feed (which adds
+    /// the channels' signed bytes; this saturates instead of wrapping on
+    /// overflow). The [`MixerDeviceSink`] must stay alive for playback.
     pub struct RodioSfxPlayer {
         channels: SharedChannels,
         _sink: MixerDeviceSink,
@@ -376,6 +399,7 @@ mod rodio_backend {
     }
 
     impl RodioSfxPlayer {
+        /// Opens the default audio device for the sound-effect mixer.
         pub fn new() -> Result<Self> {
             let mut sink =
                 DeviceSinkBuilder::open_default_sink().context("opening audio output")?;
@@ -431,9 +455,10 @@ mod rodio_backend {
         }
     }
 
-    /// An endless mono [`Source`] mixing the three channels a block at a
-    /// time, so the lock is taken once per ~11 ms rather than per sample.
-    /// Idle channels contribute silence; the source never ends.
+    /// An endless mono [`Source`] mixing the three channels a block at a time.
+    ///
+    /// The lock is taken once per ~11 ms rather than per sample. Idle channels
+    /// contribute silence; the source never ends.
     struct SfxSource {
         channels: SharedChannels,
         buffer: Vec<f32>,

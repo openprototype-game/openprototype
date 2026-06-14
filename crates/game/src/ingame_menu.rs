@@ -50,10 +50,11 @@ const ITEMS: [&str; 7] = [
     "QUIT",
 ];
 
-/// Geometry, from the original's VRAM offsets (80-byte rows, 4 px per byte):
-/// items at x 80 from row 10, one 15-row font line apart, the cursor 24 px
-/// left of the text; the pickers indent their five slots to x 120 under a
-/// title at x 96; toasts sit at x 80, row 30.
+/// Geometry, from the original's VRAM offsets (80-byte rows, 4 px per byte).
+///
+/// Items at x 80 from row 10, one 15-row font line apart, the cursor 24 px left
+/// of the text; the pickers indent their five slots to x 120 under a title at x
+/// 96; toasts sit at x 80, row 30.
 const ITEM_X: i32 = 80;
 const ITEM_TOP: i32 = 10;
 const ROW_STEP: i32 = 15;
@@ -68,16 +69,20 @@ const TITLE_Y: i32 = 10;
 const TOAST_X: i32 = 80;
 const TOAST_Y: i32 = 30;
 
-/// How long a toast holds, in logic ticks. The original blocks on two 0.7s
-/// BIOS waits (`int 15h/86h` at file `0x4d94`, called twice), ~84 ticks.
+/// How long a toast holds, in logic ticks.
+///
+/// The original blocks on two 0.7s BIOS waits (`int 15h/86h` at file `0x4d94`,
+/// called twice), ~84 ticks.
 const TOAST_TICKS: u32 = 84;
 
 /// The save toast really has two spaces (the string at file `0x1276`).
 const SAVED_TOAST: &str = "GAME  SAVED";
 const LOADED_TOAST: &str = "GAME LOADED";
 
-/// What the scene must do for the menu. Saves and loads come back as
-/// requests because only the scene can snapshot or rebuild itself.
+/// What the scene must do for the menu.
+///
+/// Saves and loads come back as requests because only the scene can snapshot or
+/// rebuild itself.
 pub enum MenuRequest {
     /// Close the menu and resume play.
     Resume,
@@ -99,8 +104,10 @@ pub enum MenuRequest {
     MusicVolume(u8),
 }
 
-/// The sound settings the VOLUME submenu edits. The level image bakes
-/// 15/15/on; the scene owns the live copy across menu opens.
+/// The sound settings the VOLUME submenu edits.
+///
+/// The level image bakes 15/15/on; the scene owns the live copy across menu
+/// opens.
 #[derive(Clone, Copy)]
 pub struct AudioSettings {
     pub music_on: bool,
@@ -118,15 +125,17 @@ impl Default for AudioSettings {
     }
 }
 
-/// Step a 0..=15 volume by one mixer notch.
+/// Steps a 0..=15 volume by one mixer notch.
 fn step_volume(volume: u8, delta: i8) -> u8 {
     volume.saturating_add_signed(delta).min(15)
 }
 
-/// The unported submenu items (GRAPHICS..., JOYSTICK...): drawn dim,
-/// skipped by the cursor.
+/// The unported submenu items (GRAPHICS..., JOYSTICK...).
+///
+/// Drawn dim, skipped by the cursor.
 const DISABLED_ITEMS: [usize; 2] = [3, 4];
 
+/// Which screen of the in-game menu is showing.
 enum Screen {
     Items {
         selected: usize,
@@ -145,6 +154,7 @@ enum Screen {
     },
 }
 
+/// The in-game Esc menu's UI state.
 pub struct InGameMenu {
     screen: Screen,
     /// `None` when the data directory could not be resolved; the pickers
@@ -155,6 +165,7 @@ pub struct InGameMenu {
 }
 
 impl InGameMenu {
+    /// Builds the menu on the items screen.
     pub fn new(store: Option<SaveStore>, audio: AudioSettings) -> Self {
         Self {
             screen: Screen::Items { selected: 0 },
@@ -163,8 +174,9 @@ impl InGameMenu {
         }
     }
 
-    /// React to a key press, returning what the scene should do. `None`
-    /// means the menu handled it internally (or ignored it).
+    /// Reacts to a key press, returning what the scene should do.
+    ///
+    /// `None` means the menu handled it internally (or ignored it).
     pub fn handle_key(&mut self, key: Key) -> Option<MenuRequest> {
         match &mut self.screen {
             Screen::Items { selected } => match key {
@@ -291,7 +303,7 @@ impl InGameMenu {
         }
     }
 
-    /// Burn toast time; the toast returns to the items when it runs out.
+    /// Burns toast time; the toast returns to the items when it runs out.
     pub fn advance(&mut self, ticks: u32) {
         if let Screen::Toast { ticks_left, .. } = &mut self.screen {
             *ticks_left = ticks_left.saturating_sub(ticks);
@@ -302,8 +314,10 @@ impl InGameMenu {
         }
     }
 
-    /// Write `save` into `slot` and toast on success. A store failure keeps
-    /// the picker open; the player can pick another slot or back out.
+    /// Writes `save` into `slot` and toasts on success.
+    ///
+    /// A store failure keeps the picker open; the player can pick another slot or
+    /// back out.
     pub fn save_to(&mut self, slot: usize, save: &SaveGame) {
         let Some(store) = &self.store else {
             tracing::warn!("no data directory; the save is dropped");
@@ -316,7 +330,7 @@ impl InGameMenu {
         }
     }
 
-    /// Read the save in `slot`.
+    /// Reads the save in `slot`.
     pub fn load_from(&self, slot: usize) -> anyhow::Result<SaveGame> {
         let store = self
             .store
@@ -326,7 +340,7 @@ impl InGameMenu {
         store.load(slot)
     }
 
-    /// Show the save toast.
+    /// Shows the save toast.
     pub fn saved(&mut self) {
         self.screen = Screen::Toast {
             text: SAVED_TOAST,
@@ -334,7 +348,7 @@ impl InGameMenu {
         };
     }
 
-    /// Show the load toast (the scene calls this after an in-place load).
+    /// Shows the load toast (the scene calls this after an in-place load).
     pub fn loaded(&mut self) {
         self.screen = Screen::Toast {
             text: LOADED_TOAST,
@@ -342,8 +356,9 @@ impl InGameMenu {
         };
     }
 
-    /// Re-probe the slot files on picker entry, like the original (file
-    /// `0xb851` runs at every list draw).
+    /// Re-probes the slot files on picker entry.
+    ///
+    /// Like the original (file `0xb851` runs at every list draw).
     fn open_slots(&mut self, saving: bool) {
         let occupied = self
             .store
@@ -358,8 +373,10 @@ impl InGameMenu {
         };
     }
 
-    /// Draw the menu over the already-dimmed playfield. `dim` is the level's
-    /// half-brightness text table, used for unoccupied slot labels.
+    /// Draws the menu over the already-dimmed playfield.
+    ///
+    /// `dim` is the level's half-brightness text table, used for unoccupied slot
+    /// labels.
     pub fn render(&self, font: &Font, dim: &[u8; 256], frame: &mut Framebuffer) {
         match &self.screen {
             Screen::Items { selected } => {

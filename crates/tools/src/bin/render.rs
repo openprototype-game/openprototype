@@ -1,4 +1,4 @@
-//! Decode an asset and write it to a PNG for visual inspection.
+//! Decodes an asset and writes it to a PNG for visual inspection.
 //!
 //! Run with `--help` for the commands. Image commands take an optional
 //! `--palette`; without one they fall back to a grayscale ramp that shows
@@ -307,10 +307,12 @@ fn main() -> Result<()> {
     }
 }
 
-/// Render the HUD panel once per firing weapon, stacked, so all five weapon
-/// pods can be inspected at once. Each row crops to the panel; the level runs in
-/// Mode X 320x160 shown on a 4:3 CRT (pixels 1.5x taller than wide), so a 320x32
-/// panel crop scales to 640x96 to match the real proportions.
+/// Renders the HUD panel once per firing weapon, stacked.
+///
+/// All five weapon pods can be inspected at once. Each row crops to the panel;
+/// the level runs in Mode X 320x160 shown on a 4:3 CRT (pixels 1.5x taller than
+/// wide), so a 320x32 panel crop scales to 640x96 to match the real
+/// proportions.
 fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
     let disc = source.context("the hud command needs --cue to read its assets")?;
     let assets = openprototype::assets::load_hud_assets(disc, "LEVEL_1.WAD")
@@ -373,7 +375,7 @@ fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()
     save(&canvas, output)
 }
 
-/// Write mono 8-bit unsigned PCM as a WAV file (44-byte header + samples).
+/// Writes mono 8-bit unsigned PCM as a WAV file (44-byte header + samples).
 fn write_wav(samples: &[u8], rate: u32, output: &std::path::Path) -> Result<()> {
     let data_len = samples.len() as u32;
     let byte_rate = rate; // channels(1) * bits/8(1) * rate
@@ -451,8 +453,9 @@ fn write_gif(frames: &[FliFrame], output: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-/// Tile every frame (downscaled) into one grid, so periodic corruption is
-/// visible at a glance.
+/// Tiles every frame (downscaled) into one grid.
+///
+/// Periodic corruption is then visible at a glance.
 fn contact_sheet_of(frames: &[FliFrame]) -> RgbImage {
     use image::imageops::{FilterType, resize};
 
@@ -545,8 +548,9 @@ fn to_png(image: &IndexedImage, palette: &Palette) -> RgbImage {
         .expect("to_rgb8 returns width * height * 3 bytes")
 }
 
-/// One sprite as an RGBA image, transparent where it has no pixel. Returns
-/// `None` for a blank (`0x0`) catalog slot.
+/// One sprite as an RGBA image, transparent where it has no pixel.
+///
+/// Returns `None` for a blank (`0x0`) catalog slot.
 fn sprite_to_rgba(sprite: &Sprite, palette: &Palette) -> Option<RgbaImage> {
     if sprite.pixels.is_empty() {
         return None;
@@ -566,7 +570,7 @@ fn sprite_to_rgba(sprite: &Sprite, palette: &Palette) -> Option<RgbaImage> {
     Some(image)
 }
 
-/// Lay every sprite over a checkerboard grid, so extent and transparency show.
+/// Lays every sprite over a checkerboard grid, so extent and transparency show.
 fn sprites_contact_sheet(sprites: &[Sprite], palette: &Palette) -> RgbImage {
     const PAD: u32 = 2;
 
@@ -622,8 +626,9 @@ fn dump_sprites(sprites: &[Sprite], palette: &Palette, dir: &std::path::Path) ->
     Ok(())
 }
 
-/// Animate the sprites in catalog order, each centered on a transparent canvas
-/// sized to the largest sprite so the animation does not jitter.
+/// Animates the sprites in catalog order, each on a transparent canvas.
+///
+/// The canvas is sized to the largest sprite so the animation does not jitter.
 fn write_sprite_gif(sprites: &[Sprite], palette: &Palette, output: &std::path::Path) -> Result<()> {
     use image::codecs::gif::{GifEncoder, Repeat};
     use image::{Delay, Frame as GifFrame};

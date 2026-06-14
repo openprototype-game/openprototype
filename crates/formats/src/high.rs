@@ -45,7 +45,7 @@ impl Highscores {
         &self.0
     }
 
-    /// Insert `entry` if its score makes the table, returning whether it did.
+    /// Inserts `entry` if its score makes the table, returning whether it did.
     ///
     /// It lands just below every entry whose score is greater than *or equal*
     /// to it, so an older entry keeps the higher rank on a tie, and the bottom
@@ -101,7 +101,7 @@ impl Display for Highscores {
     }
 }
 
-/// Parse one record (a line with its `$`, the newline already stripped).
+/// Parses one record (a line with its `$`, the newline already stripped).
 fn parse_record(line: &str) -> Result<Highscore> {
     if !line.is_ascii() || line.len() != RECORD_LEN - 1 {
         return Err(DecodeError::Unrecognized {

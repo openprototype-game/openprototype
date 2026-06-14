@@ -29,10 +29,11 @@ use openprototype_core::framebuffer::Framebuffer;
 use openprototype_core::game_state::Handoff;
 use openprototype_core::input::KeyEvent;
 
-/// The movie that plays after finishing a level, and its frame duration in
-/// timer ticks (`START.EXE`'s table at vaddr `0x36f4` and the per-level
-/// `cs:[0x3022]` writes at file `0x3d35..0x3da0`; the table indexes by the
-/// level about to launch, which is the finished level plus one).
+/// The movie that plays after finishing a level, and its frame duration.
+///
+/// The duration is in timer ticks (`START.EXE`'s table at vaddr `0x36f4` and the
+/// per-level `cs:[0x3022]` writes at file `0x3d35..0x3da0`; the table indexes by
+/// the level about to launch, which is the finished level plus one).
 pub fn transition_fli(after: Level) -> (&'static str, u32) {
     match after {
         Level::L1 => ("FLI/CANYON.FLI", 1),
@@ -45,6 +46,7 @@ pub fn transition_fli(after: Level) -> (&'static str, u32) {
     }
 }
 
+/// The interstitial movie scene between levels.
 pub struct LevelTransition {
     /// `None` when the bytes did not decode; the first update then moves on.
     player: Option<FlicPlayer>,
@@ -60,6 +62,7 @@ pub struct LevelTransition {
 }
 
 impl LevelTransition {
+    /// Builds the scene, decoding `fli` at the movie's pace.
     pub fn new(fli: &[u8], after: Level, handoff: Handoff) -> Self {
         let (_, ticks) = transition_fli(after);
         let frame_delay = Duration::from_micros(u64::from(ticks) * 1_000_000 / 70);

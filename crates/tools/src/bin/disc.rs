@@ -1,4 +1,4 @@
-//! Inspect and extract from the original *Prototype* CD image.
+//! Inspects and extracts from the original *Prototype* CD image.
 //!
 //! `ls` lists the data-track files and audio tracks; `cat` extracts a file's
 //! raw bytes (handy for files the decoders don't cover, e.g. the EXEs); `rip`
@@ -91,8 +91,10 @@ fn main() -> Result<()> {
     }
 }
 
-/// Write raw red-book PCM (44100 Hz, 16-bit, stereo, LE-interleaved) as a WAV.
-/// The SMP `write_wav` in `render` is mono/8-bit, so CD-DA needs its own header.
+/// Writes raw red-book PCM (44100 Hz, 16-bit, stereo, LE-interleaved) as a WAV.
+///
+/// The SMP `write_wav` in `render` is mono/8-bit, so CD-DA needs its own
+/// header.
 fn write_wav_pcm16_stereo(pcm: &[u8], output: &Path) -> Result<()> {
     const RATE: u32 = 44_100;
     const CHANNELS: u16 = 2;

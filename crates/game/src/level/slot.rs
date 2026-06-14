@@ -47,8 +47,9 @@ pub const fn rand(modulus: u16, base: u16) -> Rand {
     Rand { modulus, base }
 }
 
-/// One arm of a [`Choice`](Emitter::Choice): a sprite/health with rng delay
-/// and spawn row.
+/// One arm of a [`Choice`](Emitter::Choice).
+///
+/// A sprite/health with rng delay and spawn row.
 #[derive(Clone, Copy)]
 pub struct Arm {
     pub x: Rand,
@@ -80,8 +81,7 @@ pub enum Fill {
     Slots,
 }
 
-/// How a [`Row`](Emitter::Row) lays out records and draws its shared spawn
-/// row.
+/// How a [`Row`](Emitter::Row) lays out records and draws its shared row.
 ///
 /// The two forms are different relinked routines, each with its own draw
 /// order, so they are not interchangeable.
@@ -173,16 +173,18 @@ impl Slots {
         }
     }
 
-    /// delay = x_start + x_step, then consume x_start (the common per-record
-    /// step).
+    /// delay = x_start + x_step, then consume x_start.
+    ///
+    /// The common per-record step.
     fn step_x(&mut self) -> u16 {
         let x = self.x_start.wrapping_add(self.x_step);
         self.x_start = 0;
         x
     }
 
-    /// delay = x_start, then consume it (the landmark `Once` emitters; no
-    /// step).
+    /// delay = x_start, then consume it.
+    ///
+    /// The landmark `Once` emitters; no step.
     fn consume_x(&mut self) -> u16 {
         let x = self.x_start;
         self.x_start = 0;

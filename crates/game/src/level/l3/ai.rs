@@ -1,5 +1,6 @@
-//! LEVEL_3's 56 mode-0 enemy AI functions, transcribed from the disassembly
-//! (`re/l3-ai-functions.md`; pointer table at file `0x11066`).
+//! LEVEL_3's 56 mode-0 enemy AI functions, transcribed from the disassembly.
+//!
+//! See `re/l3-ai-functions.md` (pointer table at file `0x11066`).
 //!
 //! Same engine as L1 with a different AI set. The big structural difference:
 //! most L3 sprite families are runs of 0x1e-byte full descriptors per frame
@@ -45,8 +46,9 @@ pub(crate) struct AiContext<'a> {
     pub firing_plasma: bool,
 }
 
-/// The boss's engine globals (`cs:0xcd7..0xcf5`); one boss runs at a time,
-/// so the original keeps these outside the entity.
+/// The boss's engine globals (`cs:0xcd7..0xcf5`).
+///
+/// One boss runs at a time, so the original keeps these outside the entity.
 pub(crate) struct BossState {
     /// Y-bob phase (`cs:0xcd9`, wrap 0x28, byte-indexed deltas).
     bob_phase: usize,
@@ -96,8 +98,10 @@ impl Default for BossState {
     }
 }
 
-/// Re-copies the current frame's hitboxes (file `0x100c3`); the 0x1e-byte
-/// frame families call this every sub-step so the boxes track the pose.
+/// Re-copies the current frame's hitboxes (file `0x100c3`).
+///
+/// The 0x1e-byte frame families call this every sub-step so the boxes track
+/// the pose.
 fn copy_hitbox(entity: &mut Entity, wad: &[u8]) {
     entity.hitboxes = descriptor_hitboxes(wad, CS_BASE, entity.sprite);
 }
@@ -117,8 +121,9 @@ fn segment_base(segment: usize) -> usize {
     segment * 16 + 0x200
 }
 
-/// The orbiter wave table (file `0x103fd`): 0x78 words, byte-indexed with a
-/// 0xf0 wrap.
+/// The orbiter wave table (file `0x103fd`).
+///
+/// 0x78 words, byte-indexed with a 0xf0 wrap.
 const ORBITER_WAVE: usize = 0x103fd;
 
 /// Runs AI function `arg` for one sub-step.
@@ -193,8 +198,10 @@ pub(crate) fn step(entity: &mut Entity, ctx: &mut AiContext) {
     }
 }
 
-/// The two-frame flap (file `0x10097`): every 3rd call the sprite toggles
-/// between the rest descriptor and rest + 0x1e.
+/// The two-frame flap (file `0x10097`).
+///
+/// Every 3rd call the sprite toggles between the rest descriptor and rest +
+/// 0x1e.
 fn flap(entity: &mut Entity) {
     entity.tick += 1;
     entity.anim += 1;
@@ -239,11 +246,12 @@ fn popper_anim(entity: &mut Entity) {
     }
 }
 
-/// One path-table step (the head of files `0x10104`/`0x101b5`/`0x1034c`):
-/// adds the tick's `{dx, dy}` entry, scaled to 12.4. L3 paths never wrap,
-/// and a long-lived follower CAN outrun its table (row 62 lives 426 ticks
-/// on a 232-entry segment), harmlessly reading the next segment's bytes --
-/// both engines read the same WAD data there.
+/// One path-table step (the head of files `0x10104`/`0x101b5`/`0x1034c`).
+///
+/// Adds the tick's `{dx, dy}` entry, scaled to 12.4. L3 paths never wrap, and a
+/// long-lived follower CAN outrun its table (row 62 lives 426 ticks on a
+/// 232-entry segment), harmlessly reading the next segment's bytes -- both
+/// engines read the same WAD data there.
 fn path_step(entity: &mut Entity, wad: &[u8], segment: usize) {
     let at = segment_base(segment) + usize::from(entity.tick) * 4;
     entity.x += word(wad, at) << 4;
@@ -260,9 +268,10 @@ enum OrbitShape {
     Wide,
 }
 
-/// The orbiters (funcs 48-50): approach, raise the gate, then orbit the
-/// saved center on the shared wave table, with the attack animation gated
-/// on vertical proximity to the player.
+/// The orbiters (funcs 48-50): approach, then orbit the saved center.
+///
+/// Raise the gate, then orbit on the shared wave table, with the attack
+/// animation gated on vertical proximity to the player.
 fn orbiter(entity: &mut Entity, ctx: &mut AiContext, approach_ticks: u16, shape: OrbitShape) {
     entity.tick += 1;
 
@@ -337,8 +346,10 @@ fn orbiter(entity: &mut Entity, ctx: &mut AiContext, approach_ticks: u16, shape:
     copy_hitbox(entity, ctx.wad);
 }
 
-/// The slow drifter (func 51): starts animating once on screen (x <= 200 px)
-/// and gains speed once past the rest frame.
+/// The slow drifter (func 51).
+///
+/// Starts animating once on screen (x <= 200 px) and gains speed once past the
+/// rest frame.
 fn slow_drifter(entity: &mut Entity, wad: &[u8]) {
     entity.x -= 0x10;
 
@@ -362,8 +373,9 @@ fn slow_drifter(entity: &mut Entity, wad: &[u8]) {
     copy_hitbox(entity, wad);
 }
 
-/// One leaper's scripted arc: per phase, the y step (12.4, negative = up)
-/// and an optional frame to set.
+/// One phase of a leaper's scripted arc.
+///
+/// Per phase, the y step (12.4, negative = up) and an optional frame to set.
 struct LeapPhase {
     until: u16,
     dy: i32,
@@ -419,8 +431,10 @@ const LEAP_STEEP: &[LeapPhase] = &[
     },
 ];
 
-/// Func 53's arc (gentle), file `0x108b5`. (Its duplicated `tick <= 0x9e`
-/// compare makes a second `+0x20` step unreachable; transcribed as taken.)
+/// Func 53's arc (gentle), file `0x108b5`.
+///
+/// Its duplicated `tick <= 0x9e` compare makes a second `+0x20` step
+/// unreachable; transcribed as taken.
 const LEAP_GENTLE: &[LeapPhase] = &[
     LeapPhase {
         until: 0x80,
@@ -464,16 +478,18 @@ const LEAP_GENTLE: &[LeapPhase] = &[
     },
 ];
 
-/// The splash effect templates (count byte + 13-byte rows). Template B's
-/// count byte says 16 over 15 real rows; the 16th reads pad bytes and spawns
-/// far off-screen, a faithful quirk.
+/// The splash effect templates (count byte + 13-byte rows).
+///
+/// Template B's count byte says 16 over 15 real rows; the 16th reads pad bytes
+/// and spawns far off-screen, a faithful quirk.
 const SPLASH_A: usize = 0x899f;
 const SPLASH_B: usize = 0x8c78;
 
-/// The leapers (funcs 52/53): parked off-screen until tick 0x71, then a
-/// scripted dive out of the water at (175, 125) px with splash templates,
-/// then parked at x 500 to cull. They hold their drift while the gate is
-/// exactly 1.
+/// The leapers (funcs 52/53): a scripted dive out of the water.
+///
+/// Parked off-screen until tick 0x71, then a scripted dive out of the water at
+/// (175, 125) px with splash templates, then parked at x 500 to cull. They hold
+/// their drift while the gate is exactly 1.
 fn leaper(entity: &mut Entity, ctx: &mut AiContext, arc: &[LeapPhase]) {
     entity.tick += 1;
     let tick = entity.tick;
@@ -517,9 +533,10 @@ fn leaper(entity: &mut Entity, ctx: &mut AiContext, arc: &[LeapPhase]) {
     copy_hitbox(entity, ctx.wad);
 }
 
-/// Bursts an effect template (file `0x1073c`): a count byte then 13-byte
-/// rows `{desc, dx, dy, frames, rate, step, phase, delay}` relative to the
-/// burst's pixel position.
+/// Bursts an effect template (file `0x1073c`).
+///
+/// A count byte then 13-byte rows `{desc, dx, dy, frames, rate, step, phase,
+/// delay}` relative to the burst's pixel position.
 fn spawn_template(ctx: &mut AiContext, template: usize, x: i32, y: i32) {
     let Some(&count) = ctx.wad.get(template) else {
         return;
@@ -551,10 +568,12 @@ const BOSS_FRAME_DELTAS: usize = 0x109e1;
 const BOSS_SINE: usize = 0x10a31;
 const BOSS_LUNGE: usize = 0x10b21;
 
-/// The level boss (func 54, file `0x10c7d`): fly in, raise the gate, swoop
-/// to a hover anchor, then loop hover / lunge-left / wave / return. Health
-/// is pinned at 15000 until tick 0x12c; below 2000 it bursts explosions; it
-/// dies through the regular death handler at 0. No second form.
+/// The level boss (func 54, file `0x10c7d`).
+///
+/// Fly in, raise the gate, swoop to a hover anchor, then loop hover /
+/// lunge-left / wave / return. Health is pinned at 15000 until tick 0x12c; below
+/// 2000 it bursts explosions; it dies through the regular death handler at 0. No
+/// second form.
 fn boss(entity: &mut Entity, ctx: &mut AiContext) {
     let state = &mut ctx.boss;
 
@@ -681,13 +700,16 @@ fn boss(entity: &mut Entity, ctx: &mut AiContext) {
     copy_hitbox(entity, ctx.wad);
 }
 
+/// Which way a boss volley faces.
 enum VolleyFacing {
     Left,
     Right,
 }
 
-/// One 3-shot volley (files `0x10eeb`/`0x10f86`): an aimed shot from the
-/// muzzle plus two straight shots, with the volley voice sample.
+/// One 3-shot volley (files `0x10eeb`/`0x10f86`).
+///
+/// An aimed shot from the muzzle plus two straight shots, with the volley voice
+/// sample.
 fn fire_volley(entity: &mut Entity, ctx: &mut AiContext, facing: VolleyFacing) {
     let (aim_dx, aim_dy) = match facing {
         VolleyFacing::Left => (0x440, 0x450),
@@ -745,8 +767,9 @@ fn fire_volley(entity: &mut Entity, ctx: &mut AiContext, facing: VolleyFacing) {
     ctx.sounds.push(SLOT_VOLLEY);
 }
 
-/// The aimed-shot helper (file `0x117a7`): a velocity toward the player's
-/// center at 4 px per step (12.4 per sub-step).
+/// The aimed-shot helper (file `0x117a7`): a velocity toward the player.
+///
+/// Aims at the player's center at 4 px per step (12.4 per sub-step).
 ///
 /// `None` at point-blank range: the original's idiv is unguarded and a
 /// zero scale crashes it with a divide fault (reachable while shielded
