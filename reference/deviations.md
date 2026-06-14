@@ -73,6 +73,12 @@ differently" reports.
 - **Edge-triggered input.** The port reacts to key press/release events
   where the original polls held-state flags each tick; this already covers
   the original's Esc-release debounce by construction.
+- **Tick batching.** The original advances entity movement in sub-steps within
+  a frame but culls, collides, and draws once per frame; the port advances the
+  whole simulation (spawn pull, move, cull, collide, compose) in whole logic
+  ticks under a catch-up fixed timestep. The two are identical at the target
+  tick rate; only under host lag (several ticks per rendered frame) does the
+  cull cadence differ.
 - **Decoder OOB guards.** The format decoders carry defensive bounds the
   original lacks; unreachable on shipped data, golden-verified.
 - **FLI skip-on-undecodable.** The port skips a corrupt chunk; the original
