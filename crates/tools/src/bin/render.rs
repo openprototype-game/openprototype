@@ -315,7 +315,8 @@ fn main() -> Result<()> {
 /// proportions.
 fn render_hud(source: Option<&DiscImage>, output: &std::path::Path) -> Result<()> {
     let disc = source.context("the hud command needs --cue to read its assets")?;
-    let assets = openprototype::assets::load_hud_assets(disc, "LEVEL_1.WAD")
+    let l1 = openprototype::levels::Level::L1.data();
+    let assets = openprototype::assets::load_hud_assets(disc, l1.wad, l1.palette_offset)
         .context("loading HUD assets")?;
 
     // (selected, level) per row; active_weapon() resolves to the chaingun when the

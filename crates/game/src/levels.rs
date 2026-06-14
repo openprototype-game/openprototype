@@ -393,6 +393,9 @@ impl Bin {
 pub struct LevelData {
     /// The level's WAD/executable on the disc, e.g. `"LEVEL_2.WAD"`.
     pub wad: &'static str,
+    /// File offset of the embedded 256-color palette in the WAD (the per-WAD
+    /// table in `reference/formats/wad.md`; the three race WADs share `0x06b0`).
+    pub palette_offset: usize,
     /// The level's combat constants (kinds, bounds, gate sprites).
     pub combat: CombatData,
     /// The level's SP parallax background (which carries its own strip layout).
@@ -524,6 +527,7 @@ impl Level {
         match self {
             Level::L1 => LevelData {
                 wad: "LEVEL_1.WAD",
+                palette_offset: 0x26F0,
                 combat: L1_COMBAT,
                 background: Sp::Canyon,
                 catalog: Bin::Out,
@@ -614,6 +618,7 @@ impl Level {
             },
             Level::L2 => LevelData {
                 wad: "LEVEL_2.WAD",
+                palette_offset: 0x06B0,
                 combat: CombatData {
                     ship_rect_table: 0x4237,
                     pickups: [0x3974, 0x3898, 0x38fe, 0x3a3a],
@@ -719,6 +724,7 @@ impl Level {
             },
             Level::L3 => LevelData {
                 wad: "LEVEL_3.WAD",
+                palette_offset: 0x4410,
                 combat: CombatData {
                     ship_rect_table: 0x63ef,
                     pickups: [
@@ -836,6 +842,7 @@ impl Level {
             },
             Level::L4 => LevelData {
                 wad: "LEVEL_4.WAD",
+                palette_offset: 0x06B0,
                 combat: CombatData {
                     ship_rect_table: 0x42af,
                     pickups: [0x39ec, 0x3910, 0x3976, 0x3ab2],
@@ -939,6 +946,7 @@ impl Level {
             },
             Level::L5 => LevelData {
                 wad: "LEVEL_5.WAD",
+                palette_offset: 0x3C90,
                 combat: CombatData {
                     ship_rect_table: 0x47e5,
                     pickups: [
@@ -1051,6 +1059,7 @@ impl Level {
             },
             Level::L6 => LevelData {
                 wad: "LEVEL_6.WAD",
+                palette_offset: 0x06B0,
                 combat: CombatData {
                     ship_rect_table: 0x47af,
                     pickups: [0x3eec, 0x3e10, 0x3e76, 0x3fb2],
@@ -1151,6 +1160,7 @@ impl Level {
             },
             Level::L7 => LevelData {
                 wad: "LEVEL_7.WAD",
+                palette_offset: 0x4EE0,
                 combat: CombatData {
                     ship_rect_table: 0x5b47,
                     pickups: [

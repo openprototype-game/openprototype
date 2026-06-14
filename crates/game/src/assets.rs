@@ -297,12 +297,18 @@ const WEAPON_PODS_SIZE: Dimensions = Dimensions {
 
 /// Loads and decodes the in-game HUD assets from the disc image.
 ///
-/// The HUD palette is the playing level's, read from `palette_wad`.
-pub fn load_hud_assets(disc: &DiscImage, palette_wad: &str) -> Result<HudAssets> {
+/// The HUD palette is the playing level's, read from `palette_wad` at
+/// `palette_offset` (the level's [`crate::levels::LevelData::palette_offset`]).
+pub fn load_hud_assets(
+    disc: &DiscImage,
+    palette_wad: &str,
+    palette_offset: usize,
+) -> Result<HudAssets> {
     let wad_bytes = disc
         .read(palette_wad)
         .with_context(|| format!("reading {palette_wad}"))?;
-    let palette = wad::level_palette(&wad_bytes).context("extracting the level palette")?;
+    let palette =
+        wad::palette_at(&wad_bytes, palette_offset).context("extracting the level palette")?;
 
     let panel = decode_raw(disc, "PANEL.RAW", PANEL_SIZE)?;
     let score_digits = decode_raw(disc, "SCORE.RAW", SCORE_DIGITS_SIZE)?;
@@ -380,7 +386,7 @@ pub fn load_level_assets(disc: &DiscImage, level: Level) -> Result<LevelAssets> 
     let data = level.data();
 
     let background = Background::new(load_background(disc, data.background)?, data.background);
-    let hud = load_hud_assets(disc, data.wad)?;
+    let hud = load_hud_assets(disc, data.wad, data.palette_offset)?;
 
     let bin_name = format!("{}.BIN", data.catalog.stem());
     let bin = disc

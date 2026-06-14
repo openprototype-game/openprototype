@@ -18,13 +18,37 @@ const PALETTE_LEN: usize = 768;
 /// in exactly one place per WAD.
 const SIGNATURE: [u8; 6] = [0x00, 0x00, 0x00, MAX_DAC, MAX_DAC, MAX_DAC];
 
-/// Extracts the level's embedded 256-color palette from a `.WAD`.
+/// Extracts the embedded 256-color palette at a known offset in a `.WAD`.
 ///
 /// The palette is a raw 768-byte block of 6-bit VGA DAC values (see
-/// [`Palette::from_vga_6bit`]) compiled in at a per-level offset that follows no
-/// rule, so it is located by signature: the block opens black-then-white and
-/// every byte is a valid DAC value (`<= 0x3f`). That matches in exactly one
-/// place per WAD. See `reference/formats/wad.md`.
+/// [`Palette::from_vga_6bit`]). The per-WAD offsets are tabulated in
+/// `reference/formats/wad.md`; the game keeps them in its level data. Use
+/// [`level_palette`] only when the offset is unknown (a generic tool over an
+/// arbitrary WAD).
+///
+/// # Errors
+///
+/// Returns [`DecodeError::Unrecognized`] when the block runs past the end of
+/// the WAD or holds a non-DAC byte (`> 0x3f`).
+pub fn palette_at(wad: &[u8], offset: usize) -> Result<Palette> {
+    let block = wad
+        .get(offset..offset + PALETTE_LEN)
+        .filter(|window| window.iter().all(|&byte| byte <= MAX_DAC))
+        .ok_or(DecodeError::Unrecognized {
+            reason: "no valid palette block at the given WAD offset",
+        })?;
+
+    Palette::from_vga_6bit(block)
+}
+
+/// Locates the embedded palette by signature, when the offset is not known.
+///
+/// The palette's offset follows no rule across WADs, so a caller without a
+/// known offset scans for the block: it opens black-then-white and every byte
+/// is a valid DAC value (`<= 0x3f`), which matches in exactly one place per
+/// WAD. The game passes the known per-level offset to [`palette_at`] instead;
+/// this scan is for generic tools over an arbitrary WAD. See
+/// `reference/formats/wad.md`.
 ///
 /// # Errors
 ///
@@ -66,6 +90,25 @@ mod tests {
 
         let palette = level_palette(&wad).unwrap();
         assert_eq!(palette, Palette::from_vga_6bit(&palette_bytes()).unwrap());
+    }
+
+    #[test]
+    fn reads_the_palette_at_a_known_offset() {
+        let mut wad = vec![0xffu8; 5]; // arbitrary prefix
+        wad.extend(palette_bytes());
+
+        let palette = palette_at(&wad, 5).unwrap();
+        assert_eq!(palette, Palette::from_vga_6bit(&palette_bytes()).unwrap());
+    }
+
+    #[test]
+    fn rejects_a_known_offset_that_overruns_or_holds_a_non_dac_byte() {
+        let wad = palette_bytes();
+        assert!(palette_at(&wad, wad.len() - 10).is_err());
+
+        let mut bad = palette_bytes();
+        bad[400] = 0xff;
+        assert!(palette_at(&bad, 0).is_err());
     }
 
     #[test]

@@ -30,18 +30,20 @@ LEVEL_2, 4, 6 share an identical header shape (53 relocs, cs=007B) and the same
 palette offset. Those are the three RACEB2 race levels, built from one common code
 base; the others are each their own build.
 
-## Palette: locate by signature, not by offset
+## Palette: per-WAD offset, with a signature fallback
 
 Each WAD embeds the 256-color palette as a raw 768-byte block of 6-bit VGA values
 (the same layout as a `.PAL`). The offset differs per WAD (see the table) and follows
-no fixed rule, so it cannot be hardcoded or computed.
+no rule across WADs, but it is fixed per WAD. The port reads it directly: each level's
+offset is recorded in its level data (`Level::data().palette_offset`), and
+`wad::palette_at(wad, offset)` decodes the 768-byte block there.
 
-It is reliably found by signature instead. The block opens with black then white then
-a 30-step descending gray ramp, so the first 32 entries are grayscale. The locator:
+When the offset is not known (a generic tool over an arbitrary WAD), the block is
+located by signature instead. It opens with black then white then a 30-step descending
+gray ramp, so the first 32 entries are grayscale. The locator (`wad::level_palette`):
 scan for `00 00 00 3F 3F 3F` followed by a 768-byte window whose every byte is
 `<= 0x3F`. Across all seven WADs this matches in exactly one place each, so the
-signature is unambiguous. (It can be tightened further by also requiring the full
-32-entry gray ramp, if a false positive ever turns up.)
+signature is unambiguous.
 
 ## One master palette, two variants
 
