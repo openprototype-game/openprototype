@@ -17,7 +17,7 @@ r2 6.1.4.
 - Entry `CS:IP = 0000:4705` (r2 `entry0`).
 - No mouse (no `int 0x33`): keyboard-driven, through a custom `int 9` ISR.
 - The CD-audio music driver is a separate code segment (`0x4dc`), reached
-  through thunks at `0x265`–`0x308`.
+  through thunks at `0x265`..`0x308`.
 
 ## Process model
 
@@ -131,24 +131,24 @@ A scripted sequence over the title music. Stills blit from preloaded segments;
 their palettes load into the fade workspace (slot 0 = target, slot `0x300` =
 black). Durations:
 
-| # | Beat | Ticks |
-|---|------|-------|
-| 1 | blit `neo.bdy` (DAC black), start CD track 2 | — |
-| 2 | hold | 220 |
-| 3 | fade in (110 steps x 2) | 220 |
-| 4 | hold | 350 |
-| 5 | `fli\intro.fli` (31 frames x 3) | 93 |
-| 6 | hold | 230 |
-| 7 | fade out (110 x 2) | 220 |
-| 8 | blit `surplogo.bdy`; fade in (110 x 1) | 110 |
-| 9 | hold | 200 |
-| 10 | fade out (110 x 1) | 110 |
-| 11 | mode 13h reset; `fli\fly.fli` (110 frames x 2) | 220 |
-| 12 | cover reveal (below) | ~4 (machine-bound) |
-| 13 | hold | 180 |
-| 14 | fade out, DAC indices 1..255 (90 x 1) | 90 |
-| 15 | credits (below) | 6 x 40 frames x 8 |
-| 16 | menu setup; fade in (40 x 1) | 40 |
+| #   | Beat                                           | Ticks              |
+| --- | ---------------------------------------------- | ------------------ |
+| 1   | blit `neo.bdy` (DAC black), start CD track 2   |                    |
+| 2   | hold                                           | 220                |
+| 3   | fade in (110 steps x 2)                        | 220                |
+| 4   | hold                                           | 350                |
+| 5   | `fli\intro.fli` (31 frames x 3)                | 93                 |
+| 6   | hold                                           | 230                |
+| 7   | fade out (110 x 2)                             | 220                |
+| 8   | blit `surplogo.bdy`; fade in (110 x 1)         | 110                |
+| 9   | hold                                           | 200                |
+| 10  | fade out (110 x 1)                             | 110                |
+| 11  | mode 13h reset; `fli\fly.fli` (110 frames x 2) | 220                |
+| 12  | cover reveal (below)                           | ~4 (machine-bound) |
+| 13  | hold                                           | 180                |
+| 14  | fade out, DAC indices 1..255 (90 x 1)          | 90                 |
+| 15  | credits (below)                                | 6 x 40 frames x 8  |
+| 16  | menu setup; fade in (40 x 1)                   | 40                 |
 
 ### Cover reveal (320x400)
 
@@ -206,13 +206,13 @@ Loop `0x3e41`:
 - **Every other scancode is ignored, Esc included.** Quitting is the QUIT
   item.
 
-| Item | Offset | Target | Action |
-|------|--------|--------|--------|
-| NEW GAME | 0x4b46 | 0x4b05 | level state machine (below) |
-| LOAD GAME | 0x5f46 | 0x4258 | 5-slot load screen, then resume the saved level |
-| HIGHSCORES | 0x7346 | 0x3f0c | highscores screen (below) |
-| MUSIC MENU | 0x8746 | 0x439a | CD jukebox (below) |
-| QUIT | 0x9b46 | 0x4d90 | stop music, restore ISRs + text mode, `int21 AH=4C` |
+| Item       | Offset | Target | Action                                              |
+| ---------- | ------ | ------ | --------------------------------------------------- |
+| NEW GAME   | 0x4b46 | 0x4b05 | level state machine (below)                         |
+| LOAD GAME  | 0x5f46 | 0x4258 | 5-slot load screen, then resume the saved level     |
+| HIGHSCORES | 0x7346 | 0x3f0c | highscores screen (below)                           |
+| MUSIC MENU | 0x8746 | 0x439a | CD jukebox (below)                                  |
+| QUIT       | 0x9b46 | 0x4d90 | stop music, restore ISRs + text mode, `int21 AH=4C` |
 
 ### Text drawing (`0x3d03` glyph, `0x3d89` string)
 
@@ -278,7 +278,7 @@ the same fixed work (195 rows x 320 px), it is uniform.
 
 Enter-name path (a won game): `"  CONGRATULATIONS=  "` at y = 65 and
 `"  ENTER YOUR NAME   "` at y = 82 (font.raw, full-width padded strings at
-x = 0), the name field at x = 48, y = 110. Up to 13 characters, A–Z only
+x = 0), the name field at x = 48, y = 110. Up to 13 characters, A-Z only
 (lowercase is uppercased), backspace edits, Enter or Esc confirms; the buffer
 (`cs:[0x5cf]`) is `.`-padded.
 
@@ -314,7 +314,7 @@ mode byte plus `{status, score:4, lives:1, bombs:1, weapons:4}`.
   launching a level stops the front-end's audio so the level WAD can play its
   own track.
 - **No SoundBlaster in START.EXE.** The only IO ports it touches are keyboard
-  (`0x60`), PIC (`0xa1`), and VGA (`0x3c0`–`0x3da`). The DSP / DMA-buffer
+  (`0x60`), PIC (`0xa1`), and VGA (`0x3c0`..`0x3da`). The DSP / DMA-buffer
   strings are dead leftovers shared with the level engine, with zero references
   here. Sample (SMP) effects are entirely the in-game level WADs' job.
 
@@ -365,25 +365,25 @@ transcribe (the menu palette) are read at runtime, via the `start_exe` decoder.
 
 ## Subsystem primitives
 
-| Routine | Address | Role |
-|---------|---------|------|
-| DAC palette upload | `0x230` | `cx` colors from `ds:si` to index `di`, ports `0x3C8`/`0x3C9` |
-| Palette fade | `0x2ec4` | `dl` steps x `[0x3022]` ticks; `si`→`di` palettes, `bx` first index |
-| Tick counter | `[0xf5c]` | 70 Hz, incremented by the timer ISR |
-| Zero counter / wait / align | `0x1068` / `0x3024` / `0x1047` | wait spins to `[0x3022]` ticks |
-| Image blit | `0x2f04` | copy a 64000-byte image to `0xA000` |
-| FLI open/play | `0x2f31` / `0x31fd` | streams to `0xA000`, full header frame count, `[0x3022]` ticks/frame |
-| Credits FLI play | `0x3293` | compose buffer + text overlay, header count − 1 frames |
-| Highscore entry zoom | `0x2670` | 25 steps about the screen center; `0x2646` params, `0x141e` row blit, `0x1365` x-offsets |
-| Glyph / string draw | `0x3d03` / `0x3d89` | string from `cs:[si]`, `$`-terminated; see font.md |
-| Cursor move | `0x3dab` | restore the 16x16 background cell, redraw `>` |
-| Key read (blocking) | `0x2e5c` | scancode from the `int 9` queue |
-| Intro skip exit | `0x3044` | on `[0x34f4]`: longjmp to the menu entry `0x4a54` (SP from `[0x34f5]`) |
-| Unchain + vsync | `0x1b5` | the cover's 400-line mode setup |
-| ISR install/restore | `0x2e6f` / `0x4d90` | timer + keyboard handlers |
-| File loader | `0x24` | open/read/close an asset into a segment |
-| Silent exit | `0x4d5f` | restore text mode, `int21 AH=4C` (missing nfo files land here) |
-| CD music | thunks `0x265`/`0x2b5`/`0x2f0` → driver `0x4dc` | MSCDEX play/stop/info |
+| Routine                     | Address                                         | Role                                                                                     |
+| --------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| DAC palette upload          | `0x230`                                         | `cx` colors from `ds:si` to index `di`, ports `0x3C8`/`0x3C9`                            |
+| Palette fade                | `0x2ec4`                                        | `dl` steps x `[0x3022]` ticks; `si`→`di` palettes, `bx` first index                      |
+| Tick counter                | `[0xf5c]`                                       | 70 Hz, incremented by the timer ISR                                                      |
+| Zero counter / wait / align | `0x1068` / `0x3024` / `0x1047`                  | wait spins to `[0x3022]` ticks                                                           |
+| Image blit                  | `0x2f04`                                        | copy a 64000-byte image to `0xA000`                                                      |
+| FLI open/play               | `0x2f31` / `0x31fd`                             | streams to `0xA000`, full header frame count, `[0x3022]` ticks/frame                     |
+| Credits FLI play            | `0x3293`                                        | compose buffer + text overlay, header count − 1 frames                                   |
+| Highscore entry zoom        | `0x2670`                                        | 25 steps about the screen center; `0x2646` params, `0x141e` row blit, `0x1365` x-offsets |
+| Glyph / string draw         | `0x3d03` / `0x3d89`                             | string from `cs:[si]`, `$`-terminated; see font.md                                       |
+| Cursor move                 | `0x3dab`                                        | restore the 16x16 background cell, redraw `>`                                            |
+| Key read (blocking)         | `0x2e5c`                                        | scancode from the `int 9` queue                                                          |
+| Intro skip exit             | `0x3044`                                        | on `[0x34f4]`: longjmp to the menu entry `0x4a54` (SP from `[0x34f5]`)                   |
+| Unchain + vsync             | `0x1b5`                                         | the cover's 400-line mode setup                                                          |
+| ISR install/restore         | `0x2e6f` / `0x4d90`                             | timer + keyboard handlers                                                                |
+| File loader                 | `0x24`                                          | open/read/close an asset into a segment                                                  |
+| Silent exit                 | `0x4d5f`                                        | restore text mode, `int21 AH=4C` (missing nfo files land here)                           |
+| CD music                    | thunks `0x265`/`0x2b5`/`0x2f0` → driver `0x4dc` | MSCDEX play/stop/info                                                                    |
 
 ## Port mapping
 
@@ -399,11 +399,9 @@ DOSBox at its default cycles.
 
 ## Open / TBD
 
-These remaining items are level-WAD-side (a separate binary) or need a sample
-file the disc does not ship:
+These remaining items are level-WAD-side (a separate binary). The save format
+itself is decoded in [savegame.md](savegame.md); the LOAD GAME handoff is above.
 
-- The save-file format and who writes it (LOAD GAME; likely the level WAD; no
-  save ships on the disc).
 - The `message`-file content: which bytes the level WAD writes map to which
   `cs:[0x46ff]` state and the next `cs:[0x4703]` level.
 - The level WAD exit-code values (the `bl` compared at `0x2b16`).

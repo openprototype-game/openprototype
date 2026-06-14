@@ -20,13 +20,17 @@ roadmap instead.
   opening GET READY auto-starts the track after ~16.7 s and the dismissal
   then restarts it. A race between the countdown and the pending-start flag;
   the port starts the track at the first unfreeze only.
+- **Additive mix overflow.** The original sums its three sample channels into
+  the DMA buffer and wraps on overflow, so loud simultaneous effects clip into
+  noise. The port saturates instead, keeping the same mix at normal levels
+  without the wrap artifact (see [sfx.md](sfx.md)).
 
 ## Crashes the port degrades instead of reproducing
 
 - **Point-blank aimed shots.** The enemies' aim-at-player helpers divide by
   the player distance with no guard (L1 `0xde16`, L3 `0x117f9`, L5
   `0xf2d8`); a zero scale (the shielded ship sitting inside the shooter)
-  faults the original to DOS. The port skips the shot — the same shape on
+  faults the original to DOS. The port skips the shot, the same shape on
   every level (the per-level guards used to differ).
 - **Pool overflows.** The original raises fatal error exits at 0x5f live
   shots, 0x18f live effects, and the entity cap; the port drops the overflow
@@ -47,7 +51,7 @@ roadmap instead.
   list). The grant is the original's: 0x7d00 invincibility ticks and all
   four weapon bars full.
 - **GRAPHICS... and JOYSTICK... draw disabled** (the dim-text treatment, and
-  the cursor skips them) until their submenus land — the detail-level system
+  the cursor skips them) until their submenus land: the detail-level system
   and gamepad support, both on the roadmap. The original's items work; a
   dimmed item reads more honestly than a working-looking inert one.
 - **Dev keys** (`[` `]` `f` `WASD` `p`) are port-only tooling, absent from
@@ -56,7 +60,7 @@ roadmap instead.
 ## Faithful but mechanically different
 
 These match the original's observable result by a different mechanism, so
-they are not really deviations — noted to forestall "the port does X
+they are not really deviations, only noted to forestall "the port does X
 differently" reports.
 
 - **Zoom pacing.** The original's 0x2870 scaler is CPU-bound and unpaced;
@@ -72,13 +76,18 @@ differently" reports.
   shipped data.
 - **Save slots** live in the OS data directory rather than beside the
   executable; the `.psg` byte format is preserved exactly.
+- **In-flight player shots are not saved.** The original preserves the
+  player-shot buffer across a save; the port writes it empty (`savegame.rs`).
+  The port models a shot as a kind plus an octant, not the raw sprite pointer,
+  and a shot lives well under a second; a load resumes through GET READY, so the
+  buffer self-corrects on the first unfrozen tick (see [savegame.md](savegame.md)).
 
 ## Open / latent assumptions
 
 - **Plasma ball damage after a mid-retract bomb.** The launched ball never
   gets a damage byte written; it inherits the staging slot (normally 30). A
   smart bomb fired during the orb retract *might* leave it at 0 in the
-  original — unverifiable by eye (the bomb kills every viable target), so
+  original, unverifiable by eye (the bomb kills every viable target), so
   the port's fixed 30 stands as the assumption.
 - **Stale spawn fields.** The original's entity builders leave tail fields
   (phase/save words) holding the previous slot occupant's bytes; the port

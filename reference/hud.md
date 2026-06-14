@@ -92,5 +92,4 @@ frame), at `di = 0x3F` (x 252). The original animates a weapon change as a
 two-phase state machine: it lowers the old pod, then raises the new one, stepping
 the frame every 6th tick (flag `cs:0x2697`, phase `cs:0x2698`, frame
 `cs:0x2699`, latched weapon `cs:0x2695`). The port currently raises the resolved
-pod directly from the scene's latch without the lower-old-pod phase; that
-simplification is in [deviations.md](deviations.md).
+pod directly from the scene's latch without the lower-old-pod phase.
