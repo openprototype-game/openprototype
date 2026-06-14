@@ -12,7 +12,7 @@ mod desktop {
     use std::sync::Arc;
 
     use anyhow::{Context, Result};
-    use clap::Parser;
+    use clap::{Parser, Subcommand};
     use openprototype::app::{App, FrontEndAssets};
     use openprototype::assets::{
         load_ending_assets, load_fli_bytes, load_gameover_assets, load_highscore_assets,
@@ -24,9 +24,8 @@ mod desktop {
     use openprototype::scene::SceneId;
     use openprototype_backend::{WindowIcon, run};
     use openprototype_core::game_state::Handoff;
-    use prototype_disc::{AssetSource, DiscImage, manifest};
-    use prototype_formats::bin::decode_ship;
-    use prototype_formats::{Palette, Sprite, wad};
+    use openprototype_install::{IconSource, InstallSpec};
+    use prototype_disc::{DiscImage, manifest};
     use tracing_subscriber::EnvFilter;
 
     /// Which scene to boot straight into, bypassing the normal intro flow.
@@ -39,9 +38,9 @@ mod desktop {
     #[derive(Parser)]
     #[command(about = "Prototype (1995) front-end")]
     struct Cli {
-        /// Path to the disc image cue sheet. Defaults to `$PROTOTYPE_DISC`, or
-        /// `./PROTOTYPE.cue` in the current directory if that is unset.
-        #[arg(long)]
+        /// Path to the disc image cue sheet. Defaults to `$PROTOTYPE_DISC`, the
+        /// path recorded by `install`, or `./PROTOTYPE.cue`.
+        #[arg(long, global = true)]
         cue: Option<PathBuf>,
 
         /// Boot straight into a developer scene instead of the intro.
@@ -61,6 +60,18 @@ mod desktop {
         /// Boot straight into a `.psg` savegame (race levels only so far).
         #[arg(long, conflicts_with = "scene")]
         load: Option<PathBuf>,
+
+        #[command(subcommand)]
+        command: Option<Command>,
+    }
+
+    #[derive(Subcommand)]
+    enum Command {
+        /// Install OpenPrototype for the current user: copy the binary, place
+        /// the disc in the data directory, and add a launcher entry with an
+        /// icon decoded from the disc. Offline; pass `--cue` to point at the
+        /// disc to install from.
+        Install,
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
@@ -99,79 +110,76 @@ mod desktop {
         );
     }
 
-    /// Builds the window icon from the player ship, decoded from the disc.
+    /// The disc location of LEVEL_1's ship, for the window and launcher icons.
+    fn icon_source() -> IconSource {
+        let data = Level::L1.data();
+
+        IconSource {
+            wad_name: data.wad,
+            ship_catalog: data.ship.catalog,
+            palette_offset: data.palette_offset,
+        }
+    }
+
+    /// The window icon: the player ship decoded from the disc.
     ///
-    /// Bundles no art: the pixels come from `PTURN1.BN1` over LEVEL_1's palette,
-    /// the same files the game plays from. A read or decode failure (an odd
+    /// Shares the decoder with the launcher icon; a read/decode failure (an odd
     /// disc) just leaves the window without an icon.
     fn window_icon(disc: &DiscImage) -> Option<WindowIcon> {
-        build_window_icon(disc)
+        openprototype_install::decode_ship_icon(disc, &icon_source())
+            .map(|icon| WindowIcon {
+                rgba: icon.rgba,
+                width: icon.side,
+                height: icon.side,
+            })
             .map_err(|error| tracing::warn!(%error, "no window icon"))
             .ok()
     }
 
-    fn build_window_icon(disc: &DiscImage) -> Result<WindowIcon> {
-        let data = Level::L1.data();
-        let wad = disc
-            .read(data.wad)
-            .with_context(|| format!("reading {}", data.wad))?;
-        let pturn1 = disc.read("PTURN1.BN1").context("reading PTURN1.BN1")?;
-        let frames =
-            decode_ship(&pturn1, &wad, data.ship.catalog).context("decoding PTURN1.BN1")?;
-        let palette =
-            wad::palette_at(&wad, data.palette_offset).context("reading the level palette")?;
-        let sprite = frames
-            .sprites
-            .first()
-            .context("PTURN1.BN1 has no ship frames")?;
+    /// Resolves the disc cue path: `--cue`, then `$PROTOTYPE_DISC`, then the
+    /// path recorded by `install`, then `./PROTOTYPE.cue`.
+    fn resolve_cue(cli: &Cli) -> Option<PathBuf> {
+        if let Some(cue) = &cli.cue {
+            return Some(cue.clone());
+        }
 
-        Ok(ship_icon(sprite, &palette))
+        if let Some(env) = std::env::var_os("PROTOTYPE_DISC") {
+            return Some(PathBuf::from(env));
+        }
+
+        if let Some(recorded) = openprototype_install::configured_disc() {
+            return Some(recorded);
+        }
+
+        let local = PathBuf::from("PROTOTYPE.cue");
+        local.exists().then_some(local)
     }
 
-    /// Composites one ship frame into a transparent square RGBA icon.
-    ///
-    /// Nearest-upscaled to the level's 1.5 pixel aspect (a 2:3 integer scale, so
-    /// it stays crisp) and centered, so the desktop compositor downscales a large
-    /// clean source instead of smoothing the ~37-pixel sprite up.
-    fn ship_icon(sprite: &Sprite, palette: &Palette) -> WindowIcon {
-        const SCALE_X: u32 = 8;
-        const SCALE_Y: u32 = 12;
-        const MARGIN: u32 = 18;
+    fn open_disc(cli: &Cli) -> Result<DiscImage> {
+        let cue = resolve_cue(cli).context(
+            "no disc image found: pass --cue, set $PROTOTYPE_DISC, run `install`, \
+             or put PROTOTYPE.cue in the working directory",
+        )?;
 
-        let (sprite_w, sprite_h) = (sprite.size.width, sprite.size.height);
-        let (scaled_w, scaled_h) = (sprite_w * SCALE_X, sprite_h * SCALE_Y);
-        let side = scaled_w.max(scaled_h) + MARGIN * 2;
-        let (origin_x, origin_y) = ((side - scaled_w) / 2, (side - scaled_h) / 2);
+        DiscImage::open(&cue).with_context(|| format!("opening the disc image {}", cue.display()))
+    }
 
-        let mut rgba = vec![0u8; (side * side * 4) as usize];
+    /// Runs the `install` subcommand: local, offline desktop integration.
+    fn run_install(cli: &Cli) -> Result<()> {
+        let cue = resolve_cue(cli)
+            .context("no disc image to install from: pass --cue with the downloaded .cue")?;
+        let report = openprototype_install::install(&InstallSpec {
+            cue,
+            icon: icon_source(),
+        })?;
 
-        for y in 0..sprite_h {
-            for x in 0..sprite_w {
-                let Some(index) = sprite.pixels[(y * sprite_w + x) as usize] else {
-                    continue;
-                };
+        println!("Installed OpenPrototype:");
+        println!("  binary:   {}", report.binary.display());
+        println!("  disc:     {}", report.disc.display());
+        println!("  launcher: {}", report.launcher.display());
+        println!("  icon:     {}", report.icon.display());
 
-                let color = palette.colors[usize::from(index)];
-
-                for block_y in 0..SCALE_Y {
-                    for block_x in 0..SCALE_X {
-                        let px = origin_x + x * SCALE_X + block_x;
-                        let py = origin_y + y * SCALE_Y + block_y;
-                        let at = ((py * side + px) * 4) as usize;
-                        rgba[at] = color.r;
-                        rgba[at + 1] = color.g;
-                        rgba[at + 2] = color.b;
-                        rgba[at + 3] = 0xff;
-                    }
-                }
-            }
-        }
-
-        WindowIcon {
-            rgba,
-            width: side,
-            height: side,
-        }
+        Ok(())
     }
 
     pub fn main() -> Result<()> {
@@ -179,12 +187,11 @@ mod desktop {
 
         let cli = Cli::parse();
 
-        let disc = Arc::new(match &cli.cue {
-            Some(cue) => DiscImage::open(cue)
-                .with_context(|| format!("opening disc image {}", cue.display()))?,
-            None => DiscImage::open_default()
-                .context("opening the default disc image (set --cue or $PROTOTYPE_DISC)")?,
-        });
+        if let Some(Command::Install) = cli.command {
+            return run_install(&cli);
+        }
+
+        let disc = Arc::new(open_disc(&cli)?);
 
         verify_disc(&disc)?;
 
