@@ -331,6 +331,23 @@ fn create_renderer(
         .with_inner_size(LogicalSize::new(width, height))
         .with_min_inner_size(LogicalSize::new(source.width, source.width * 3 / 4));
 
+    // A stable WM_CLASS (X11) / app_id (Wayland) so a desktop environment can
+    // tie the window to its `.desktop` entry: GNOME's app switcher takes the
+    // icon from there, not from the X11 `_NET_WM_ICON` set below. Both winit
+    // extension traits write the same field, so one call covers either backend.
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
+    {
+        use winit::platform::x11::WindowAttributesExtX11;
+
+        attributes = attributes.with_name("OpenPrototype", "openprototype");
+    }
+
     if let Some(icon) = icon {
         match Icon::from_rgba(icon.rgba, icon.width, icon.height) {
             Ok(icon) => attributes = attributes.with_window_icon(Some(icon)),
