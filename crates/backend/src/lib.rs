@@ -4,9 +4,9 @@
 //! winit, pixels and the audio device, so a different backend means rewriting
 //! this crate alone. The game drives it through [`run`].
 
-pub mod audio;
-pub mod compositor;
-pub mod renderer;
-pub mod window;
+pub(crate) mod audio;
+pub(crate) mod compositor;
+pub(crate) mod renderer;
+pub(crate) mod window;
 
 pub use window::run;

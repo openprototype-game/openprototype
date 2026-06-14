@@ -11,8 +11,8 @@
 use crate::error::DecodeError;
 use crate::{Dimensions, IndexedImage, Result};
 
-pub const GLYPH_WIDTH: u32 = 16;
-pub const GLYPH_HEIGHT: u32 = 15;
+pub(crate) const GLYPH_WIDTH: u32 = 16;
+pub(crate) const GLYPH_HEIGHT: u32 = 15;
 
 const SHEET_WIDTH: u32 = 320;
 const GLYPHS_PER_ROW: usize = 20;

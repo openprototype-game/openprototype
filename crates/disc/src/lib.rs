@@ -9,12 +9,12 @@
 //! take a [`&dyn AssetSource`](AssetSource), so a future loose-files backend can
 //! stand in without depending on the disc layout.
 
-pub mod cue;
-pub mod disc;
-pub mod error;
-pub mod iso9660;
+pub(crate) mod cue;
+pub(crate) mod disc;
+pub(crate) mod error;
+pub(crate) mod iso9660;
 pub mod manifest;
-pub mod sector;
+pub(crate) mod sector;
 
 pub use disc::{AudioTrack, DiscImage, FileEntry};
 pub use error::{DiscError, Result};

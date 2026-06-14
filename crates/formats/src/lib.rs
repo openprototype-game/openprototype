@@ -7,20 +7,20 @@
 //! per-format notes under `reference/formats/`.
 
 pub mod color;
-pub mod error;
-pub mod image;
+pub(crate) mod error;
+pub(crate) mod image;
 
 pub mod background;
 pub mod bdy;
 pub mod bin;
-pub mod fli;
+pub(crate) mod fli;
 pub mod font;
-pub mod high;
+pub(crate) mod high;
 pub mod pal;
 pub mod pcm;
 pub mod raw;
 pub mod smp;
-pub mod start_exe;
+pub(crate) mod start_exe;
 pub mod wad;
 
 pub use bin::{Sprite, SpriteSheet};

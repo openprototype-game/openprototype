@@ -13,7 +13,7 @@ use crate::error::DecodeError;
 use crate::{Dimensions, IndexedImage, Result};
 
 /// Background dimensions: 640 wide, 160 tall.
-pub const BACKGROUND_SIZE: Dimensions = Dimensions {
+pub(crate) const BACKGROUND_SIZE: Dimensions = Dimensions {
     width: 640,
     height: 160,
 };

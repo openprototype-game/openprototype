@@ -10,7 +10,7 @@
 //! [`AudioCommand`]: audio::AudioCommand
 
 pub mod audio;
-pub mod bounded;
+pub(crate) mod bounded;
 pub mod framebuffer;
 pub mod game;
 pub mod game_state;
