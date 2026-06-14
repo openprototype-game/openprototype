@@ -72,6 +72,14 @@ mod desktop {
         /// icon decoded from the disc. Offline; pass `--cue` to point at the
         /// disc to install from.
         Install,
+
+        /// Remove the launcher entry, icon, installed binary, and disc image.
+        /// Keeps saves and highscores unless `--purge` is given.
+        Uninstall {
+            /// Also delete saves and highscores (the disc is always removed).
+            #[arg(long)]
+            purge: bool,
+        },
     }
 
     /// Our crates at `info`, everything else (wgpu, winit, rodio) at `warn`.
@@ -182,13 +190,36 @@ mod desktop {
         Ok(())
     }
 
+    /// Runs the `uninstall` subcommand.
+    fn run_uninstall(purge: bool) -> Result<()> {
+        let report = openprototype_install::uninstall(purge)?;
+
+        println!("Uninstalled OpenPrototype.");
+
+        for path in &report.removed {
+            println!("  removed: {}", path.display());
+        }
+
+        if !report.kept.is_empty() {
+            println!("Kept your saves and highscores (run `uninstall --purge` to remove these):");
+
+            for path in &report.kept {
+                println!("  kept:    {}", path.display());
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn main() -> Result<()> {
         init_tracing();
 
         let cli = Cli::parse();
 
-        if let Some(Command::Install) = cli.command {
-            return run_install(&cli);
+        match cli.command {
+            Some(Command::Install) => return run_install(&cli),
+            Some(Command::Uninstall { purge }) => return run_uninstall(purge),
+            None => {}
         }
 
         let disc = Arc::new(open_disc(&cli)?);

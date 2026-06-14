@@ -163,6 +163,101 @@ fn integrate(exe: &Path, icon: &IconImage, disc: &Path) -> Result<Report> {
     }
 }
 
+/// What an [`uninstall`] run removed, and what it deliberately kept.
+pub struct UninstallReport {
+    pub removed: Vec<PathBuf>,
+    pub kept: Vec<PathBuf>,
+}
+
+/// Removes the launcher entry, icon, installed binary, and the disc image.
+///
+/// The disc is always removed (large and re-downloadable). Saves and
+/// highscores are kept unless `purge` is set, which deletes the whole data and
+/// config directories.
+pub fn uninstall(purge: bool) -> Result<UninstallReport> {
+    let dirs = project_dirs()?;
+    let mut removed = Vec::new();
+    let mut kept = Vec::new();
+
+    remove_integration(&mut removed)?;
+
+    // The disc: always removed. Read its path before deleting the config.
+    if let Some(cue) = configured_disc() {
+        remove_disc_files(&cue, &mut removed);
+    }
+
+    remove_path(dirs.config_dir(), &mut removed);
+
+    let data = dirs.data_local_dir().to_path_buf();
+    let roaming = dirs.data_dir().to_path_buf();
+
+    if purge {
+        remove_path(&data, &mut removed);
+
+        if roaming != data {
+            remove_path(&roaming, &mut removed);
+        }
+    } else {
+        // The disc lived in the data dir; keep what is left (saves and
+        // highscores), or drop the dir if removing the disc emptied it.
+        for dir in [&data, &roaming] {
+            if !dir.exists() || kept.contains(dir) {
+                continue;
+            }
+
+            if is_empty_dir(dir) {
+                remove_path(dir, &mut removed);
+            } else {
+                kept.push(dir.clone());
+            }
+        }
+    }
+
+    Ok(UninstallReport { removed, kept })
+}
+
+/// Removes a disc image: the BIN the cue references, then the cue.
+fn remove_disc_files(cue: &Path, removed: &mut Vec<PathBuf>) {
+    if let Some(dir) = cue.parent()
+        && let Ok(bin) = resolve_referenced_bin(cue, dir)
+    {
+        remove_path(&bin, removed);
+    }
+
+    remove_path(cue, removed);
+}
+
+fn is_empty_dir(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_none())
+}
+
+/// Dispatches to the platform-specific launcher removal.
+fn remove_integration(removed: &mut Vec<PathBuf>) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::remove(removed)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = removed;
+        bail!("`uninstall` is not implemented on this platform yet");
+    }
+}
+
+/// Removes a file or directory, recording it; a missing path is a no-op.
+pub(crate) fn remove_path(path: &Path, removed: &mut Vec<PathBuf>) {
+    let result = if path.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    };
+
+    if result.is_ok() {
+        removed.push(path.to_path_buf());
+    }
+}
+
 /// The recorded disc path the bare binary falls back to, if any.
 pub fn configured_disc() -> Option<PathBuf> {
     let path = project_dirs().ok()?.config_dir().join("disc.path");

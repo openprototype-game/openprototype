@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use directories::BaseDirs;
 use image::imageops::FilterType;
 
-use crate::{APP_ID, BINARY_NAME, DISPLAY_NAME, IconImage, Report};
+use crate::{APP_ID, BINARY_NAME, DISPLAY_NAME, IconImage, Report, remove_path};
 
 /// The icon size written into the hicolor theme.
 const ICON_SIZE: u32 = 256;
@@ -52,6 +52,31 @@ pub fn integrate(exe: &Path, icon: &IconImage, disc: &Path) -> Result<Report> {
         launcher,
         icon: icon_path,
     })
+}
+
+/// Removes the binary, hicolor icon, and `.desktop` entry.
+pub fn remove(removed: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    let dirs = BaseDirs::new().context("no home directory")?;
+    let data = dirs.data_dir();
+
+    if let Some(bin_dir) = dirs.executable_dir() {
+        remove_path(&bin_dir.join(BINARY_NAME), removed);
+    }
+
+    remove_path(
+        &data.join(format!(
+            "icons/hicolor/{ICON_SIZE}x{ICON_SIZE}/apps/{BINARY_NAME}.png"
+        )),
+        removed,
+    );
+    remove_path(&data.join(format!("applications/{BINARY_NAME}.desktop")), removed);
+
+    let _ = std::process::Command::new("gtk-update-icon-cache")
+        .arg("-tq")
+        .arg(data.join("icons/hicolor"))
+        .status();
+
+    Ok(())
 }
 
 fn copy_binary(exe: &Path, dest: &Path) -> Result<()> {
