@@ -84,7 +84,8 @@ fn write_icns(icon: &IconImage, dest: &Path) -> Result<()> {
         family.add_icon(&image).context("adding an icns size")?;
     }
 
-    let file = std::fs::File::create(dest).with_context(|| format!("creating {}", dest.display()))?;
+    let file =
+        std::fs::File::create(dest).with_context(|| format!("creating {}", dest.display()))?;
     family
         .write(BufWriter::new(file))
         .with_context(|| format!("writing {}", dest.display()))?;

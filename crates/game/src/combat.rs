@@ -349,196 +349,6 @@ fn center_offset(wad: &[u8], cs_base: usize, kind: u16) -> (i32, i32) {
     (word(0), word(2))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::level::prng::EngineRng;
-
-    fn test_rng() -> EngineRng {
-        EngineRng::new(1)
-    }
-    use openprototype_core::PerWeapon;
-    use openprototype_core::game_state::{Lives, SmartBombs, Weapon, WeaponLevel};
-
-    fn fresh_state() -> GameState {
-        GameState {
-            score: 0,
-            lives: Lives::new(3),
-            smart_bombs: SmartBombs::new(0),
-            weapons: PerWeapon::splat(WeaponLevel::new(2)),
-            selected: Weapon::Multishot,
-            invincible_ticks: 0,
-            contact_grace_ticks: 0,
-        }
-    }
-
-    /// Three rects all sitting on the ship at (100, 50).
-    fn rects_at(x: i32, y: i32) -> ShipRects {
-        [[x, y, x + 32, y + 24]; 3]
-    }
-
-    fn entity(x: i32, y: i32, health: i32) -> Entity {
-        Entity {
-            sprite: 0x3308,
-            kind: 0x3308,
-            x: x << 4,
-            y: y << 4,
-            mode: 0,
-            arg: 0,
-            health,
-            seen: false,
-            anim: 0,
-            tick: 0,
-            debris: 0,
-            // One box covering 0..32 x 0..30 around the entity position.
-            hitboxes: [[0, 0, 32, 30], [0xff, 0, 0, 0], [0xff, 0, 0, 0]],
-            phase_a: 0,
-            phase_b: 0,
-            save_y: 0,
-            save_x: 0,
-            counter: 0,
-        }
-    }
-
-    #[test]
-    fn a_shot_damages_the_first_overlapping_entity() {
-        let mut entities = vec![entity(100, 50, 100)];
-
-        let outcome = apply_shot(&mut entities, 100, 50, 13, 4, 12);
-        assert_eq!(outcome, ShotOutcome::Absorbed);
-        assert_eq!(entities[0].health, 88);
-    }
-
-    #[test]
-    fn overkill_pierces_with_the_remainder() {
-        let mut entities = vec![entity(100, 50, 30)];
-
-        let outcome = apply_shot(&mut entities, 100, 50, 13, 4, 80);
-        assert_eq!(outcome, ShotOutcome::Pierced(50));
-        assert_eq!(entities[0].health, 0);
-    }
-
-    #[test]
-    fn disabled_boxes_and_misses_leave_the_shot_alone() {
-        let mut entities = vec![entity(100, 50, 100)];
-        entities[0].hitboxes[0][0] = 0xff;
-
-        assert_eq!(
-            apply_shot(&mut entities, 100, 50, 13, 4, 12),
-            ShotOutcome::Missed
-        );
-        assert_eq!(entities[0].health, 100);
-
-        entities[0].hitboxes[0][0] = 0;
-        assert_eq!(
-            apply_shot(&mut entities, 200, 50, 13, 4, 12),
-            ShotOutcome::Missed
-        );
-    }
-
-    #[test]
-    fn touching_a_pickup_grants_and_removes_it() {
-        let mut spawns = Spawns::new(
-            Vec::new(),
-            None,
-            crate::levels::Level::L1.data().combat,
-            test_rng(),
-        );
-        let mut weapon_upgrade = entity(100, 50, 350);
-        weapon_upgrade.kind = 0x36ea;
-        spawns.entities.push(weapon_upgrade);
-
-        let mut state = fresh_state();
-        let mut events = CombatEvents::default();
-        body_contact(
-            &mut spawns,
-            &rects_at(100, 50),
-            &mut state,
-            Weapon::Multishot.into(),
-            &[],
-            0,
-            &mut events,
-        );
-
-        assert!(spawns.entities.is_empty());
-        assert_eq!(state.level(Weapon::Multishot).get(), 3);
-        assert_eq!(events.ship, None);
-    }
-
-    #[test]
-    fn ramming_an_enemy_costs_the_bar_and_kills_it() {
-        let mut spawns = Spawns::new(
-            Vec::new(),
-            None,
-            crate::levels::Level::L1.data().combat,
-            test_rng(),
-        );
-        spawns.entities.push(entity(100, 50, 100));
-
-        let mut state = fresh_state();
-        let mut events = CombatEvents::default();
-        body_contact(
-            &mut spawns,
-            &rects_at(100, 50),
-            &mut state,
-            Weapon::Multishot.into(),
-            &[],
-            0,
-            &mut events,
-        );
-
-        // The firing bar zeroes, the rammed enemy dies and is reaped.
-        assert_eq!(state.level(Weapon::Multishot).get(), 0);
-        assert_eq!(events.ship, Some(HitOutcome::Absorbed));
-        assert!(spawns.entities.is_empty() || spawns.entities[0].kind == 0x36ea);
-    }
-
-    #[test]
-    fn the_first_weapon_upgrade_drops_on_the_third_kill() {
-        let mut spawns = Spawns::new(
-            Vec::new(),
-            None,
-            crate::levels::Level::L1.data().combat,
-            test_rng(),
-        );
-        let mut events = CombatEvents::default();
-
-        for kill in 1..=3 {
-            spawns.entities.push(entity(100, 50, 0));
-            reap(&mut spawns, &[], 0, &mut events);
-
-            let converted = spawns.entities.first().is_some_and(|e| e.kind == 0x36ea);
-            assert_eq!(converted, kill == 3, "kill {kill}");
-
-            // The conversion writes seen=1, so an off-screen weapon-upgrade culls.
-            if converted {
-                assert!(spawns.entities[0].seen);
-            }
-
-            assert_eq!(
-                events.weapon_upgrade_dropped,
-                kill == 3,
-                "jingle on kill {kill}"
-            );
-            events.weapon_upgrade_dropped = false;
-
-            spawns.entities.clear();
-        }
-    }
-
-    #[test]
-    fn an_exact_kill_is_absorbed_not_pierced() {
-        // health == damage takes the >= branch: absorbed, health 0.
-        let mut entities = vec![entity(100, 50, 12)];
-
-        assert_eq!(
-            apply_shot(&mut entities, 100, 50, 13, 4, 12),
-            ShotOutcome::Absorbed
-        );
-        assert_eq!(entities[0].health, 0);
-    }
-}
-
 /// One ship hit rect in screen pixels: `[x_min, y_min, x_max, y_max]`.
 pub type ShipRects = [[i32; 4]; 3];
 
@@ -772,5 +582,195 @@ fn merge_ship_outcome(current: Option<HitOutcome>, new: HitOutcome) -> Option<Hi
     match (current, new) {
         (Some(HitOutcome::Died), _) | (_, HitOutcome::Died) => Some(HitOutcome::Died),
         (current, new) => current.or(Some(new)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::level::prng::EngineRng;
+
+    fn test_rng() -> EngineRng {
+        EngineRng::new(1)
+    }
+    use openprototype_core::PerWeapon;
+    use openprototype_core::game_state::{Lives, SmartBombs, Weapon, WeaponLevel};
+
+    fn fresh_state() -> GameState {
+        GameState {
+            score: 0,
+            lives: Lives::new(3),
+            smart_bombs: SmartBombs::new(0),
+            weapons: PerWeapon::splat(WeaponLevel::new(2)),
+            selected: Weapon::Multishot,
+            invincible_ticks: 0,
+            contact_grace_ticks: 0,
+        }
+    }
+
+    /// Three rects all sitting on the ship at (100, 50).
+    fn rects_at(x: i32, y: i32) -> ShipRects {
+        [[x, y, x + 32, y + 24]; 3]
+    }
+
+    fn entity(x: i32, y: i32, health: i32) -> Entity {
+        Entity {
+            sprite: 0x3308,
+            kind: 0x3308,
+            x: x << 4,
+            y: y << 4,
+            mode: 0,
+            arg: 0,
+            health,
+            seen: false,
+            anim: 0,
+            tick: 0,
+            debris: 0,
+            // One box covering 0..32 x 0..30 around the entity position.
+            hitboxes: [[0, 0, 32, 30], [0xff, 0, 0, 0], [0xff, 0, 0, 0]],
+            phase_a: 0,
+            phase_b: 0,
+            save_y: 0,
+            save_x: 0,
+            counter: 0,
+        }
+    }
+
+    #[test]
+    fn a_shot_damages_the_first_overlapping_entity() {
+        let mut entities = vec![entity(100, 50, 100)];
+
+        let outcome = apply_shot(&mut entities, 100, 50, 13, 4, 12);
+        assert_eq!(outcome, ShotOutcome::Absorbed);
+        assert_eq!(entities[0].health, 88);
+    }
+
+    #[test]
+    fn overkill_pierces_with_the_remainder() {
+        let mut entities = vec![entity(100, 50, 30)];
+
+        let outcome = apply_shot(&mut entities, 100, 50, 13, 4, 80);
+        assert_eq!(outcome, ShotOutcome::Pierced(50));
+        assert_eq!(entities[0].health, 0);
+    }
+
+    #[test]
+    fn disabled_boxes_and_misses_leave_the_shot_alone() {
+        let mut entities = vec![entity(100, 50, 100)];
+        entities[0].hitboxes[0][0] = 0xff;
+
+        assert_eq!(
+            apply_shot(&mut entities, 100, 50, 13, 4, 12),
+            ShotOutcome::Missed
+        );
+        assert_eq!(entities[0].health, 100);
+
+        entities[0].hitboxes[0][0] = 0;
+        assert_eq!(
+            apply_shot(&mut entities, 200, 50, 13, 4, 12),
+            ShotOutcome::Missed
+        );
+    }
+
+    #[test]
+    fn touching_a_pickup_grants_and_removes_it() {
+        let mut spawns = Spawns::new(
+            Vec::new(),
+            None,
+            crate::levels::Level::L1.data().combat,
+            test_rng(),
+        );
+        let mut weapon_upgrade = entity(100, 50, 350);
+        weapon_upgrade.kind = 0x36ea;
+        spawns.entities.push(weapon_upgrade);
+
+        let mut state = fresh_state();
+        let mut events = CombatEvents::default();
+        body_contact(
+            &mut spawns,
+            &rects_at(100, 50),
+            &mut state,
+            Weapon::Multishot.into(),
+            &[],
+            0,
+            &mut events,
+        );
+
+        assert!(spawns.entities.is_empty());
+        assert_eq!(state.level(Weapon::Multishot).get(), 3);
+        assert_eq!(events.ship, None);
+    }
+
+    #[test]
+    fn ramming_an_enemy_costs_the_bar_and_kills_it() {
+        let mut spawns = Spawns::new(
+            Vec::new(),
+            None,
+            crate::levels::Level::L1.data().combat,
+            test_rng(),
+        );
+        spawns.entities.push(entity(100, 50, 100));
+
+        let mut state = fresh_state();
+        let mut events = CombatEvents::default();
+        body_contact(
+            &mut spawns,
+            &rects_at(100, 50),
+            &mut state,
+            Weapon::Multishot.into(),
+            &[],
+            0,
+            &mut events,
+        );
+
+        // The firing bar zeroes, the rammed enemy dies and is reaped.
+        assert_eq!(state.level(Weapon::Multishot).get(), 0);
+        assert_eq!(events.ship, Some(HitOutcome::Absorbed));
+        assert!(spawns.entities.is_empty() || spawns.entities[0].kind == 0x36ea);
+    }
+
+    #[test]
+    fn the_first_weapon_upgrade_drops_on_the_third_kill() {
+        let mut spawns = Spawns::new(
+            Vec::new(),
+            None,
+            crate::levels::Level::L1.data().combat,
+            test_rng(),
+        );
+        let mut events = CombatEvents::default();
+
+        for kill in 1..=3 {
+            spawns.entities.push(entity(100, 50, 0));
+            reap(&mut spawns, &[], 0, &mut events);
+
+            let converted = spawns.entities.first().is_some_and(|e| e.kind == 0x36ea);
+            assert_eq!(converted, kill == 3, "kill {kill}");
+
+            // The conversion writes seen=1, so an off-screen weapon-upgrade culls.
+            if converted {
+                assert!(spawns.entities[0].seen);
+            }
+
+            assert_eq!(
+                events.weapon_upgrade_dropped,
+                kill == 3,
+                "jingle on kill {kill}"
+            );
+            events.weapon_upgrade_dropped = false;
+
+            spawns.entities.clear();
+        }
+    }
+
+    #[test]
+    fn an_exact_kill_is_absorbed_not_pierced() {
+        // health == damage takes the >= branch: absorbed, health 0.
+        let mut entities = vec![entity(100, 50, 12)];
+
+        assert_eq!(
+            apply_shot(&mut entities, 100, 50, 13, 4, 12),
+            ShotOutcome::Absorbed
+        );
+        assert_eq!(entities[0].health, 0);
     }
 }

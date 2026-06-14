@@ -67,7 +67,10 @@ pub fn remove(removed: &mut Vec<std::path::PathBuf>) -> Result<()> {
         )),
         removed,
     );
-    remove_path(&data.join(format!("applications/{BINARY_NAME}.desktop")), removed);
+    remove_path(
+        &data.join(format!("applications/{BINARY_NAME}.desktop")),
+        removed,
+    );
 
     Ok(())
 }

@@ -89,8 +89,7 @@ pub fn decode_ship_icon(disc: &DiscImage, source: &IconSource) -> Result<IconIma
         .read(source.wad_name)
         .with_context(|| format!("reading {}", source.wad_name))?;
     let pturn1 = disc.read("PTURN1.BN1").context("reading PTURN1.BN1")?;
-    let frames =
-        decode_ship(&pturn1, &wad, source.ship_catalog).context("decoding PTURN1.BN1")?;
+    let frames = decode_ship(&pturn1, &wad, source.ship_catalog).context("decoding PTURN1.BN1")?;
     let palette =
         wad::palette_at(&wad, source.palette_offset).context("reading the level palette")?;
     let sprite = frames
@@ -477,7 +476,11 @@ mod tests {
     fn the_info_plist_names_the_bundle() {
         let plist = macos_info_plist();
 
-        assert!(plist.contains("<key>CFBundleIdentifier</key>\t<string>de.dasprids.OpenPrototype</string>"));
+        assert!(
+            plist.contains(
+                "<key>CFBundleIdentifier</key>\t<string>de.dasprids.OpenPrototype</string>"
+            )
+        );
         assert!(plist.contains("<key>CFBundleExecutable</key>\t<string>openprototype</string>"));
         assert!(plist.contains("<key>CFBundleIconFile</key>\t<string>AppIcon</string>"));
         assert_eq!(bundle_id(), "de.dasprids.OpenPrototype");
@@ -485,7 +488,8 @@ mod tests {
 
     #[test]
     fn the_shortcut_command_quotes_paths() {
-        let lnk = r"C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OpenPrototype.lnk";
+        let lnk =
+            r"C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OpenPrototype.lnk";
         let exe = r"C:\Users\me\AppData\Local\Programs\OpenPrototype\openprototype.exe";
         let cmd = powershell_shortcut(
             lnk,
@@ -505,7 +509,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("opi-cue-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let cue = dir.join("PROTOTYPE.cue");
-        std::fs::write(&cue, "FILE \"PROTOTYPE.BIN\" BINARY\n  TRACK 01 MODE1/2352\n").unwrap();
+        std::fs::write(
+            &cue,
+            "FILE \"PROTOTYPE.BIN\" BINARY\n  TRACK 01 MODE1/2352\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("prototype.bin"), b"x").unwrap();
 
         let resolved = resolve_referenced_bin(&cue, &dir).unwrap();
