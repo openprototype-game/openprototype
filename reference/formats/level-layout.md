@@ -3,7 +3,7 @@
 How each level decides where its enemy and pickup objects spawn. Two
 mechanisms, one record format:
 
-- **Race levels (2, 4, 6)** bake a static placement table into the EXE (`0x1690`).
+- **Race levels (2, 4, 6)** bake a static placement table into the EXE (`0x1696`).
 - **Generated levels (1, 3, 5, 7)** build the placement at load from a PRNG-driven
   layout script, so the scatter varies every play. All four are fully decoded,
   ported, and validated byte-for-byte against the running game.
@@ -52,9 +52,9 @@ notes in `re/spawn-consumer.md`):
   landmark pickups mid-screen (x 160..230). It is not a screen coordinate
   itself.
 
-The same 8-byte shape appears in the race levels' static `0x1690` table, but
-the race consumer is unread and its field mapping is provisional (race word0
-values ~15500..17700 look like BIN references, not tick deltas).
+The same 8-byte record drives the race levels' static table at file `0x1696`;
+its full field mapping and the race spawn model are in
+[../race-mode.md](../race-mode.md).
 
 Runtime buffer base: the records start at the C-runtime marker + `0x48`. Read
 there, the runtime records match the generator's write trace, except that the
@@ -75,8 +75,8 @@ offsets in `re/spawn-consumer.md`):
   entries in LEVEL_1) each step; a nonzero mode is the segment of a path table
   of `{dx, dy, danim}` triplets with an `0xff9c` loop marker (MZ-relocated
   segment constants; LEVEL_1 uses mode 0 exclusively). Movement runs
-  `cs:0xcd1` sub-steps per rendered frame, the elapsed PIT ticks (`cs:0x69ca`)
-  — the engine's catch-up stepping.
+  `cs:0xcd1` sub-steps per rendered frame, the elapsed PIT ticks (`cs:0x69ca`),
+  the engine's catch-up stepping.
 - **Boss gate.** While `cs:0x269c` is nonzero (set by big-ship spawns,
   decremented by their deaths), the ISR skips the parallax scroll, the spawn
   countdown, and the elapsed counter together: the level holds until those
@@ -137,9 +137,9 @@ The renderer (`0x9237`) points `cs:0x31c4` at a layer's tilemap and reads the ti
 byte at `cs:0x31c4 + (scroll >> 5)`, one tile per 32-pixel column. The byte maps to a
 sprite:
 
-- `0` — an empty column.
-- `0xFF` — a jump to the 16-bit cs-offset that follows; the stream continues there.
-- any other `n` — OUT.BIN catalog cell `n - 1` (catalog record offset `(n-1) * 10`),
+- `0`: an empty column.
+- `0xFF`: a jump to the 16-bit cs-offset that follows; the stream continues there.
+- any other `n`: OUT.BIN catalog cell `n - 1` (catalog record offset `(n-1) * 10`),
   blitted from the catalog segment `0x0F7F`.
 
 Each stream ends in a `0xFF` jump back to its own start, so a layer is a short
@@ -148,11 +148,11 @@ from a separate timeline, not the scenery.
 
 ### The three layers
 
-| Layer | Tilemap `cs` | Loop | LEVEL_1 catalog cells |
-| --- | --- | --- | --- |
-| Back  | `0x3137` | 62 columns | sparse in the opening section |
-| Mid   | `0x30f2` | 66 columns | 6–14, 71–78 (the lattice) |
-| Front | `0x3178` | 49 columns | 1, 2 (the front girders) |
+| Layer | Tilemap `cs` | Loop       | LEVEL_1 catalog cells         |
+| ----- | ------------ | ---------- | ----------------------------- |
+| Back  | `0x3137`     | 62 columns | sparse in the opening section |
+| Mid   | `0x30f2`     | 66 columns | 6–14, 71–78 (the lattice)     |
+| Front | `0x3178`     | 49 columns | 1, 2 (the front girders)      |
 
 `file = cs + 0x29F0`. The same renderer draws all three from the per-frame compose
 path, in order: back, mid, then (after the ship and enemies) front. A layer's depth
@@ -169,37 +169,27 @@ visible lattice; this pass is not yet in the port.
 
 ### Port
 
-`scenery.rs` and `assets.rs` decode one loop per tilemap and composite the three
-layers over the background, each scrolling at a placeholder rate. The layer rows and
-the per-layer scroll rates (`cs:0x25f6/fa/f2`) are placeholders until traced.
+`scenery.rs` and `assets.rs` decode one loop per tilemap and composite the
+layers over the background at their traced per-layer scroll rates. The walker
+and the compose order that drive them are in
+[../render-pipeline.md](../render-pipeline.md).
 
-## Race levels: the static `0x1690` table
+## Race levels: the static `0x1696` table
 
-LEVEL_2, 4, 6 are one code build, so a lower-data byte diff between them isolates the
-per-level data: a table at file `0x1690`.
+LEVEL_2, 4, 6 are one code build and bake their layout into the WAD instead of
+generating it. The schedule is a static table at file `0x1696` (after a
+three-zero-word header at `0x1690`), of the same 8-byte
+`{delay, sprite, health, spawn_row}` records the generated levels emit:
 
-- The consumer reads 8-byte `{delay, sprite, health, row}` records starting
-  at `0x1696`, after a three-zero-word header at `0x1690`. (An earlier
-  framing put the records at `0x1698` with a four-word header; that misread
-  the first record's `delay` field — `0xC8` = 200 in LEVEL_2/4, `0x64` = 100
-  in LEVEL_6 — as a header word.)
-- The table region is large: live records, then `(0, 0, 0, 20)` terminator
-  slots padding it out to ~800 trailing slots (867 total in LEVEL_2, 882 in
-  LEVEL_4, 1042 in LEVEL_6). The consumer never reaches them.
-- Populated count scales with level length: LEVEL_2 67, LEVEL_4 82, LEVEL_6 242.
-  Every run ends with a shared `(ref, 20, 209, 20)` trailer record; a populated
-  record always has a nonzero sprite word, so the first zero sprite ends the run.
-- `word0` is a reference into the level's BIN: in LEVEL_2 the offsets point at real,
-  reused sprite data in `RACE1.BIN` (`0x3EB2` appears three times in a row, the same
-  sprite placed repeatedly); the bytes there are compiled-sprite code
-  (`c6 84` = `mov byte [si+disp16]`) and clip headers. The recurring high word is
-  mostly `0x7D00` (with some `0x00FA` / `0x0014`), the same `0x7d00` descriptor marker
-  the generated records use.
+- The populated count scales with level length: LEVEL_2 67, LEVEL_4 82,
+  LEVEL_6 242. A record with a zero sprite word ends the run, so the region's
+  trailing terminator slots (867 total in LEVEL_2, 882 in LEVEL_4, 1042 in
+  LEVEL_6) are never reached.
+- `spawn_row` indexes a per-WAD spawn-position table, and the last live record
+  spawns the finish entity.
 
-So the `0x1690` table is the race levels' static object-placement layer (object
-class unconfirmed; likely the race obstacle/enemy set, by analogy with the generated
-levels). Still open: the meaning of the byte and word after the pointer, and a
-render-validation pass.
+The full race model (the obstacle behaviors, the position table, the finish
+entity, and the L4/L6 deltas) is in [../race-mode.md](../race-mode.md).
 
 ## Generated levels: the load-time scatter generator
 
@@ -328,70 +318,70 @@ LEVEL_3 section for the exact draw order).
 **Emitter catalog (LEVEL_1)**: vaddr, kind, sprite ptr (`word1`), health slot, and the
 x / y formulas. `xacc` = `cs:[0xbf6b]` (x-start, added once):
 
-| vaddr | kind | sprite | cfg | x | y |
-|-------|------|--------|-----|---|---|
-| `0xe776` | Single | `0x3308` | `[bf6d]` | `rng([bf82])+[bf84]+xacc` | `rng(0x12)` |
-| `0xe7bb` | Single | `0x38b0` | `[bf6f]` | `rng(0x1e)+0x1e+xacc` | `rng(5)+0x1a` |
-| `0xe800` | Single | `0x338e` | `[bf71]` | `rng(0x32)+0x50+xacc` | `rng(5)+0x15` |
-| `0xe845` | Single | `0x39a4` | `[bf73]` | `rng(0x32)+0x78+xacc` | `rng(6)+0x36` |
-| `0xe88a` | Row | `0x3a92` | `[bf75]` | `0x14+xacc` | `[bf7f]` once |
-| `0xe8d5` | Row | `0x33f4` | `[bf77]` | `0x14+xacc` | `[bf7f]` once |
-| `0xe920` | Single | `0x3a92` | `[bf75]` | `rng(0x1e)+0x14+xacc` | `rng(6)+0x2c` |
-| `0xe965` | Single | `0x33f4` | `[bf77]` | `rng(0x1e)+0x28+xacc` | `rng(6)+0x1f` |
-| `0xe9aa` | Choice | `0x338e`/`0x3308` | `[bf71]`/`[bf6d]` | `rng(0xa)+0x1e+xacc` | `rng(5)+0x15` / `rng(0x12)` |
-| `0xea2d` | Choice | `0x38b0`/`0x3308` | `[bf6f]`/`[bf6d]` | `rng(0xa)+0x1e+xacc` | `rng(5)+0x1a` / `rng(0x12)` |
-| `0xeab0` | Row+everyNth | `0x3a92` (+`0x3308` every 2nd) | `[bf75]` (+`[bf6d]`) | `0x14+xacc` (+`0`) | `rng(4)+0x28` once (+`rng(0x12)`) |
-| `0xeb35` | Fixed×2 | `0x392e` | `[bf79]` | `xacc`, then `0x3c` | `0x26`, `0x27` |
-| `0xeb72` | Fixed×1 | `0x3f8e` | `[bf7b]` | `xacc` | `0x45` |
-| `0xeb92` | Fixed | `0x36ea` | `0xfa` | `xacc` | `0x4b` |
-| `0xec39` | Single | `0x3750` | `0xfa` | `xacc` | `rng(3)+0x3c` |
-| `0xec65` | Single | `0x37b6` | `0xfa` | `xacc` | `rng(3)+0x3f` |
-| `0xec91` | Single | `0x382c` | `0xfa` | `xacc` | `rng(3)+0x42` |
-| `0xecbd` | Single | `0x338e` | `[bf71]` | `0x64` | `0x16` |
+| vaddr    | kind         | sprite                         | cfg                  | x                         | y                                 |
+| -------- | ------------ | ------------------------------ | -------------------- | ------------------------- | --------------------------------- |
+| `0xe776` | Single       | `0x3308`                       | `[bf6d]`             | `rng([bf82])+[bf84]+xacc` | `rng(0x12)`                       |
+| `0xe7bb` | Single       | `0x38b0`                       | `[bf6f]`             | `rng(0x1e)+0x1e+xacc`     | `rng(5)+0x1a`                     |
+| `0xe800` | Single       | `0x338e`                       | `[bf71]`             | `rng(0x32)+0x50+xacc`     | `rng(5)+0x15`                     |
+| `0xe845` | Single       | `0x39a4`                       | `[bf73]`             | `rng(0x32)+0x78+xacc`     | `rng(6)+0x36`                     |
+| `0xe88a` | Row          | `0x3a92`                       | `[bf75]`             | `0x14+xacc`               | `[bf7f]` once                     |
+| `0xe8d5` | Row          | `0x33f4`                       | `[bf77]`             | `0x14+xacc`               | `[bf7f]` once                     |
+| `0xe920` | Single       | `0x3a92`                       | `[bf75]`             | `rng(0x1e)+0x14+xacc`     | `rng(6)+0x2c`                     |
+| `0xe965` | Single       | `0x33f4`                       | `[bf77]`             | `rng(0x1e)+0x28+xacc`     | `rng(6)+0x1f`                     |
+| `0xe9aa` | Choice       | `0x338e`/`0x3308`              | `[bf71]`/`[bf6d]`    | `rng(0xa)+0x1e+xacc`      | `rng(5)+0x15` / `rng(0x12)`       |
+| `0xea2d` | Choice       | `0x38b0`/`0x3308`              | `[bf6f]`/`[bf6d]`    | `rng(0xa)+0x1e+xacc`      | `rng(5)+0x1a` / `rng(0x12)`       |
+| `0xeab0` | Row+everyNth | `0x3a92` (+`0x3308` every 2nd) | `[bf75]` (+`[bf6d]`) | `0x14+xacc` (+`0`)        | `rng(4)+0x28` once (+`rng(0x12)`) |
+| `0xeb35` | Fixed×2      | `0x392e`                       | `[bf79]`             | `xacc`, then `0x3c`       | `0x26`, `0x27`                    |
+| `0xeb72` | Fixed×1      | `0x3f8e`                       | `[bf7b]`             | `xacc`                    | `0x45`                            |
+| `0xeb92` | Fixed        | `0x36ea`                       | `0xfa`               | `xacc`                    | `0x4b`                            |
+| `0xec39` | Single       | `0x3750`                       | `0xfa`               | `xacc`                    | `rng(3)+0x3c`                     |
+| `0xec65` | Single       | `0x37b6`                       | `0xfa`               | `xacc`                    | `rng(3)+0x3f`                     |
+| `0xec91` | Single       | `0x382c`                       | `0xfa`               | `xacc`                    | `rng(3)+0x42`                     |
+| `0xecbd` | Single       | `0x338e`                       | `[bf71]`             | `0x64`                    | `0x16`                            |
 
 **LEVEL_1 dispatcher script**: 38 steps, in order. `xstart` carries forward when a
 step does not set it. `count = rng(a) + b`:
 
-| # | emitter (vaddr) | xstart | xmod/xbase | count rng(a)+b |
-|---|-----------------|--------|------------|----------------|
-| 1 | `0xec91` | `0x96` | — | (entry regs) |
-| 2 | `0xe776` | `0x96` | `0x1e`/`0x32` | `rng(7)+0x28` |
-| 3 | `0xe776` | `0x96` | `0xa`/`0x1e` | `rng(7)+0x8` |
-| 4 | `0xea2d` | `0x96` | — | `rng(8)+0x8` |
-| 5 | `0xe776` | `0x96` | — | `rng(0xa)+0x8` |
-| 6 | `0xe7bb` | `0xc8` | — | `rng(3)+0xc` |
-| 7 | `0xea2d` | `0xc8` | — | `rng(5)+0xf` |
-| 8 | `0xe800` | `0xc8` | — | `rng(2)+0x6` |
-| 9 | `0xe9aa` | `0xc8` | — | `rng(6)+0xa` |
-| 10 | `0xec39` | `0x28` | — | `rng(6)+0xa` |
-| 11 | `0xe88a` | `0x12c` | — | `rng(5)+0xa` |
-| 12 | `0xeb35` | `0x12c` | — | `rng(5)+0xa` (Fixed: count ignored) |
-| 13 | `0xe776` | `0x12c` | — | `rng(5)+0x5` |
-| 14 | `0xe920` | `0x12c` | — | `rng(5)+0x8` |
-| 15 | `0xe7bb` | `0x78` | — | `rng(0xa)+0x14` |
-| 16 | `0xec65` | `0x28` | — | `rng(0xa)+0x14` |
-| 17 | `0xecbd` | `0x14` | — | `rng(2)+0x2` |
-| 18 | `0xe7bb` | `0x14` | — | `rng(0xa)+0x14` |
-| 19 | `0xe800` | `0x14` | — | `rng(2)+0x6` |
-| 20 | `0xe7bb` | `0x64` | — | `rng(5)+0xa` |
-| 21 | `0xe965` | `0x64` | — | `rng(0xa)+0xa` |
-| 22 | `0xe776` | `0x64` | — | `rng(5)+0x5` |
-| 23 | `0xeab0` | `0x64` | — | `rng(5)+0x5` |
-| 24 | `0xe776` | `0x64` | — | `rng(5)+0x5` |
-| 25 | `0xeab0` | `0x64` | — | `rng(5)+0x8` |
-| 26 | `0xe776` | `0x64` | — | `rng(5)+0xa` |
-| 27 | `0xe8d5` | `0x64` | — | `rng(5)+0xa` |
-| 28 | `0xe845` | `0xdc` | — | `rng(5)+0xa` |
-| 29 | `0xec39` | `0x28` | — | `rng(5)+0xa` |
-| 30 | `0xe8d5` | `0xdc` | — | `rng(5)+0xa` |
-| 31 | `0xe7bb` | `0xdc` | — | `rng(5)+0xa` |
-| 32 | `0xeb72` | `0xfa` | — | `rng(5)+0xa` (Fixed) |
-| 33 | `0xe845` | `0xdc` | — | `rng(5)+0xa` |
-| 34 | `0xec39` | `0x28` | — | `rng(5)+0xa` |
-| 35 | `0xe8d5` | `0xdc` | — | `rng(5)+0xa` |
-| 36 | `0xe7bb` | `0xdc` | — | `rng(0x28)+0x14` |
-| 37 | `0xe776` | `0xdc` | — | `rng(0xa)+0xa` |
-| 38 | `0xeb92` | `0xfa` | — | `rng(0xa)+0xa` (Fixed) |
+| #   | emitter (vaddr) | xstart  | xmod/xbase    | count rng(a)+b                      |
+| --- | --------------- | ------- | ------------- | ----------------------------------- |
+| 1   | `0xec91`        | `0x96`  |               | (entry regs)                        |
+| 2   | `0xe776`        | `0x96`  | `0x1e`/`0x32` | `rng(7)+0x28`                       |
+| 3   | `0xe776`        | `0x96`  | `0xa`/`0x1e`  | `rng(7)+0x8`                        |
+| 4   | `0xea2d`        | `0x96`  |               | `rng(8)+0x8`                        |
+| 5   | `0xe776`        | `0x96`  |               | `rng(0xa)+0x8`                      |
+| 6   | `0xe7bb`        | `0xc8`  |               | `rng(3)+0xc`                        |
+| 7   | `0xea2d`        | `0xc8`  |               | `rng(5)+0xf`                        |
+| 8   | `0xe800`        | `0xc8`  |               | `rng(2)+0x6`                        |
+| 9   | `0xe9aa`        | `0xc8`  |               | `rng(6)+0xa`                        |
+| 10  | `0xec39`        | `0x28`  |               | `rng(6)+0xa`                        |
+| 11  | `0xe88a`        | `0x12c` |               | `rng(5)+0xa`                        |
+| 12  | `0xeb35`        | `0x12c` |               | `rng(5)+0xa` (Fixed: count ignored) |
+| 13  | `0xe776`        | `0x12c` |               | `rng(5)+0x5`                        |
+| 14  | `0xe920`        | `0x12c` |               | `rng(5)+0x8`                        |
+| 15  | `0xe7bb`        | `0x78`  |               | `rng(0xa)+0x14`                     |
+| 16  | `0xec65`        | `0x28`  |               | `rng(0xa)+0x14`                     |
+| 17  | `0xecbd`        | `0x14`  |               | `rng(2)+0x2`                        |
+| 18  | `0xe7bb`        | `0x14`  |               | `rng(0xa)+0x14`                     |
+| 19  | `0xe800`        | `0x14`  |               | `rng(2)+0x6`                        |
+| 20  | `0xe7bb`        | `0x64`  |               | `rng(5)+0xa`                        |
+| 21  | `0xe965`        | `0x64`  |               | `rng(0xa)+0xa`                      |
+| 22  | `0xe776`        | `0x64`  |               | `rng(5)+0x5`                        |
+| 23  | `0xeab0`        | `0x64`  |               | `rng(5)+0x5`                        |
+| 24  | `0xe776`        | `0x64`  |               | `rng(5)+0x5`                        |
+| 25  | `0xeab0`        | `0x64`  |               | `rng(5)+0x8`                        |
+| 26  | `0xe776`        | `0x64`  |               | `rng(5)+0xa`                        |
+| 27  | `0xe8d5`        | `0x64`  |               | `rng(5)+0xa`                        |
+| 28  | `0xe845`        | `0xdc`  |               | `rng(5)+0xa`                        |
+| 29  | `0xec39`        | `0x28`  |               | `rng(5)+0xa`                        |
+| 30  | `0xe8d5`        | `0xdc`  |               | `rng(5)+0xa`                        |
+| 31  | `0xe7bb`        | `0xdc`  |               | `rng(5)+0xa`                        |
+| 32  | `0xeb72`        | `0xfa`  |               | `rng(5)+0xa` (Fixed)                |
+| 33  | `0xe845`        | `0xdc`  |               | `rng(5)+0xa`                        |
+| 34  | `0xec39`        | `0x28`  |               | `rng(5)+0xa`                        |
+| 35  | `0xe8d5`        | `0xdc`  |               | `rng(5)+0xa`                        |
+| 36  | `0xe7bb`        | `0xdc`  |               | `rng(0x28)+0x14`                    |
+| 37  | `0xe776`        | `0xdc`  |               | `rng(0xa)+0xa`                      |
+| 38  | `0xeb92`        | `0xfa`  |               | `rng(0xa)+0xa` (Fixed)              |
 
 (`xmod`/`xbase` only matter for `0xe776`, which reads them from `cs:[0xbf82]`/`[0xbf84]`;
 later steps leave the last-set values in place. Decode reproducible via
@@ -476,7 +466,7 @@ New emitter kinds (file offsets):
 
 Three dispatcher steps wrap their emitter in a `rng(3) + k` repeat loop (the two
 grid runs and the `0x3a2c`/`0x3c84` row runs). One r2 caveat: with `-n`, near-call
-targets aren't IP-wrapped, so dispatcher calls print `0x10000` high — the real body
+targets aren't IP-wrapped, so dispatcher calls print `0x10000` high; the real body
 offset is `target & 0xffff`.
 
 Validated like the others: the GET-READY buffer is 521 records at the C-runtime
@@ -488,7 +478,7 @@ step-repeat) and `level_5.rs` (the 48-step script and health constants).
 
 LEVEL_7 (CITY) has the simplest scatter and the most elaborate post-pass. Its one
 PRNG emitter is the L3-shape **Grid** (`0x121bd`): `outer = rng(dx) + cx` rows of
-`inner = rng(ax) + bx` records (`ax = 0` skips the inner draw, as in L3 — here
+`inner = rng(ax) + bx` records (`ax = 0` skips the inner draw, as in L3, where
 `rng(0)` returns 0 with no state advance), one row-y `rng(0xa) + [cfd9]` per row,
 sprite/health/x-step/row-reset from config slots `cfd1`/`cfd5`/`cfd7`/`cfd3`. The
 dispatcher (one straight-line script, file `0x123be`..`0x129b0`) calls it 21 times
@@ -515,12 +505,12 @@ every one. Ported in `slot.rs` (the `Insert`/`PostOp` post-pass and `Fixed`'s
 All four use the identical engine, confirmed by disassembling each one's dispatcher
 and emitters. Only data and link addresses differ; the code shape is one engine:
 
-| WAD | PRNG generator | dispatcher config block | distinct emitters |
-|-----|----------------|-------------------------|-------------------|
-| LEVEL_1 | `0x818c` | `0xbf6b` (x), `0xbf82`/`0xbf84` (cfg) | 18 |
-| LEVEL_3 | `0x1bb2a` | `0xdab7` (x), `0xdab9`/`0xdabb` (cfg) | 13 (+ post-pass) |
-| LEVEL_5 | `0x97a0` | `0xbd16` (x), `0xbd9c` (cfg) | 16 |
-| LEVEL_7 | `0x1bd52` | `0xcf4b` (x), `0xcfd1`..`0xcfd9` (cfg) | 9 (+ insert post-pass) |
+| WAD     | PRNG generator | dispatcher config block                | distinct emitters      |
+| ------- | -------------- | -------------------------------------- | ---------------------- |
+| LEVEL_1 | `0x818c`       | `0xbf6b` (x), `0xbf82`/`0xbf84` (cfg)  | 18                     |
+| LEVEL_3 | `0x1bb2a`      | `0xdab7` (x), `0xdab9`/`0xdabb` (cfg)  | 13 (+ post-pass)       |
+| LEVEL_5 | `0x97a0`       | `0xbd16` (x), `0xbd9c` (cfg)           | 16                     |
+| LEVEL_7 | `0x1bd52`      | `0xcf4b` (x), `0xcfd1`..`0xcfd9` (cfg) | 9 (+ insert post-pass) |
 
 Every emitter is the same body: `count = rng() + bx`, then a loop writing
 `cs:[bp+0..6] = {delay, sprite ptr, health, row}` and `add bp, 8`, with the same
@@ -559,5 +549,3 @@ image). The race arm's field mapping is provisional until the render validation.
   catalog `decode_banked` produces, and the sprite spans `cell_count` consecutive
   cells (see `bin.md`). Open: wire resolve-and-blit into the parallax render (place
   at `canyon_x - scroll`, `canyon_y - camera`).
-- Race `0x1690`: render-validate (needs `RACE1.BIN`'s catalog offset; the render tool
-  hardcodes `OUT_BIN_CATALOG`) and confirm the byte+word fields after the pointer.
