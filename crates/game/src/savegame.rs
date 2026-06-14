@@ -19,13 +19,14 @@
 //! DOSBox saves of all seven levels (`tests/fixtures/`).
 //!
 //! This module maps the snapshot onto the port's semantic state. Fields the
-//! port does not model yet are written as the original's idle values and
-//! ignored on read; each is marked `TODO` at its offset. The freeze/dying
-//! flags and the engine PRNG live outside the saved ranges, so a loaded
-//! game always resumes through GET READY on a fresh clock seed, like the
-//! original. The per-level AI tails (boss phase globals) are not carried
-//! yet: live entities restore with their mode/phase words, but a save made
-//! mid-boss-fight resumes with the boss's out-of-entity state reset.
+//! port does not model are written as the original's idle values and ignored
+//! on read, annotated at their offset (open ones as `TODO`, decided
+//! deviations in place). The freeze/dying flags and the engine PRNG live
+//! outside the saved ranges, so a loaded game always resumes through GET
+//! READY on a fresh clock seed, like the original. The per-level AI tails
+//! (boss phase globals) are not carried yet: live entities restore with
+//! their mode/phase words, but a save made mid-boss-fight resumes with the
+//! boss's out-of-entity state reset.
 
 use anyhow::{Result, bail};
 
@@ -495,8 +496,11 @@ impl SaveGame {
         // hold stage -- all 14 consumers in L2 0x8b76..0x8c50 compare
         // against 1..4 and nothing else ever writes it, so a 0 kills the
         // orb machine for the rest of an original-engine session).
-        // Cooldown, flash and the orb flags stay 0 like a fresh level.
-        // TODO: carry the live cooldown/flash/stage instead.
+        // Cooldown, flash and the orb flags stay 0 like a fresh level. The
+        // baked reload/stage above already avoids the original's zeroing bug
+        // (a written 0 stage killed the orb machine for the rest of a
+        // cross-engine session); carrying the live cooldown/flash/stage is a
+        // remaining refinement that matters only for cross-engine saves.
         if let Some(reload_at) = map.reload_at {
             block[reload_at - BLOCK_BASE] = 6;
         }
@@ -727,8 +731,10 @@ fn encode_entities(buffer: &mut [u8], entities: &[Entity], buf_len: usize) {
         put_word(0x14, entity.mode);
         put_word(0x16, entity.arg);
         put_word(0x18, entity.health as u16);
-        // TODO at +0x1b: the fire-pattern word (0xffff = none); the port
-        // drives enemy fire from the AI functions directly.
+        // The fire-pattern word (+0x1b, 0xffff = none) stays unset by design:
+        // the original's pattern pass (table cs:0x46b3) is latent in the
+        // shipping game -- DOSBox-confirmed inert -- and the port drives enemy
+        // fire from the AI functions directly. Intentional deviation.
         put_word(0x1B, 0xFFFF);
         put_word(0x20, entity.tick);
         put_word(0x22, entity.phase_a);
