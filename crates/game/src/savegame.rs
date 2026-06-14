@@ -31,6 +31,9 @@
 use anyhow::{Result, bail};
 
 use crate::level::l1::ai::BossState as L1Boss;
+use crate::level::l3::ai::BossState as L3Boss;
+use crate::level::l5::ai::BossState as L5Boss;
+use crate::level::l7::ai::BossState as L7Boss;
 use crate::level::slot::Record;
 use crate::levels::Level;
 use crate::spawns::{Effect, Entity, Shot};
@@ -168,7 +171,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCFE,
                 reload_at: None,
-                gate_at: None,
+                gate_at: Some(0x394E),
             },
             Level::L5 => BlockMap {
                 level_byte: 5,
@@ -183,7 +186,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCDE,
                 reload_at: Some(0xCC8),
-                gate_at: None,
+                gate_at: Some(0x2689),
             },
             Level::L7 => BlockMap {
                 level_byte: 7,
@@ -198,7 +201,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCFA,
                 reload_at: Some(0xCE4),
-                gate_at: None,
+                gate_at: Some(0x2ED4),
             },
         }
     }
@@ -321,13 +324,19 @@ pub struct SaveGame {
 ///
 /// Each level's boss keeps its phase state in `cs:[...]` globals inside the
 /// saved block rather than in the entity record, so the codec carries them
-/// separately. Currently wired for L1; other levels round-trip as `None`.
+/// separately. The shooter levels are wired; races round-trip as `None`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BossSave {
-    /// No boss globals carried (races, or levels not yet wired).
+    /// No boss globals carried (races).
     None,
     /// The L1 boss globals.
     L1(L1Boss),
+    /// The L3 boss globals.
+    L3(L3Boss),
+    /// The L5 boss globals.
+    L5(L5Boss),
+    /// The L7 composite-boss globals.
+    L7(L7Boss),
 }
 
 impl SaveGame {
@@ -486,6 +495,9 @@ impl SaveGame {
             gate: map.gate_at.map_or(0, byte),
             boss: match level {
                 Level::L1 => BossSave::L1(L1Boss::restore_from(bytes, BLOCK_BASE)),
+                Level::L3 => BossSave::L3(L3Boss::restore_from(bytes, BLOCK_BASE)),
+                Level::L5 => BossSave::L5(L5Boss::restore_from(bytes, BLOCK_BASE)),
+                Level::L7 => BossSave::L7(L7Boss::restore_from(bytes, BLOCK_BASE)),
                 _ => BossSave::None,
             },
         })
@@ -633,6 +645,9 @@ impl SaveGame {
 
         match &self.boss {
             BossSave::L1(boss) => boss.save_into(block, BLOCK_BASE),
+            BossSave::L3(boss) => boss.save_into(block, BLOCK_BASE),
+            BossSave::L5(boss) => boss.save_into(block, BLOCK_BASE),
+            BossSave::L7(boss) => boss.save_into(block, BLOCK_BASE),
             BossSave::None => {}
         }
     }

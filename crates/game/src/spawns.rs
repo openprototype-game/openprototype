@@ -359,8 +359,12 @@ impl Spawns {
         spawns.level_end = level_end;
         spawns.gate = gate;
 
-        if let BossSave::L1(state) = boss {
-            spawns.boss = state;
+        match boss {
+            BossSave::L1(state) => spawns.boss = state,
+            BossSave::L3(state) => spawns.boss_l3 = state,
+            BossSave::L5(state) => spawns.boss_l5 = state,
+            BossSave::L7(state) => spawns.boss_l7 = state,
+            BossSave::None => {}
         }
 
         spawns
@@ -369,11 +373,14 @@ impl Spawns {
     /// The boss engine globals for the save, by level.
     ///
     /// Keyed on the level (matching the decoder, which reads the file's level
-    /// byte) rather than the runtime AI, so the two sides always agree. Only
-    /// L1 is wired so far, the rest round-trip as `None`.
+    /// byte) rather than the runtime AI, so the two sides always agree. The
+    /// shooter levels are wired; races round-trip as `None`.
     pub(crate) fn boss_save(&self, level: Level) -> BossSave {
         match level {
             Level::L1 => BossSave::L1(self.boss.clone()),
+            Level::L3 => BossSave::L3(self.boss_l3.clone()),
+            Level::L5 => BossSave::L5(self.boss_l5.clone()),
+            Level::L7 => BossSave::L7(self.boss_l7.clone()),
             _ => BossSave::None,
         }
     }

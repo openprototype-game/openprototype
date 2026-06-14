@@ -49,6 +49,7 @@ pub(crate) struct AiContext<'a> {
 /// The boss's engine globals (`cs:0xcd7..0xcf5`).
 ///
 /// One boss runs at a time, so the original keeps these outside the entity.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct BossState {
     /// Y-bob phase (`cs:0xcd9`, wrap 0x28, byte-indexed deltas).
     bob_phase: usize,
@@ -94,6 +95,55 @@ impl Default for BossState {
             explosion_timer: 0x14,
             explosion_dx: 0,
             explosion_dy: 0,
+        }
+    }
+}
+
+impl BossState {
+    /// Writes the boss globals into the save block (`cs:0xcd7..0xcf5`).
+    ///
+    /// `base` is the block's first runtime offset. The two volley-scratch
+    /// words (`cs:0xceb`/`0xced`) are regenerated per shot, so they stay zero.
+    pub(crate) fn save_into(&self, block: &mut [u8], base: usize) {
+        fn put_word(block: &mut [u8], at: usize, value: u16) {
+            block[at..at + 2].copy_from_slice(&value.to_le_bytes());
+        }
+
+        put_word(block, 0xCD7 - base, self.tick);
+        put_word(block, 0xCD9 - base, self.bob_phase as u16);
+        put_word(block, 0xCDB - base, self.frame_index as u16);
+        put_word(block, 0xCDD - base, self.creep_x as u16);
+        put_word(block, 0xCDF - base, self.home_x as u16);
+        put_word(block, 0xCE1 - base, self.lunge_end_x as u16);
+        put_word(block, 0xCE3 - base, self.sine_index as u16);
+        put_word(block, 0xCE5 - base, self.hover_count);
+        put_word(block, 0xCE7 - base, self.pattern_count);
+        block[0xCE9 - base] = self.divider;
+        put_word(block, 0xCEF - base, self.fire_timer as u16);
+        put_word(block, 0xCF1 - base, self.explosion_timer as u16);
+        put_word(block, 0xCF3 - base, self.explosion_dx as u16);
+        put_word(block, 0xCF5 - base, self.explosion_dy as u16);
+    }
+
+    /// Reads the boss globals back from the save block.
+    pub(crate) fn restore_from(block: &[u8], base: usize) -> Self {
+        let word = |at: usize| u16::from_le_bytes([block[at - base], block[at - base + 1]]);
+
+        Self {
+            bob_phase: usize::from(word(0xCD9)),
+            tick: word(0xCD7),
+            frame_index: usize::from(word(0xCDB)),
+            creep_x: i32::from(word(0xCDD) as i16),
+            home_x: i32::from(word(0xCDF) as i16),
+            lunge_end_x: i32::from(word(0xCE1) as i16),
+            sine_index: usize::from(word(0xCE3)),
+            hover_count: word(0xCE5),
+            pattern_count: word(0xCE7),
+            divider: block[0xCE9 - base],
+            fire_timer: i32::from(word(0xCEF) as i16),
+            explosion_timer: i32::from(word(0xCF1) as i16),
+            explosion_dx: i32::from(word(0xCF3) as i16),
+            explosion_dy: i32::from(word(0xCF5) as i16),
         }
     }
 }
@@ -817,4 +867,40 @@ fn boss_explosions(entity: &mut Entity, ctx: &mut AiContext) {
         phase: 0,
         delay: 0,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_boss_globals_round_trip_through_the_save_block() {
+        // The save block's first runtime offset (savegame::BLOCK_BASE).
+        let base = 0xCB4;
+        let boss = BossState {
+            bob_phase: 0x12,
+            tick: 0x1A5,
+            frame_index: 0x30,
+            creep_x: 0x140,
+            home_x: 0x120,
+            lunge_end_x: 0x100,
+            sine_index: 0x44,
+            hover_count: 0x88,
+            pattern_count: 3,
+            divider: 1,
+            fire_timer: 0x28,
+            explosion_timer: 0x14,
+            explosion_dx: 0x10,
+            explosion_dy: -0x10,
+        };
+
+        let mut block = vec![0u8; 0x100];
+        boss.save_into(&mut block, base);
+
+        assert_eq!(block[0xCD7 - base..0xCD9 - base], 0x1A5u16.to_le_bytes());
+        assert_eq!(block[0xCEF - base..0xCF1 - base], 0x28u16.to_le_bytes());
+        assert_eq!(block[0xCE9 - base], 1);
+
+        assert_eq!(BossState::restore_from(&block, base), boss);
+    }
 }

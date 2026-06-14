@@ -55,7 +55,7 @@ pub(crate) struct AiContext<'a> {
 }
 
 /// The boss's engine globals (`cs:0xce4..0xced`), all file-image zero.
-#[derive(Default)]
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct BossState {
     /// The boss tick (`cs:0xce4`) and the fire-tick counter (`cs:0xce9`).
     tick: u16,
@@ -71,6 +71,41 @@ pub(crate) struct BossState {
     explosion_timer: i32,
     explosion_dx: i32,
     explosion_dy: i32,
+}
+
+impl BossState {
+    /// Writes the boss globals into the save block (`cs:0xce4..0xce9`).
+    ///
+    /// `base` is the block's first runtime offset. The explosion burst state
+    /// (`cs:0xa734..`) sits outside the saved block, so neither engine carries
+    /// it; `restore_from` leaves it at the idle default.
+    pub(crate) fn save_into(&self, block: &mut [u8], base: usize) {
+        fn put_word(block: &mut [u8], at: usize, value: u16) {
+            block[at..at + 2].copy_from_slice(&value.to_le_bytes());
+        }
+
+        put_word(block, 0xCE4 - base, self.tick);
+        block[0xCE6 - base] = self.phase;
+        block[0xCE7 - base] = self.half_rate;
+        block[0xCE8 - base] = self.bounce;
+        put_word(block, 0xCE9 - base, self.fire_ticks);
+    }
+
+    /// Reads the boss globals back from the save block.
+    pub(crate) fn restore_from(block: &[u8], base: usize) -> Self {
+        let word = |at: usize| u16::from_le_bytes([block[at - base], block[at - base + 1]]);
+
+        Self {
+            tick: word(0xCE4),
+            fire_ticks: word(0xCE9),
+            phase: block[0xCE6 - base],
+            bounce: block[0xCE8 - base],
+            half_rate: block[0xCE7 - base],
+            explosion_timer: 0,
+            explosion_dx: 0,
+            explosion_dy: 0,
+        }
+    }
 }
 
 /// Re-copies the current frame's hitboxes (the 0x1e-stride families).
@@ -864,4 +899,36 @@ fn boss_explosions(entity: &mut Entity, ctx: &mut AiContext) {
         phase: 0,
         delay: 0,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_boss_globals_round_trip_through_the_save_block() {
+        // The save block's first runtime offset (savegame::BLOCK_BASE).
+        let base = 0xCB4;
+        // The explosion-burst fields live outside the saved block, so they
+        // stay at their idle default through a round trip.
+        let boss = BossState {
+            tick: 0x50,
+            fire_ticks: 0x14,
+            phase: 2,
+            bounce: 1,
+            half_rate: 1,
+            explosion_timer: 0,
+            explosion_dx: 0,
+            explosion_dy: 0,
+        };
+
+        let mut block = vec![0u8; 0x100];
+        boss.save_into(&mut block, base);
+
+        assert_eq!(block[0xCE4 - base..0xCE6 - base], 0x50u16.to_le_bytes());
+        assert_eq!(block[0xCE6 - base], 2);
+        assert_eq!(block[0xCE9 - base..0xCEB - base], 0x14u16.to_le_bytes());
+
+        assert_eq!(BossState::restore_from(&block, base), boss);
+    }
 }

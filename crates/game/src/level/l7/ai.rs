@@ -46,6 +46,7 @@ pub(crate) struct AiContext<'a> {
 ///
 /// Owned by the controller (arg 4) and read by the body parts. File-image
 /// inits in the `Default`.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct BossState {
     /// The shared anchor (`cs:0xcc3`/`0xcc5`, 12.4; starts at 288, 20 px).
     anchor_x: i32,
@@ -91,6 +92,58 @@ impl Default for BossState {
             smoke_dy: 0,
             wobble_phase_x: 0,
             wobble_phase_y: 0,
+        }
+    }
+}
+
+impl BossState {
+    /// Writes the composite boss's shared globals into the save block.
+    ///
+    /// `base` is the block's first runtime offset; the cluster runs
+    /// `cs:0xcc3..0xcdd`. `shared_health` also self-heals from the part
+    /// records on the first tick, but the original saves it here too.
+    pub(crate) fn save_into(&self, block: &mut [u8], base: usize) {
+        fn put_word(block: &mut [u8], at: usize, value: u16) {
+            block[at..at + 2].copy_from_slice(&value.to_le_bytes());
+        }
+
+        put_word(block, 0xCC3 - base, self.anchor_x as u16);
+        put_word(block, 0xCC5 - base, self.anchor_y as u16);
+        put_word(block, 0xCC7 - base, self.wobble_x as u16);
+        put_word(block, 0xCC9 - base, self.wobble_y as u16);
+        put_word(block, 0xCCB - base, self.master_tick);
+        put_word(block, 0xCCD - base, self.pattern_clock);
+        block[0xCCF - base] = self.anim_gate;
+        put_word(block, 0xCD0 - base, self.spiral_phase);
+        block[0xCD2 - base] = self.spiral_divider;
+        put_word(block, 0xCD3 - base, self.shared_health as u16);
+        put_word(block, 0xCD5 - base, self.smoke_dx as u16);
+        put_word(block, 0xCD7 - base, self.smoke_dy as u16);
+        put_word(block, 0xCD9 - base, self.smoke_delay as u16);
+        put_word(block, 0xCDB - base, self.wobble_phase_x as u16);
+        put_word(block, 0xCDD - base, self.wobble_phase_y as u16);
+    }
+
+    /// Reads the composite boss's shared globals back from the save block.
+    pub(crate) fn restore_from(block: &[u8], base: usize) -> Self {
+        let word = |at: usize| u16::from_le_bytes([block[at - base], block[at - base + 1]]);
+
+        Self {
+            anchor_x: i32::from(word(0xCC3) as i16),
+            anchor_y: i32::from(word(0xCC5) as i16),
+            wobble_x: i32::from(word(0xCC7) as i16),
+            wobble_y: i32::from(word(0xCC9) as i16),
+            master_tick: word(0xCCB),
+            pattern_clock: word(0xCCD),
+            anim_gate: block[0xCCF - base],
+            spiral_phase: word(0xCD0),
+            spiral_divider: block[0xCD2 - base],
+            shared_health: i32::from(word(0xCD3) as i16),
+            smoke_delay: i32::from(word(0xCD9) as i16),
+            smoke_dx: i32::from(word(0xCD5) as i16),
+            smoke_dy: i32::from(word(0xCD7) as i16),
+            wobble_phase_x: usize::from(word(0xCDB)),
+            wobble_phase_y: usize::from(word(0xCDD)),
         }
     }
 }
@@ -659,5 +712,42 @@ fn muzzle_fire(entity: &mut Entity, ctx: &mut AiContext) {
             vx: -0x60,
             vy: 0,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_boss_globals_round_trip_through_the_save_block() {
+        // The save block's first runtime offset (savegame::BLOCK_BASE).
+        let base = 0xCB4;
+        let boss = BossState {
+            anchor_x: 0x1200,
+            anchor_y: 0x140,
+            wobble_x: 0x10,
+            wobble_y: -0x10,
+            master_tick: 0x80,
+            pattern_clock: 0x258,
+            anim_gate: 1,
+            spiral_phase: 0x120,
+            spiral_divider: 2,
+            shared_health: 0x7D00,
+            smoke_delay: 0x14,
+            smoke_dx: 5,
+            smoke_dy: 6,
+            wobble_phase_x: 0x44,
+            wobble_phase_y: 0x33,
+        };
+
+        let mut block = vec![0u8; 0x100];
+        boss.save_into(&mut block, base);
+
+        assert_eq!(block[0xCCB - base..0xCCD - base], 0x80u16.to_le_bytes());
+        assert_eq!(block[0xCCD - base..0xCCF - base], 0x258u16.to_le_bytes());
+        assert_eq!(block[0xCCF - base], 1);
+
+        assert_eq!(BossState::restore_from(&block, base), boss);
     }
 }
