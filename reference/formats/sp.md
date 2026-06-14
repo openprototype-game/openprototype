@@ -14,21 +14,20 @@ stored across four files as VGA "Mode X" byte planes:
 To rebuild the image: pixel `(x, y)` = `plane[x % 4][y * 160 + x / 4]`, where
 each plane is read as 160 wide by 160 tall.
 
-The data is uncompressed indexed pixels. The palette is not in these files; it
-comes from the level (the `.WAD`).
+The data is uncompressed indexed pixels. Each plane is read as 160 bytes wide
+by 160 rows tall (the `y * 160 + x / 4` stride above). The palette is not in
+these files; it comes from the level `.WAD` (see [wad.md](wad.md)).
 
 ## Evidence
 
 Every `.SP[1-4]` file is exactly 25600 bytes. Combining the four planes at
 640x160 produces a coherent scene for CANYON (canyon vista), WALD (forest),
-RACEB2 and ALIENBG. Reading a single file linearly, or combining at 320x320,
-gives sheared noise.
+RACEB2, and ALIENBG, each in its level's own palette. Reading a single file
+linearly, or combining at 320x320, gives sheared noise. The four files are the
+four Mode X planes of one image, not four separate parallax layers.
 
-This corrects the 2013 developer mail, which guessed SP1-4 were "4-layer"
-(four separate parallax layers). They are four planes of one image.
+## Parallax
 
-## Open
-
-- Width 640 and height 160 are constant across every set seen so far.
-- Colors are unverified until a level `.WAD` palette is decoded; rendered so
-  far only against a grayscale ramp and unrelated palettes.
+The level cuts this image into horizontal strips and scrolls each at its own
+rate; that scroll model, the per-level strip tables, and the vertical camera pan
+are in [../render-pipeline.md](../render-pipeline.md).

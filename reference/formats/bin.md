@@ -1,7 +1,7 @@
 # BIN / BN1: compiled sprites
 
 Status: rendering path reverse-engineered (in r2, from `LEVEL_1.WAD`) and
-verified by rendering — OUT.BIN decodes into recognizable sprites (rotating
+verified by rendering: OUT.BIN decodes into recognizable sprites (rotating
 asteroid, blue-lit metal girders, explosions). All 4112 plane subroutines of the
 1028 catalog records resolve (100%).
 
@@ -16,16 +16,16 @@ fast-blit technique.
 Each sprite plane is one subroutine, terminated by `RETF` (`0xCB`). The only
 opcodes used (all writing relative to `SI`, the destination pointer):
 
-| bytes | instruction | meaning |
-|-------|-------------|---------|
-| `C6 44 dd vv` | `mov byte [si+disp8], imm8` | write 1 pixel |
-| `C7 44 dd vvvv` | `mov word [si+disp8], imm16` | write 2 pixels |
-| `C6/C7 84 dddd ..` | `[si+disp16]` form | disp is 16-bit |
-| `66 C7 .. vvvvvvvv` | `mov dword [si+disp], imm32` | write 4 pixels |
-| `81 C6 vvvv` | `add si, imm16` | advance destination |
-| `03 F0` | `add si, ax` | advance one row (AX = stride) |
-| `B8 vvvv` | `mov ax, imm16` | set stride |
-| `CB` | `retf` | end of subroutine |
+| bytes               | instruction                  | meaning                       |
+| ------------------- | ---------------------------- | ----------------------------- |
+| `C6 44 dd vv`       | `mov byte [si+disp8], imm8`  | write 1 pixel                 |
+| `C7 44 dd vvvv`     | `mov word [si+disp8], imm16` | write 2 pixels                |
+| `C6/C7 84 dddd ..`  | `[si+disp16]` form           | disp is 16-bit                |
+| `66 C7 .. vvvvvvvv` | `mov dword [si+disp], imm32` | write 4 pixels                |
+| `81 C6 vvvv`        | `add si, imm16`              | advance destination           |
+| `03 F0`             | `add si, ax`                 | advance one row (AX = stride) |
+| `B8 vvvv`           | `mov ax, imm16`              | set stride                    |
+| `CB`                | `retf`                       | end of subroutine             |
 
 Only the non-transparent pixels are emitted, so unwritten bytes stay transparent.
 
@@ -53,7 +53,7 @@ alignments (`x % 4`).
 ## Per-sprite descriptor table (in the WAD, not the BIN)
 
 The association of 4 plane-subroutines into one sprite lives in a table in the
-**WAD**, not the BIN — nothing in the BIN groups them. For `LEVEL_1.WAD` it is
+**WAD**, not the BIN; nothing in the BIN groups them. For `LEVEL_1.WAD` it is
 in segment `0x0F7F` (file offset `0xf9f0`). Records are **10 bytes = 5 words**:
 
 ```
@@ -64,7 +64,7 @@ The table is a shared sprite **catalog**: **1028 records** (`0xf9f0 .. 0x12218`)
 referenced by index from the level's object code. A header-family draw
 loop (`@0x8ee2`) reads `field0` into `bp`, then its dispatcher (`@0x87ba`) reads
 the plane words from `gs:[bx+2/4/6/8]`. Each iteration: `bx += 0x0a` (next
-descriptor), `bp += 0x20` (X += 32 — sprites are 32px wide), clipping at X in
+descriptor), `bp += 0x20` (X += 32, sprites are 32px wide), clipping at X in
 `[-32, 288]`.
 
 The WAD tail after the catalog: 8 zero bytes (`0x12218`), then **three 16-color
@@ -91,7 +91,7 @@ A plane word `pk` resolves to a subroutine one of two ways, matching the two
 dispatcher families in the engine:
 
 - **Clip-header family** (dispatcher `@0x87ba`): for small clippable game objects
-  (rocks, particles, explosions). `pk` points at a progressive-clip header — a
+  (rocks, particles, explosions). `pk` points at a progressive-clip header, a
   short word table (e.g. OUT.BIN @ 0 = `0a 00 0f 00 18 00 23 00 2e 00`; some
   sprites have 3 words, not 5). The dispatcher computes
   `sub = pk + u16(fs:[pk + clipbase])`, where `clipbase = cs:0x59ae` ∈ {0,2,4,6,8}
@@ -99,7 +99,7 @@ dispatcher families in the engine:
   left-clipped, sharing the trailing `RETF`; `@0x7c64` picks `clipbase` from
   screen-edge proximity.
 - **Direct family** (dispatcher `@0x804a` + variants): for large full-height
-  objects (e.g. the 32×145 girders). `mov cs:[0x5854], gs:[bx]` — the plane word
+  objects (e.g. the 32x145 girders). `mov cs:[0x5854], gs:[bx]`: the plane word
   *is* the subroutine offset, no header, no clipping. `sub = pk`. This family
   advances `si` by a full plane-screen (`0x4000`) per plane.
 
@@ -109,7 +109,7 @@ read `word0 = u16(BIN[base+pk])`; if `word0` is a small offset (1..0x7ff) and
 `base+pk+word0` decodes to a valid `RETF`-terminated subroutine, it's a clip
 header (use `sub = pk + word0`); otherwise `pk` is a direct subroutine. This is
 unambiguous across all 1028 catalog records (4112/4112 planes resolve). Do **not**
-discriminate on the first byte alone — a header whose `word0` is e.g. `0x0066`
+discriminate on the first byte alone: a header whose `word0` is e.g. `0x0066`
 starts with byte `0x66`, which collides with the operand-size-prefix opcode.
 
 ## Level → BIN mapping
@@ -123,7 +123,7 @@ levels also load the shared `PTURN1.BN1` (player-ship sprites).
 `PTURN1.BN1` is 44,881 bytes = **232 compiled-sprite subroutines** back-to-back,
 no internal catalog. It fits one segment, so there's no EMS banking (no
 `field0`). The ship sprites are all **direct** (raw subroutine pointers, no clip
-header — the ship is never edge-clipped).
+header, the ship is never edge-clipped).
 
 The grouping is a catalog in the WAD: **28 fixed 18-byte records**, each a
 **count-first** `[ncells, then up to 8 cell words]` from file `0x6dda`. The
@@ -139,16 +139,18 @@ exhausts), covering 228 of the 232 subroutines.
 
 ## Verified vs open
 
-- **Verified**: every one of the 1028 catalog records decodes — all 4112 plane
+- **Verified**: every one of the 1028 catalog records decodes, all 4112 plane
   subroutines resolve through the chain (100%). Rendered sprites are recognizable
   (rotating asteroid, blue-lit girders, explosions). This is code-grounded: the
   opcodes, Mode X convention, EMS-page banking, and both draw families come from
   the disassembly, and the per-entry header/direct rule is a self-describing
   property of the data, not a guess.
 - **Open**: pixel/color fidelity is eyeballed, not diffed against real captures.
-- **Open**: the runtime placement layer — *which* catalog entry is drawn *where*
-  and *when* (scroll `cs:0x6404`, the per-object tables) — is needed for a
-  faithful live renderer but not for extracting the sprites. Not traced.
+- **Placement**: which catalog entry is drawn, and where, is resolved. A spawn
+  record's sprite descriptor carries the `catalog_index` that selects the entry
+  (see [level-layout.md](level-layout.md)), and the Mode X blitter below is the
+  renderer. Wiring resolve-and-blit into the live parallax render is the
+  remaining work.
 - **PTURN1 tail (resolved)**: the 4 unaccounted subroutines belong to the
   ship's death-explosion descriptor table, which the port pins at `cs:0x45e2`
   (file `0x6fd2`) and feeds through [`ShipData::explosion`]. They are not a

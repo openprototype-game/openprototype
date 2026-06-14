@@ -16,15 +16,15 @@ overlay or trailing blob. The palette and the level data live *inside* the loade
 image (the program's data, read by its own code), not in a tacked-on section. The MZ
 header is 512 bytes (32 paragraphs); code starts at file offset 512.
 
-| WAD     | File size | Relocs | cs:ip       | Palette @ |
-|---------|-----------|--------|-------------|-----------|
-| LEVEL_1 | 75472     | 64     | 027F:CCFE   | 0x26F0    |
-| LEVEL_2 | 61328     | 53     | 007B:B2A1   | 0x06B0    |
-| LEVEL_3 | 89952     | 91     | 0451:EAB1   | 0x4410    |
-| LEVEL_4 | 61552     | 53     | 007B:B319   | 0x06B0    |
-| LEVEL_5 | 81840     | 81     | 03D9:CB83   | 0x3C90    |
-| LEVEL_6 | 64112     | 53     | 007B:B819   | 0x06B0    |
-| LEVEL_7 | 92272     | 81     | 0451 (0x4FE):DD50 | 0x4EE0 |
+| WAD     | File size | Relocs | cs:ip             | Palette @ |
+| ------- | --------- | ------ | ----------------- | --------- |
+| LEVEL_1 | 75472     | 64     | 027F:CCFE         | 0x26F0    |
+| LEVEL_2 | 61328     | 53     | 007B:B2A1         | 0x06B0    |
+| LEVEL_3 | 89952     | 91     | 0451:EAB1         | 0x4410    |
+| LEVEL_4 | 61552     | 53     | 007B:B319         | 0x06B0    |
+| LEVEL_5 | 81840     | 81     | 03D9:CB83         | 0x3C90    |
+| LEVEL_6 | 64112     | 53     | 007B:B819         | 0x06B0    |
+| LEVEL_7 | 92272     | 81     | 0451 (0x4FE):DD50 | 0x4EE0    |
 
 LEVEL_2, 4, 6 share an identical header shape (53 relocs, cs=007B) and the same
 palette offset. Those are the three RACEB2 race levels, built from one common code
@@ -77,15 +77,15 @@ passes to DOS file open, not an index into the WAD. The exact record layout
 
 ### Level to assets mapping
 
-| WAD       | Background | Other        |
-|-----------|------------|--------------|
-| LEVEL_1   | CANYON     | out.bin      |
-| LEVEL_2   | RACEB2     | race1.bin    |
-| LEVEL_3   | WALD       | wald.bin     |
-| LEVEL_4   | RACEB2     | race1.bin    |
-| LEVEL_5   | ALIENBG    | techno.bin   |
-| LEVEL_6   | RACEB2     | race1.bin    |
-| LEVEL_7   | LAVAH      | lava.bin     |
+| WAD     | Background | Other      |
+| ------- | ---------- | ---------- |
+| LEVEL_1 | CANYON     | out.bin    |
+| LEVEL_2 | RACEB2     | race1.bin  |
+| LEVEL_3 | WALD       | wald.bin   |
+| LEVEL_4 | RACEB2     | race1.bin  |
+| LEVEL_5 | ALIENBG    | techno.bin |
+| LEVEL_6 | RACEB2     | race1.bin  |
+| LEVEL_7 | LAVAH      | lava.bin   |
 
 Every WAD also references the shared HUD/UI RAW files: `panel.raw`, `score.raw`,
 `numbers.raw`, `lights.raw`, `smart.raw`, `extras.raw`, `balken.raw`, `font.raw`,
