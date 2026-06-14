@@ -30,6 +30,7 @@
 
 use anyhow::{Result, bail};
 
+use crate::level::l1::ai::BossState as L1Boss;
 use crate::level::slot::Record;
 use crate::levels::Level;
 use crate::spawns::{Effect, Entity, Shot};
@@ -105,6 +106,9 @@ struct BlockMap {
     /// its offset is pinned: `0xcc8` unshifted, L7 `0xce4` (+0x1c). L3's
     /// insertion point inside the cluster is unpinned, so `None` there.
     reload_at: Option<usize>,
+    /// The boss/scroll gate byte (`cs:0x269c` on L1). `None` until the
+    /// level's boss state is wired into the codec.
+    gate_at: Option<usize>,
 }
 
 impl BlockMap {
@@ -123,6 +127,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCDE,
                 reload_at: Some(0xCC8),
+                gate_at: Some(0x269C),
             },
             // The races share every delta, but each WAD's spawn table has its
             // own length, shifting the cursor and everything after it (L4
@@ -147,6 +152,7 @@ impl BlockMap {
                     has_grace: true,
                     stage_at: 0xCDE,
                     reload_at: Some(0xCC8),
+                    gate_at: None,
                 }
             }
             Level::L3 => BlockMap {
@@ -162,6 +168,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCFE,
                 reload_at: None,
+                gate_at: None,
             },
             Level::L5 => BlockMap {
                 level_byte: 5,
@@ -176,6 +183,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCDE,
                 reload_at: Some(0xCC8),
+                gate_at: None,
             },
             Level::L7 => BlockMap {
                 level_byte: 7,
@@ -190,6 +198,7 @@ impl BlockMap {
                 has_grace: false,
                 stage_at: 0xCFA,
                 reload_at: Some(0xCE4),
+                gate_at: None,
             },
         }
     }
@@ -302,6 +311,23 @@ pub struct SaveGame {
     /// The camera row (the races store their speed here; it is their
     /// camera).
     pub speed_level: u16,
+    /// The boss/scroll gate (`cs:0x269c` on L1; per-level offset elsewhere).
+    pub gate: u8,
+    /// The boss engine globals that live outside the entity records.
+    pub(crate) boss: BossSave,
+}
+
+/// The per-level boss engine globals carried through a save.
+///
+/// Each level's boss keeps its phase state in `cs:[...]` globals inside the
+/// saved block rather than in the entity record, so the codec carries them
+/// separately. Currently wired for L1; other levels round-trip as `None`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BossSave {
+    /// No boss globals carried (races, or levels not yet wired).
+    None,
+    /// The L1 boss globals.
+    L1(L1Boss),
 }
 
 impl SaveGame {
@@ -457,14 +483,19 @@ impl SaveGame {
             ship_roll: i32::from(word(ramp + 0x22) as i16) / 0x12,
             scroll_accums,
             speed_level: word(map.camera50_at() + 2),
+            gate: map.gate_at.map_or(0, byte),
+            boss: match level {
+                Level::L1 => BossSave::L1(L1Boss::restore_from(bytes, BLOCK_BASE)),
+                _ => BossSave::None,
+            },
         })
     }
 
     /// Fills the variable block.
     ///
-    /// Unmodeled engine scratch (each level's AI tail and prefix extras
-    /// included) is left at zero; the loaded engine state that matters lives in
-    /// the mapped fields and the entity records.
+    /// The mapped fields, the entity records, the scroll gate, and the boss
+    /// engine globals (where wired). Remaining unmodeled scratch (other
+    /// levels' AI tails, prefix extras) stays zero.
     fn encode_block(&self, map: &BlockMap, block: &mut [u8]) {
         fn put_word(block: &mut [u8], at: usize, value: u16) {
             block[at - BLOCK_BASE..at - BLOCK_BASE + 2].copy_from_slice(&value.to_le_bytes());
@@ -592,6 +623,18 @@ impl SaveGame {
         block[map.score_at + 9 - BLOCK_BASE] = 1;
 
         block[0] = map.level_byte;
+
+        // The boss/scroll gate and the boss's out-of-entity phase globals,
+        // so a save taken mid-boss resumes the boss in place rather than
+        // restarting its pattern.
+        if let Some(gate_at) = map.gate_at {
+            block[gate_at - BLOCK_BASE] = self.gate;
+        }
+
+        match &self.boss {
+            BossSave::L1(boss) => boss.save_into(block, BLOCK_BASE),
+            BossSave::None => {}
+        }
     }
 }
 
@@ -924,6 +967,8 @@ mod tests {
             ship_roll: 13,
             scroll_accums: vec![0x1234, 0x5678, 0x9ABC, 0xDEF0],
             speed_level: 0x10,
+            gate: 0,
+            boss: BossSave::None,
         }
     }
 
@@ -966,10 +1011,34 @@ mod tests {
         save.level = Level::L1;
         save.state.contact_grace_ticks = 0; // shooters carry no grace
         save.scroll_accums = (0..10).map(|index| index * 0x111).collect();
+        // An L1 file always decodes to L1 boss globals (idle defaults here).
+        save.boss = BossSave::L1(L1Boss::default());
 
         let encoded = save.encode();
         assert_eq!(encoded.len(), 32_265);
         assert_eq!(SaveGame::decode(&encoded).expect("decodes"), save);
+    }
+
+    /// Locks the full L1 encode (boss tail included) against accidental drift.
+    ///
+    /// FNV-1a over the encoded bytes; deterministic across platforms, so the
+    /// digest only changes when the encoded form does.
+    #[test]
+    fn the_l1_encode_matches_its_golden() {
+        let mut save = sample();
+        save.level = Level::L1;
+        save.state.contact_grace_ticks = 0;
+        save.scroll_accums = (0..10).map(|index| index * 0x111).collect();
+        save.boss = BossSave::L1(L1Boss::default());
+
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+
+        for byte in save.encode() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+
+        assert_eq!(format!("{hash:016x}"), "0f87e94181997ed8");
     }
 
     /// Real saves created by the original engine in DOSBox: one chained

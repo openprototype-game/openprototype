@@ -19,8 +19,9 @@ use std::collections::HashMap;
 use crate::assets::{OverlaySprite, directory_sprite};
 use crate::level::prng::{EngineRng, clock_seed};
 use crate::level::slot::Record;
-use crate::levels::{CombatData, SpawnAi};
+use crate::levels::{CombatData, Level, SpawnAi};
 use crate::playfield;
+use crate::savegame::BossSave;
 use openprototype_core::framebuffer::Framebuffer;
 use prototype_formats::bin::SpriteSheet;
 
@@ -174,8 +175,8 @@ pub(crate) fn descriptor_debris(wad: &[u8], cs_base: usize, sprite: u16) -> u16 
 
 /// Sample slots the AI triggered this step, played on the event channel.
 ///
-/// Volleys, the boss phase change, the carrier-pod deploy: each level's AI knows
-/// its own slot numbers from its RE doc.
+/// Volleys, the boss phase change, the kamikaze rocket's launch: each level's
+/// AI knows its own slot numbers from its RE doc.
 pub type AiSounds = Vec<usize>;
 
 /// Which samples a boss explosion burst plays.
@@ -324,7 +325,7 @@ impl Spawns {
     /// debris pointers re-derive from their type descriptors (the saved
     /// record has no debris field; the death handler reads the descriptor).
     #[allow(clippy::too_many_arguments)]
-    pub fn from_save(
+    pub(crate) fn from_save(
         records: Vec<Record>,
         cursor: usize,
         mut entities: Vec<Entity>,
@@ -336,6 +337,8 @@ impl Spawns {
         combat: CombatData,
         wad: &[u8],
         cs_base: usize,
+        gate: u8,
+        boss: BossSave,
     ) -> Self {
         for entity in &mut entities {
             entity.debris = descriptor_debris(wad, cs_base, entity.kind);
@@ -354,8 +357,25 @@ impl Spawns {
         spawns.effects = effects;
         spawns.weapon_upgrade_drop_countdown = weapon_upgrade_drop_countdown;
         spawns.level_end = level_end;
+        spawns.gate = gate;
+
+        if let BossSave::L1(state) = boss {
+            spawns.boss = state;
+        }
 
         spawns
+    }
+
+    /// The boss engine globals for the save, by level.
+    ///
+    /// Keyed on the level (matching the decoder, which reads the file's level
+    /// byte) rather than the runtime AI, so the two sides always agree. Only
+    /// L1 is wired so far, the rest round-trip as `None`.
+    pub(crate) fn boss_save(&self, level: Level) -> BossSave {
+        match level {
+            Level::L1 => BossSave::L1(self.boss.clone()),
+            _ => BossSave::None,
+        }
     }
 
     /// The schedule as a savegame stores it.

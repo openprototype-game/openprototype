@@ -45,6 +45,7 @@ pub(crate) struct AiContext<'a> {
 /// The boss's engine globals (`cs:0x269d..0x26a7`, `cs:0xce8/0xce9`).
 ///
 /// One boss runs at a time, so the original keeps these outside the entity.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct BossState {
     anchor_x: i32,
     anchor_y: i32,
@@ -70,6 +71,44 @@ impl Default for BossState {
             explosion_timer: 0x28,
             form2: false,
             dying: false,
+        }
+    }
+}
+
+impl BossState {
+    /// Writes the boss globals into the save block.
+    ///
+    /// `base` is the block's first runtime offset; the globals live at
+    /// `cs:0x269d..0x26a7` (anchor, saved phases, the two timers) and the
+    /// `cs:0xce8`/`cs:0xce9` form and dying flags.
+    pub(crate) fn save_into(&self, block: &mut [u8], base: usize) {
+        fn put_word(block: &mut [u8], at: usize, value: u16) {
+            block[at..at + 2].copy_from_slice(&value.to_le_bytes());
+        }
+
+        put_word(block, 0x269D - base, self.anchor_x as u16);
+        put_word(block, 0x269F - base, self.anchor_y as u16);
+        put_word(block, 0x26A1 - base, self.saved_a);
+        put_word(block, 0x26A3 - base, self.saved_b);
+        put_word(block, 0x26A5 - base, self.fire_timer as u16);
+        put_word(block, 0x26A7 - base, self.explosion_timer as u16);
+        block[0xCE8 - base] = u8::from(self.form2);
+        block[0xCE9 - base] = u8::from(self.dying);
+    }
+
+    /// Reads the boss globals back from the save block.
+    pub(crate) fn restore_from(block: &[u8], base: usize) -> Self {
+        let word = |at: usize| u16::from_le_bytes([block[at - base], block[at - base + 1]]);
+
+        Self {
+            anchor_x: i32::from(word(0x269D) as i16),
+            anchor_y: i32::from(word(0x269F) as i16),
+            saved_a: word(0x26A1),
+            saved_b: word(0x26A3),
+            fire_timer: i32::from(word(0x26A5) as i16),
+            explosion_timer: i32::from(word(0x26A7) as i16),
+            form2: block[0xCE8 - base] != 0,
+            dying: block[0xCE9 - base] != 0,
         }
     }
 }
@@ -749,5 +788,38 @@ fn boss_fire(entity: &Entity, ctx: &mut AiContext) {
                 vy,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_boss_globals_round_trip_through_the_save_block() {
+        // The save block's first runtime offset (savegame::BLOCK_BASE).
+        let base = 0xCB4;
+        let boss = BossState {
+            anchor_x: 0x1200,
+            anchor_y: 0x140,
+            saved_a: 0x0055,
+            saved_b: 0x00AA,
+            fire_timer: 0x30,
+            explosion_timer: 0x1F,
+            form2: true,
+            dying: true,
+        };
+
+        let mut block = vec![0u8; 0x2000];
+        boss.save_into(&mut block, base);
+
+        // Each global lands at its documented cs offset.
+        assert_eq!(block[0x269D - base..0x269F - base], 0x1200u16.to_le_bytes());
+        assert_eq!(block[0x269F - base..0x26A1 - base], 0x0140u16.to_le_bytes());
+        assert_eq!(block[0x26A5 - base..0x26A7 - base], 0x0030u16.to_le_bytes());
+        assert_eq!(block[0xCE8 - base], 1);
+        assert_eq!(block[0xCE9 - base], 1);
+
+        assert_eq!(BossState::restore_from(&block, base), boss);
     }
 }

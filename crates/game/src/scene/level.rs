@@ -401,6 +401,8 @@ impl LevelScene {
             scene.assets.combat,
             &scene.assets.wad,
             scene.assets.cs_base,
+            save.gate,
+            save.boss,
         ));
         let layout = crate::savegame::scroll_layout(save.level);
 
@@ -447,6 +449,8 @@ impl LevelScene {
             entities,
             enemy_shots,
             effects,
+            gate,
+            boss,
         ) = match &self.spawns {
             Some(spawns) => {
                 let (records, cursor) = spawns.save_schedule();
@@ -459,9 +463,21 @@ impl LevelScene {
                     spawns.entities.clone(),
                     spawns.shots.clone(),
                     spawns.effects.clone(),
+                    spawns.gate,
+                    spawns.boss_save(self.level),
                 )
             }
-            None => (Vec::new(), 0, 0, false, Vec::new(), Vec::new(), Vec::new()),
+            None => (
+                Vec::new(),
+                0,
+                0,
+                false,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                0,
+                crate::savegame::BossSave::None,
+            ),
         };
 
         let layout = crate::savegame::scroll_layout(self.level);
@@ -508,6 +524,8 @@ impl LevelScene {
             ship_roll: self.ship.roll_frame() as i32,
             scroll_accums,
             speed_level: self.camera_y as u16,
+            gate,
+            boss,
         }
     }
 
