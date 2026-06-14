@@ -282,9 +282,15 @@ impl BlockMap {
 
 /// A decoded savegame: the semantic state the port restores a level from.
 ///
-/// In-flight player shots (the A buffer) and the fire system's transient
-/// state (cooldowns, muzzle flash) are not carried yet; the weapons resume
-/// idle, which costs at most a fraction of a second of fire state.
+/// In-flight player shots (the A buffer) are deliberately dropped. The
+/// original preserves them (the respawn/GET READY path at file `0x9d84`
+/// does not clear the buffer), but the port models a player shot as a
+/// `ShotKind` plus an octant, not the record's raw sprite pointer, and the
+/// pointer is resolved per-level from the WAD; reconstructing it both ways
+/// would couple the WAD into this codec for shots that live well under a
+/// second and self-correct on the first unfrozen tick. The fire system's
+/// transient state (cooldown, muzzle flash) resumes idle for the same
+/// reason GET READY makes it unobservable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SaveGame {
     pub level: Level,
@@ -353,7 +359,8 @@ impl SaveGame {
         let mut bytes = vec![0u8; map.file_len()];
         self.encode_block(&map, &mut bytes[..map.block_len]);
 
-        // A: player shots, both parities. Not carried yet; empty lists.
+        // A: player shots, both parities. Left empty by design -- see the
+        // SaveGame doc; the in-flight shots self-correct within a frame.
 
         // B: enemy shots, both parities (identical copies are consistent;
         // the engine reads the parity the block names, which we write as 0).
