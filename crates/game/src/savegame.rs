@@ -2,7 +2,8 @@
 //!
 //! The port's save format IS the original's: `protosgN.psg` is a full
 //! mid-level snapshot the level writes from its in-game menu (the writer at
-//! LEVEL_2 file `0xb8da`, the loader at `0xb9d3`; see `re/savegame.md`).
+//! LEVEL_2 file `0xb8da`, the loader at `0xb9d3`; see
+//! `reference/savegame.md`).
 //! A file is the level's variable block (whose first byte is the level
 //! number) followed by both parities of each live-object buffer: A player
 //! shots, B enemy shots, C entities, D fire staging, E effects, in that
@@ -20,13 +21,13 @@
 //!
 //! This module maps the snapshot onto the port's semantic state. Fields the
 //! port does not model are written as the original's idle values and ignored
-//! on read, annotated at their offset (open ones as `TODO`, decided
-//! deviations in place). The freeze/dying flags and the engine PRNG live
-//! outside the saved ranges, so a loaded game always resumes through GET
-//! READY on a fresh clock seed, like the original. The per-level AI tails
-//! (boss phase globals) are not carried yet: live entities restore with
-//! their mode/phase words, but a save made mid-boss-fight resumes with the
-//! boss's out-of-entity state reset.
+//! on read, annotated at their offset (decided deviations in place). The
+//! freeze/dying flags and the engine PRNG live outside the saved ranges, so a
+//! loaded game always resumes through GET READY on a fresh clock seed, like
+//! the original. The per-level AI tails (boss phase globals) live in `cs:[...]`
+//! globals outside the entity records and are carried through the save by each
+//! level's `BossState`, so a save made mid-boss-fight resumes the boss in
+//! place.
 
 use anyhow::{Result, bail};
 
@@ -785,7 +786,7 @@ fn decode_shots(buffer: &[u8]) -> Vec<Shot> {
 
 /// Writes the entity list as a count word plus 0x40-byte records.
 ///
-/// The entity layout is from `re/spawn-consumer.md`.
+/// The entity layout is in `reference/entity-buffers.md`.
 fn encode_entities(buffer: &mut [u8], entities: &[Entity], buf_len: usize) {
     let count = entities.len().min((buf_len - 2) / ENTITY_RECORD_LEN);
     buffer[0..2].copy_from_slice(&(count as u16).to_le_bytes());
