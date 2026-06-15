@@ -24,4 +24,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
+      # Compile every feature-gated path (dev, disc-tests) without running it;
+      # the default clippy above covers the shipping cfg(not(feature = ...)) code.
+      - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-targets
