@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "rust",
+  "include-component-in-tag": false,
+  "separate-pull-requests": false,
+  "packages": {
+    "crates/formats": {},
+    "crates/disc": {},
+    "crates/core": {},
+    "crates/backend": {},
+    "crates/install": {},
+    "crates/game": {},
+    "crates/integration-tests": {},
+    "crates/tools": {}
+  },
+  "plugins": [
+    { "type": "cargo-workspace", "merge": false },
+    {
+      "type": "linked-versions",
+      "groupName": "openprototype",
+      "components": [
+        "prototype-formats",
+        "prototype-disc",
+        "openprototype-core",
+        "openprototype-backend",
+        "openprototype-install",
+        "openprototype",
+        "openprototype-integration-tests",
+        "openprototype-tools"
+      ]
+    }
+  ]
+}
