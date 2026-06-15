@@ -6,6 +6,7 @@ members = ["crates/backend", "crates/core", "crates/disc", "crates/formats", "cr
 edition = "2024"
 rust-version = "1.95"
 publish = false
+license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 prototype-formats = { path = "crates/formats", version = "0.1.0" }
