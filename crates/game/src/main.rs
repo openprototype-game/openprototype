@@ -20,15 +20,19 @@ mod desktop {
     };
     use openprototype::highscores::HighscoreStore;
     use openprototype::levels::Level;
+    #[cfg(feature = "dev")]
     use openprototype::savegame::SaveGame;
+    #[cfg(feature = "dev")]
     use openprototype::scene::SceneId;
     use openprototype_backend::{WindowIcon, run};
+    #[cfg(feature = "dev")]
     use openprototype_core::game_state::Handoff;
     use openprototype_install::{IconSource, InstallSpec};
     use prototype_disc::{DiscImage, manifest};
     use tracing_subscriber::EnvFilter;
 
     /// Which scene to boot straight into, bypassing the normal intro flow.
+    #[cfg(feature = "dev")]
     #[derive(Clone, Copy, clap::ValueEnum)]
     enum DevScene {
         /// The in-game level render (weapon-animation test harness).
@@ -44,20 +48,24 @@ mod desktop {
         cue: Option<PathBuf>,
 
         /// Boot straight into a developer scene instead of the intro.
+        #[cfg(feature = "dev")]
         #[arg(long)]
         scene: Option<DevScene>,
 
         /// Which level to load for the `--scene level` harness (1..=7).
+        #[cfg(feature = "dev")]
         #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u8).range(1..=7))]
         level: u8,
 
         /// Skip this many seconds into the level (`--scene level` only): the
         /// spawn clock, enemies, and scroll are pre-simulated, so the scene
         /// starts mid-action.
+        #[cfg(feature = "dev")]
         #[arg(long, default_value_t = 0.0)]
         skip: f32,
 
         /// Boot straight into a `.psg` savegame (race levels only so far).
+        #[cfg(feature = "dev")]
         #[arg(long, conflicts_with = "scene")]
         load: Option<PathBuf>,
 
@@ -236,6 +244,7 @@ mod desktop {
         let highscore_store = HighscoreStore::open(&disc)?;
         let loader_disc = disc.clone();
         let fli_disc = disc.clone();
+        #[cfg_attr(not(feature = "dev"), allow(unused_mut))]
         let mut app = App::new(
             assets,
             Box::new(move |level| load_level_assets(&loader_disc, level)),
@@ -243,6 +252,7 @@ mod desktop {
             highscore_store,
         );
 
+        #[cfg(feature = "dev")]
         if let Some(path) = &cli.load {
             let bytes = std::fs::read(path)
                 .with_context(|| format!("reading savegame {}", path.display()))?;
@@ -251,6 +261,7 @@ mod desktop {
             app.start_on_save(save);
         }
 
+        #[cfg(feature = "dev")]
         if let Some(DevScene::Level) = cli.scene {
             let level = Level::from_number(cli.level).expect("--level is validated to 1..=7");
             app.set_level_skip((cli.skip * 60.0) as u32);

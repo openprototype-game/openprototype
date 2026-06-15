@@ -25,6 +25,9 @@ audio = ["openprototype-backend/audio"]
 # Enable the tests that need the original CD image. Off by default so a plain
 # `cargo test` reports them as ignored rather than running them.
 disc-tests = []
+# Developer harness flags (--scene, --level, --skip, --load). Off by default so
+# released binaries neither advertise nor expose them.
+dev = []
 
 [dependencies]
 openprototype-core.workspace = true
