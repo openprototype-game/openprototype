@@ -9,9 +9,9 @@ rust-version = "1.95"
 publish = false
 
 [workspace.dependencies]
-prototype-formats = { path = "crates/formats" }
-prototype-disc = { path = "crates/disc" }
-openprototype-core = { path = "crates/core" }
-openprototype = { path = "crates/game", default-features = false }
-openprototype-backend = { path = "crates/backend", default-features = false }
-openprototype-install = { path = "crates/install" }
+prototype-formats = { path = "crates/formats", version = "0.1.0" }
+prototype-disc = { path = "crates/disc", version = "0.1.0" }
+openprototype-core = { path = "crates/core", version = "0.1.0" }
+openprototype = { path = "crates/game", version = "0.1.0", default-features = false }
+openprototype-backend = { path = "crates/backend", version = "0.1.0", default-features = false }
+openprototype-install = { path = "crates/install", version = "0.1.0" }
