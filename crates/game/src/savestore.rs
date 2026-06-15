@@ -27,7 +27,7 @@ impl SaveStore {
     ///
     /// No I/O happens until a slot is read or written.
     pub fn open() -> Result<Self> {
-        let dirs = ProjectDirs::from("de", "dasprids", "OpenPrototype")
+        let dirs = ProjectDirs::from("io.github", "openprototype-game", "OpenPrototype")
             .context("resolving the data directory")?;
 
         Ok(Self {

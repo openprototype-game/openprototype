@@ -28,8 +28,8 @@ mod windows;
 
 /// The application identity, shared with the runtime's `directories` lookups
 /// and the window's WM_CLASS.
-const QUALIFIER: &str = "de";
-const ORGANIZATION: &str = "dasprids";
+const QUALIFIER: &str = "io.github";
+const ORGANIZATION: &str = "openprototype-game";
 const APPLICATION: &str = "OpenPrototype";
 
 /// The installed executable's filename.
@@ -270,7 +270,7 @@ fn remove_integration(removed: &mut Vec<PathBuf>) -> Result<()> {
     }
 }
 
-/// The macOS bundle identifier, `de.dasprids.OpenPrototype`.
+/// The macOS bundle identifier, `io.github.openprototype-game.OpenPrototype`.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn bundle_id() -> String {
     format!("{QUALIFIER}.{ORGANIZATION}.{APPLICATION}")
@@ -478,12 +478,12 @@ mod tests {
 
         assert!(
             plist.contains(
-                "<key>CFBundleIdentifier</key>\t<string>de.dasprids.OpenPrototype</string>"
+                "<key>CFBundleIdentifier</key>\t<string>io.github.openprototype-game.OpenPrototype</string>"
             )
         );
         assert!(plist.contains("<key>CFBundleExecutable</key>\t<string>openprototype</string>"));
         assert!(plist.contains("<key>CFBundleIconFile</key>\t<string>AppIcon</string>"));
-        assert_eq!(bundle_id(), "de.dasprids.OpenPrototype");
+        assert_eq!(bundle_id(), "io.github.openprototype-game.OpenPrototype");
     }
 
     #[test]

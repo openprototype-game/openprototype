@@ -28,7 +28,7 @@ impl HighscoreStore {
     ///
     /// The default is the fallback when there is no local copy.
     pub fn open(disc: &DiscImage) -> Result<Self> {
-        let dirs = ProjectDirs::from("de", "dasprids", "OpenPrototype")
+        let dirs = ProjectDirs::from("io.github", "openprototype-game", "OpenPrototype")
             .context("resolving the data directory")?;
 
         Ok(Self {
