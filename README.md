@@ -9,6 +9,32 @@ Open* remakes.
 It plays from start to finish: all seven levels, enemies, bosses, and the
 front-end, running off your own copy of the disc image.
 
+## Install
+
+One command downloads the latest release, fetches the disc image if you don't
+already have it, and registers the desktop launcher.
+
+Linux and macOS:
+
+```
+curl -fsSL https://raw.githubusercontent.com/openprototype-game/openprototype/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```
+irm https://raw.githubusercontent.com/openprototype-game/openprototype/main/install.ps1 | iex
+```
+
+The script asks before pulling the ~270 MB disc image from the Internet Archive.
+Already have it? Point the script at your own cue with `--cue
+/path/to/PROTOTYPE.cue` (or `-Cue` on Windows) and it skips the download.
+Re-running installs the latest release over the old one; `openprototype
+uninstall` removes everything.
+
+On macOS the build isn't signed yet, so the first launch needs a right-click ->
+Open to get past Gatekeeper.
+
 ## Controls
 
 In the menus (main menu, jukebox, in-game menu):
@@ -83,7 +109,7 @@ you supply yourself. Download it from the Internet Archive
 and drop `PROTOTYPE.bin` / `PROTOTYPE.cue` at the repo root (they are
 git-ignored). `crates/disc/` reads both the files and the original-quality OST
 from it; see `reference/formats/disc.md`. Set `$PROTOTYPE_DISC` to point the
-tools at a cue elsewhere.
+tools at a cue elsewhere. The installer above can fetch the same image for you.
 
 Tests that need the image are gated behind a `disc-tests` feature and are
 `#[ignore]`d without it, so a plain `cargo test` skips them honestly (it reports
