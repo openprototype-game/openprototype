@@ -375,6 +375,7 @@ fn translate_key(key: &Key) -> Option<CoreKey> {
         Key::Named(NamedKey::Control) => Some(CoreKey::Ctrl),
         Key::Named(NamedKey::Shift) => Some(CoreKey::Shift),
         Key::Named(NamedKey::Backspace) => Some(CoreKey::Backspace),
+        Key::Named(NamedKey::Space) => Some(CoreKey::Char(' ')),
         Key::Character(text) => text.chars().next().map(CoreKey::Char),
         _ => None,
     }
@@ -404,5 +405,14 @@ mod tests {
         let limit = (MAX_CATCHUP_PER_FRAME.as_nanos() / INTERVAL.as_nanos()) as u32;
 
         assert_eq!(backlog_steps(Duration::from_secs(1), INTERVAL), limit);
+    }
+
+    #[test]
+    fn the_spacebar_maps_to_a_space_char() {
+        // winit reports it as NamedKey::Space, but the scenes read Char(' ').
+        assert_eq!(
+            translate_key(&Key::Named(NamedKey::Space)),
+            Some(CoreKey::Char(' '))
+        );
     }
 }
