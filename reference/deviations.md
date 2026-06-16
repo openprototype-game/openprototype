@@ -58,8 +58,6 @@ roadmap instead.
   the cursor skips them) until their submenus land: the detail-level system
   and gamepad support, both on the roadmap. The original's items work; a
   dimmed item reads more honestly than a working-looking inert one.
-- **Dev keys** (`[` `]` `f` `WASD` `p`) are port-only tooling, absent from
-  the original (whose only cheat is ERIK).
 
 ## Faithful but mechanically different
 

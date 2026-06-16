@@ -1,16 +1,11 @@
-//! A developer scene for live-testing the in-game level render.
+//! The in-game level scene.
 //!
-//! Not part of the normal front-end flow: the `--scene level` flag boots
-//! straight into it. It scrolls the level's parallax background and composites
-//! the HUD panel and the animated weapon pod on top, all into one 320x160 frame,
-//! so the scroll, panel geometry, and the pod's open/settle animation can be
-//! checked against footage.
-//!
-//! All four weapons start fully charged. The arrow keys fly the ship (which
-//! drags the vertical camera, like the original), Shift cycles the selected
-//! weapon (the original's switch key, replaying the pod and overlay
-//! animations), WASD nudge the overlay, `[`/`]` adjust the selected weapon's
-//! charge level (dev keys, for testing the per-level fire modes), Esc quits.
+//! Scrolls the level's parallax background and composites the HUD panel and the
+//! animated weapon pod on top, all into one 320x160 frame. The arrow keys fly
+//! the ship (which drags the vertical camera, like the original), Shift cycles
+//! the selected weapon (the original's switch key, replaying the pod and overlay
+//! animations), Ctrl fires, Space drops a smart bomb, and Esc opens the in-game
+//! menu.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -198,10 +193,6 @@ pub struct LevelScene {
     /// Vertical camera, `camera_min..=32`: which background row sits at the
     /// top of the playfield. The ship's flight drags it (see [`Ship::update`]).
     camera_y: i32,
-    /// The overlay's screen x, nudged with A/D.
-    overlay_x: i32,
-    /// The overlay's top relative to [`playfield::PANEL_TOP`], nudged with W/S.
-    overlay_offset_y: i32,
     /// The pod's current animation frame, `0` (hidden) up to [`POD_SETTLED_FRAME`].
     pod_frame: usize,
     /// The weapon whose pod and overlay are on screen (the latch `cs:0x2695`):
@@ -219,11 +210,6 @@ pub struct LevelScene {
     pod_ticks: u32,
     /// Real time accumulated toward the next logic tick.
     tick_elapsed: Duration,
-    /// Debug freeze: P stops every scroll so stills can be compared against
-    /// the original. Starts frozen-off; the scene begins at scroll zero anyway.
-    paused: bool,
-    /// Dev fast-forward: F held runs 8 logic ticks per frame.
-    turbo: bool,
     /// Ticks left of the level-end sequence: the original runs 460 more
     /// frames after the boss dies, and for the last 300 the ship flies off
     /// to the right with input locked ([`Ship::fly_out`]).
@@ -266,12 +252,6 @@ impl LevelScene {
         // invincibility a death respawn does.
         let mut state = GameState::enter_level(handoff);
         state.invincible_ticks = assets.combat.respawn_invincibility;
-
-        eprintln!(
-            "level scene: arrows fly the ship, Ctrl fires, Shift cycles weapon, \
-             Space smart-bombs, F fast-forwards, WASD nudge the overlay, \
-             [/] adjust its level, P pauses the scroll, Esc quits"
-        );
 
         let frame = Framebuffer::new(SCREEN, assets.hud.palette.clone());
         let background_scroll = assets.background.scroll();
@@ -327,8 +307,6 @@ impl LevelScene {
             held: HeldKeys::default(),
             fire_held: false,
             camera_y,
-            overlay_x: OVERLAY_X,
-            overlay_offset_y: OVERLAY_OFFSET_Y,
             // Level entry bakes the pod pop-up flag (cs:0x2697 = 5 in the
             // L1 image, congruent in every WAD), so the pod starts empty
             // and the active weapon rises once play begins.
@@ -337,8 +315,6 @@ impl LevelScene {
             pod_lowering: false,
             pod_ticks: 0,
             tick_elapsed: Duration::ZERO,
-            paused: false,
-            turbo: false,
             level_end_countdown: None,
             flow,
             menu: None,
@@ -755,25 +731,6 @@ impl LevelScene {
 
             tracing::info!("ERIK");
         }
-    }
-
-    /// Reports the selected weapon's charge after a dev-key adjustment.
-    fn report_level(&self) {
-        eprintln!(
-            "{:?} level = {}",
-            self.state.selected,
-            self.state.level(self.state.selected).get()
-        );
-    }
-
-    /// Moves the overlay by `(dx, dy)` and reports its position, to pin it live.
-    fn nudge_overlay(&mut self, dx: i32, dy: i32) {
-        self.overlay_x += dx;
-        self.overlay_offset_y += dy;
-        eprintln!(
-            "overlay x = {}, y = panel_top {:+}",
-            self.overlay_x, self.overlay_offset_y
-        );
     }
 
     /// Starts the music and loops it on the track-length countdown.
@@ -1272,8 +1229,8 @@ impl LevelScene {
             self.frame.blit_transparent(
                 &overlay.pixels,
                 overlay.size,
-                self.overlay_x + slide_x,
-                playfield::PANEL_TOP + self.overlay_offset_y + slide_y,
+                OVERLAY_X + slide_x,
+                playfield::PANEL_TOP + OVERLAY_OFFSET_Y + slide_y,
             );
         }
 
@@ -1416,7 +1373,6 @@ impl Scene for LevelScene {
                             self.cycle_weapon();
                         }
                     }
-                    Key::Char('f') => self.turbo = true,
                     Key::Char(' ') => {
                         if matches!(self.flow, Flow::Running) {
                             if self.bomb_countdown > 0 {
@@ -1455,35 +1411,7 @@ impl Scene for LevelScene {
                     }
                     Key::Ctrl => self.fire_held = true,
                     Key::Enter | Key::Backspace => {}
-                    Key::Char(c) => {
-                        self.erik_letter(c.to_ascii_lowercase());
-
-                        match c.to_ascii_lowercase() {
-                            'a' => self.nudge_overlay(-1, 0),
-                            'd' => self.nudge_overlay(1, 0),
-                            'w' => self.nudge_overlay(0, -1),
-                            's' => self.nudge_overlay(0, 1),
-                            'p' => {
-                                self.paused = !self.paused;
-                                eprintln!(
-                                    "scroll {}",
-                                    if self.paused { "paused" } else { "running" }
-                                );
-                            }
-                            // Dev: adjust the selected weapon's charge level,
-                            // to test the per-level fire modes.
-                            ']' => {
-                                self.state.level_up();
-                                self.report_level();
-                            }
-                            '[' => {
-                                let level = self.state.weapons.get_mut(self.state.selected);
-                                *level = level.saturating_sub(1);
-                                self.report_level();
-                            }
-                            _ => {}
-                        }
-                    }
+                    Key::Char(c) => self.erik_letter(c.to_ascii_lowercase()),
                 },
                 KeyEvent::Released(key) => match key {
                     Key::Up => self.held.up = false,
@@ -1491,7 +1419,6 @@ impl Scene for LevelScene {
                     Key::Left => self.held.left = false,
                     Key::Right => self.held.right = false,
                     Key::Ctrl => self.fire_held = false,
-                    Key::Char('f') => self.turbo = false,
                     _ => {}
                 },
             }
@@ -1502,11 +1429,6 @@ impl Scene for LevelScene {
         while self.tick_elapsed >= TICK {
             self.tick_elapsed -= TICK;
             ticks += 1;
-        }
-
-        // Dev fast-forward: F held runs the level at 8x.
-        if self.turbo {
-            ticks *= 8;
         }
 
         // The GET READY freeze waits for fire released, then pressed (the
@@ -1554,7 +1476,7 @@ impl Scene for LevelScene {
             }
         }
 
-        if !self.paused && !frozen {
+        if !frozen {
             self.advance(ticks, &mut output.audio);
         }
 
@@ -1887,30 +1809,6 @@ mod tests {
         scene.update(TICK, &[]);
         // Strip 0 (rate 16 = 1px) moved one whole pixel after one tick.
         assert_eq!(scene.background_scroll.pixel_column(0), start + 1);
-    }
-
-    #[test]
-    fn wasd_nudges_the_overlay() {
-        let mut scene = test_scene();
-        let (x, y) = (scene.overlay_x, scene.overlay_offset_y);
-
-        scene.update(
-            Duration::ZERO,
-            &[
-                KeyEvent::Pressed(Key::Char('d')),
-                KeyEvent::Pressed(Key::Char('s')),
-            ],
-        );
-        assert_eq!((scene.overlay_x, scene.overlay_offset_y), (x + 1, y + 1));
-
-        scene.update(
-            Duration::ZERO,
-            &[
-                KeyEvent::Pressed(Key::Char('a')),
-                KeyEvent::Pressed(Key::Char('w')),
-            ],
-        );
-        assert_eq!((scene.overlay_x, scene.overlay_offset_y), (x, y));
     }
 
     #[test]
