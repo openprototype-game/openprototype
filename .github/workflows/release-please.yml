@@ -22,5 +22,22 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           token: ${{ steps.token.outputs.token }}
+
+      - uses: actions/checkout@v6
+        if: ${{ steps.release.outputs.pr }}
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ steps.token.outputs.token }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: ${{ steps.release.outputs.pr }}
+      - if: ${{ steps.release.outputs.pr }}
+        run: |
+          cargo update --workspace --offline
+          git diff --quiet Cargo.lock && exit 0
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -am "chore: sync Cargo.lock"
+          git push origin HEAD:${{ fromJSON(steps.release.outputs.pr).headBranchName }}
