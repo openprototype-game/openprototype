@@ -54,6 +54,7 @@ Flying a level:
 Any time:
 
 - Alt+Enter: toggle fullscreen
+- Alt+S: cycle the scaling mode (perfect fit, or integer vertical scaling for uniform scanlines)
 
 ## Background
 

@@ -17,8 +17,9 @@
 //! vsync caps the redraw rate below the scene's frame rate. Input/resize frames
 //! re-render with `dt = 0` and do not advance.
 //!
-//! Alt+Enter toggles borderless fullscreen here (the OpenTyrian binding); it is
-//! handled in this layer and never reaches the core as a key.
+//! Two display bindings are handled in this layer and never reach the core as
+//! keys: Alt+Enter toggles borderless fullscreen (the OpenTyrian binding), and
+//! Alt+S cycles the content scaling mode (perfect-fit vs. integer-vertical).
 
 use std::mem;
 use std::sync::Arc;
@@ -31,8 +32,10 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key, ModifiersState, NamedKey};
+use winit::keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey};
 use winit::window::{Icon, Window, WindowId};
+
+use tracing::debug;
 
 use crate::audio::{MusicPlayer, SfxPlayer, make_music_player, make_sfx_player};
 use crate::renderer::Renderer;
@@ -259,6 +262,19 @@ impl ApplicationHandler for App {
                 {
                     if let Some(renderer) = &self.renderer {
                         renderer.toggle_fullscreen();
+                    }
+
+                    self.request_redraw();
+                    return;
+                }
+
+                if pressed
+                    && self.modifiers.alt_key()
+                    && event.physical_key == PhysicalKey::Code(KeyCode::KeyS)
+                {
+                    if let Some(renderer) = self.renderer.as_mut() {
+                        let mode = renderer.cycle_scale_mode();
+                        debug!("scaling mode: {mode:?}");
                     }
 
                     self.request_redraw();

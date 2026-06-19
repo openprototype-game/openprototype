@@ -45,7 +45,8 @@ struct Fit {
     source_size: vec2<f32>,
     // Content rect size in physical pixels (drives the prescale factor).
     output_size: vec2<f32>,
-    _padding: vec2<f32>,
+    // Clip-space translation of the content quad (pixel-aligns PerfectY).
+    ndc_offset: vec2<f32>,
 };
 
 @group(0) @binding(0) var source_tex: texture_2d<f32>;
@@ -58,7 +59,7 @@ fn vs_fit(@builtin(vertex_index) vertex_index: u32) -> Stage {
     let uv = vec2<f32>(f32(vertex_index & 1u), f32((vertex_index >> 1u) & 1u));
     let ndc = (uv * 2.0 - 1.0) * fit.ndc_scale;
     var out: Stage;
-    out.position = vec4<f32>(ndc.x, -ndc.y, 0.0, 1.0);
+    out.position = vec4<f32>(ndc.x + fit.ndc_offset.x, -ndc.y + fit.ndc_offset.y, 0.0, 1.0);
     out.uv = uv;
     return out;
 }
