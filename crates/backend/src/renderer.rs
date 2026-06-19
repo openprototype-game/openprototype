@@ -14,7 +14,7 @@ use prototype_formats::Dimensions;
 use tracing::debug;
 use winit::window::Window;
 
-use crate::compositor::Compositor;
+use crate::compositor::{Compositor, ScaleMode};
 
 /// A wgpu surface and swapchain wrapping a [`Compositor`].
 pub struct Renderer {
@@ -121,6 +121,11 @@ impl Renderer {
         };
 
         self.window.set_fullscreen(fullscreen);
+    }
+
+    /// Cycles the content scaling mode, returning the one now active.
+    pub fn cycle_scale_mode(&mut self) -> ScaleMode {
+        self.compositor.cycle_scale_mode()
     }
 
     /// Presents `frame`.

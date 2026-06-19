@@ -35,17 +35,37 @@ const TARGET_ASPECT: f32 = 4.0 / 3.0;
 /// way the VGA DAC drove them.
 const OFFSCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+/// How the centered content rect is sized inside the window.
+///
+/// Both modes hold the 4:3 display aspect; they differ in whether the vertical
+/// scale is free or snapped to the pixel grid.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum ScaleMode {
+    /// Largest 4:3 rect that fits the window. Both axes scale fractionally, so
+    /// the sharp shader keeps a sub-pixel interpolation band on each.
+    #[default]
+    PerfectFit,
+
+    /// Vertical scale snapped down to a whole multiple of the source height, so
+    /// every scanline is the same thickness; the width is re-derived to keep
+    /// exact 4:3, leaving only the horizontal axis fractional. Costs a little
+    /// extra letterbox in return for a uniform pixel grid vertically.
+    PerfectY,
+}
+
 /// The `Fit` uniform, matching the `blit.wgsl` layout.
 ///
-/// Padded to 32 bytes so the `vec2` members land at the same offsets the WGSL
-/// uniform layout expects.
+/// 32 bytes so the `vec2` members land at the offsets the WGSL uniform layout
+/// expects.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct FitUniform {
     ndc_scale: [f32; 2],
     source_size: [f32; 2],
     output_size: [f32; 2],
-    _padding: [f32; 2],
+    /// Clip-space translation of the content quad. Used by `PerfectY` to nudge
+    /// the rect onto a whole-pixel vertical position; zero otherwise.
+    ndc_offset: [f32; 2],
 }
 
 /// The source-size-dependent resources.
@@ -75,6 +95,8 @@ pub struct Compositor {
     source: Source,
     expand_bind_group: wgpu::BindGroup,
     scale_bind_group: wgpu::BindGroup,
+
+    scale_mode: ScaleMode,
 }
 
 impl Compositor {
@@ -195,12 +217,26 @@ impl Compositor {
             source,
             expand_bind_group,
             scale_bind_group,
+            scale_mode: ScaleMode::default(),
         }
     }
 
     /// The wgpu device the pipelines were built on.
     pub fn device(&self) -> &wgpu::Device {
         &self.device
+    }
+
+    /// Switches to the next scaling mode, returning the one now active.
+    ///
+    /// Takes effect on the next [`render_to`](Self::render_to); the caller
+    /// requests a redraw to apply it immediately.
+    pub fn cycle_scale_mode(&mut self) -> ScaleMode {
+        self.scale_mode = match self.scale_mode {
+            ScaleMode::PerfectFit => ScaleMode::PerfectY,
+            ScaleMode::PerfectY => ScaleMode::PerfectFit,
+        };
+
+        self.scale_mode
     }
 
     /// Uploads `frame` and renders it into `target`.
@@ -271,7 +307,7 @@ impl Compositor {
             },
         );
 
-        let fit = compute_fit(target_width, target_height, size);
+        let fit = compute_fit(target_width, target_height, size, self.scale_mode);
         self.queue
             .write_buffer(&self.fit_buffer, 0, bytemuck::bytes_of(&fit));
     }
@@ -345,21 +381,47 @@ impl Compositor {
 ///
 /// Returned as the quad's clip-space half-extent plus the sizes the
 /// sharp-bilinear shader needs.
-fn compute_fit(target_width: u32, target_height: u32, source: Dimensions) -> FitUniform {
+fn compute_fit(
+    target_width: u32,
+    target_height: u32,
+    source: Dimensions,
+    mode: ScaleMode,
+) -> FitUniform {
     let target_width = target_width as f32;
     let target_height = target_height as f32;
 
-    let (content_width, content_height) = if target_width / target_height > TARGET_ASPECT {
+    // Largest 4:3 rect that fits the window.
+    let (mut content_width, mut content_height) = if target_width / target_height > TARGET_ASPECT {
         (target_height * TARGET_ASPECT, target_height)
     } else {
         (target_width, target_width / TARGET_ASPECT)
     };
 
+    let mut ndc_offset = [0.0, 0.0];
+
+    if mode == ScaleMode::PerfectY {
+        // Snap the height down to a whole multiple of the source height (at
+        // least 1x), then re-derive the width to hold exact 4:3. The snapped
+        // rect is never taller than the fitted one, so it still fits the
+        // window; only the horizontal scale stays fractional.
+        let scale_y = (content_height / source.height as f32).floor().max(1.0);
+        content_height = scale_y * source.height as f32;
+        content_width = content_height * TARGET_ASPECT;
+
+        // Pixel-align the vertical position. Centering on an odd letterbox would
+        // start the rect on a half-pixel, pushing the sample points off the grid
+        // and re-softening the band the integer scale was meant to keep crisp.
+        // Snap the top to a whole pixel; one physical pixel is 2 / target_height
+        // in clip space.
+        let top = (target_height - content_height) / 2.0;
+        ndc_offset[1] = (top.round() - top) * -2.0 / target_height;
+    }
+
     FitUniform {
         ndc_scale: [content_width / target_width, content_height / target_height],
         source_size: [source.width as f32, source.height as f32],
         output_size: [content_width, content_height],
-        _padding: [0.0, 0.0],
+        ndc_offset,
     }
 }
 
@@ -575,6 +637,7 @@ mod tests {
         frame: &Framebuffer,
         width: u32,
         height: u32,
+        mode: ScaleMode,
     ) -> Vec<u8> {
         let mut compositor = Compositor::new(
             device,
@@ -582,6 +645,10 @@ mod tests {
             frame.image.size,
             wgpu::TextureFormat::Rgba8Unorm,
         );
+
+        if mode == ScaleMode::PerfectY {
+            compositor.cycle_scale_mode();
+        }
 
         let target = compositor.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("target"),
@@ -664,7 +731,7 @@ mod tests {
         let (frame, colors) = quadrant_frame();
         // 16x12 is exactly 4:3, so the content fills the target with no bars.
         let (width, height) = (16u32, 12u32);
-        let bytes = render_to_bytes(device, queue, &frame, width, height);
+        let bytes = render_to_bytes(device, queue, &frame, width, height, ScaleMode::PerfectFit);
 
         // Deep inside each output quadrant, where filtering taps stay within one
         // solid block, the color is byte-exact. The quadrant positions also
@@ -690,7 +757,7 @@ mod tests {
         let (frame, _) = quadrant_frame();
         // 24x12 is wider than 4:3, so the 16-wide content centers with 4px bars.
         let (width, height) = (24u32, 12u32);
-        let bytes = render_to_bytes(device, queue, &frame, width, height);
+        let bytes = render_to_bytes(device, queue, &frame, width, height, ScaleMode::PerfectFit);
 
         assert_eq!(pixel(&bytes, width, 0, 6), [0, 0, 0], "left bar is black");
         assert_eq!(pixel(&bytes, width, 23, 6), [0, 0, 0], "right bar is black");
@@ -698,6 +765,112 @@ mod tests {
             pixel(&bytes, width, 12, 6),
             [0, 0, 0],
             "center content is not black"
+        );
+    }
+
+    #[test]
+    fn perfect_y_renders_crisp_pixel_aligned_rows() {
+        let Some((device, queue)) = headless_device() else {
+            eprintln!("no GPU adapter; skipping compositor perfect-y test");
+            return;
+        };
+
+        let (frame, colors) = quadrant_frame();
+        // 40x21 is wider than 4:3, so it is height-limited. PerfectFit would fill
+        // all 21 rows; PerfectY floors the height to 3x the source (18) and, with
+        // a centered top of 1.5 (odd letterbox), snaps it to a whole pixel: 2 bar
+        // rows on top, content in rows 2..19, 1 bar row at the bottom. Both axes
+        // land on an exact 3x grid, so the boundary stays crisp.
+        let (width, height) = (40u32, 21u32);
+        let bytes = render_to_bytes(device, queue, &frame, width, height, ScaleMode::PerfectY);
+
+        // x=12 sits inside the left column of quadrants (content spans x 8..32).
+        assert_eq!(
+            pixel(&bytes, width, 12, 0),
+            [0, 0, 0],
+            "top bar row 0 is black"
+        );
+        assert_eq!(
+            pixel(&bytes, width, 12, 1),
+            [0, 0, 0],
+            "top bar row 1 is black"
+        );
+        // The first content row is the exact top-left color, not a blend: this is
+        // what the vertical pixel-alignment buys. A half-pixel slip would soften
+        // it to something between black and the quadrant color.
+        assert_eq!(
+            pixel(&bytes, width, 12, 2),
+            colors[0],
+            "first content row is crisp top-left"
+        );
+        assert_eq!(
+            pixel(&bytes, width, 12, 20),
+            [0, 0, 0],
+            "bottom bar row 20 is black"
+        );
+    }
+
+    #[test]
+    fn perfect_fit_keeps_the_full_4_3_rect() {
+        let source = Dimensions::new(320, 160);
+        let fit = compute_fit(1000, 1000, source, ScaleMode::PerfectFit);
+
+        // A square window is width-limited: the content spans the full width
+        // and is exactly 4:3 tall, with no integer snapping.
+        assert_eq!(fit.output_size, [1000.0, 750.0]);
+        // PerfectFit never offsets the quad.
+        assert_eq!(fit.ndc_offset, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn perfect_y_snaps_height_to_a_whole_source_multiple() {
+        let source = Dimensions::new(320, 160);
+        let fit = compute_fit(1000, 1000, source, ScaleMode::PerfectY);
+
+        // Fitted height is 750; floored to a multiple of 160 that is 4x (640).
+        let [width, height] = fit.output_size;
+        assert_eq!(height, 640.0, "height snaps down to 4x the source");
+        assert_eq!(
+            height % source.height as f32,
+            0.0,
+            "height is a whole multiple"
+        );
+        assert!(
+            (width / height - TARGET_ASPECT).abs() < 1e-4,
+            "rect stays 4:3"
+        );
+        assert!(width <= 1000.0 && height <= 1000.0, "rect fits the window");
+    }
+
+    #[test]
+    fn perfect_y_matches_perfect_fit_when_the_scale_is_already_integer() {
+        let source = Dimensions::new(320, 160);
+        // 1280x960 is exactly 4:3 and 960 is 6x the source height, so the two
+        // modes agree: nothing to snap.
+        let fitted = compute_fit(1280, 960, source, ScaleMode::PerfectFit);
+        let snapped = compute_fit(1280, 960, source, ScaleMode::PerfectY);
+
+        assert_eq!(fitted.output_size, snapped.output_size);
+        assert_eq!(snapped.output_size, [1280.0, 960.0]);
+    }
+
+    #[test]
+    fn perfect_y_pixel_aligns_the_vertical_position() {
+        let source = Dimensions::new(320, 160);
+        // Height-limited (wider than 4:3) with an odd letterbox: 933 floors to
+        // a 5x = 800-tall rect, which centered starts at y = 66.5, off the grid.
+        let fit = compute_fit(1300, 933, source, ScaleMode::PerfectY);
+
+        let content_height = fit.output_size[1];
+        let centered_top = (933.0 - content_height) / 2.0;
+        assert_ne!(centered_top.fract(), 0.0, "test needs an odd letterbox");
+
+        // Recover the top the offset actually places the rect at; it must be a
+        // whole pixel. One physical pixel is 2 / target_height in clip space.
+        let aligned_top = centered_top - fit.ndc_offset[1] * 933.0 / 2.0;
+        assert!(
+            (aligned_top - aligned_top.round()).abs() < 1e-3,
+            "vertical top not pixel-aligned: {aligned_top}"
         );
     }
 }
